@@ -1,10 +1,8 @@
 ---
 id: CUJ-003
-slug: blank-expect
 schema: 1
 title: Step with no observable outcome
-actor: returning-user
-actor_description: "Returns daily."
+actor: "Returning user with a handful of tasks, opens the app daily"
 goal: "Reach a state the CUJ never describes"
 criticality: medium
 entry_point: "/"
@@ -16,10 +14,6 @@ steps:
     expect: "   "
 success_criteria:
   - "The task persists after reload"
-authored:
-  date: 2026-07-16T10:00:00Z
-  method: manual
-  revision: 1
 ---
 
 # CUJ-003 — Blank expect

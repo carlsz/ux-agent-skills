@@ -113,13 +113,15 @@ def main() -> int:
     failures += _expect_invalid(FIXTURES / "invalid" / "CUJ-004-bad-criticality.md",
                                 "criticality")
     failures += _expect_invalid(FIXTURES / "invalid" / "CUJ-005-no-steps.md", "steps")
-    failures += _expect_invalid(FIXTURES / "invalid" / "CUJ-006-missing-provenance.md",
-                                "authored")
     failures += _expect_invalid(FIXTURES / "invalid" / "CUJ-007-noncontiguous.md",
                                 "contiguous")
+    # The filename carries the slug, so a slug can no longer disagree with it — but the
+    # id still lives in frontmatter (reports cite it) and the index links by filename,
+    # so this is the identity mismatch that survives.
     failures += _expect_invalid(FIXTURES / "invalid" / "CUJ-008-wrong-name.md", "filename")
-    # No PII: provenance records no author. Enforced, not merely documented (SPEC §9.7).
-    failures += _expect_invalid(FIXTURES / "invalid" / "CUJ-009-authored-by.md", "by")
+    # No PII. Dropping the `authored` block from the schema doesn't stop someone adding
+    # `author:` back by hand, so the rule stays executable (SPEC §9.7).
+    failures += _expect_invalid(FIXTURES / "invalid" / "CUJ-009-authored-by.md", "author")
 
     # Cross-file: a duplicate id is invisible per-file but breaks the index and makes
     # every "CUJ-010 step <n>" citation ambiguous.
@@ -134,7 +136,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — CUJ contract (13 checks)")
+    print("PASS — CUJ contract (12 checks)")
     return 0
 
 

@@ -1,10 +1,8 @@
 ---
 id: CUJ-004
-slug: bad-criticality
 schema: 1
 title: Criticality outside the vocabulary
-actor: returning-user
-actor_description: "Returns daily."
+actor: "Returning user with a handful of tasks, opens the app daily"
 goal: "Capture a task"
 criticality: blocker
 entry_point: "/"
@@ -16,10 +14,6 @@ steps:
     expect: "The input takes focus"
 success_criteria:
   - "The task persists after reload"
-authored:
-  date: 2026-07-16T10:00:00Z
-  method: manual
-  revision: 1
 ---
 
 # CUJ-004 — Bad criticality

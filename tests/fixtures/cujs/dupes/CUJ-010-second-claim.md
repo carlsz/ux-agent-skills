@@ -1,10 +1,8 @@
 ---
 id: CUJ-010
-slug: second-claim
 schema: 1
 title: Second journey claiming CUJ-010
-actor: power-user
-actor_description: "Lives in the keyboard shortcuts."
+actor: "Power user who lives in the keyboard shortcuts"
 goal: "Capture a task without touching the mouse"
 criticality: medium
 entry_point: "/"
@@ -16,10 +14,6 @@ steps:
     expect: "The new-task input takes focus"
 success_criteria:
   - "The task persists after reload"
-authored:
-  date: 2026-07-16T10:10:00Z
-  method: manual
-  revision: 1
 ---
 
 # CUJ-010 — Second claim

@@ -1,10 +1,9 @@
 ---
 id: CUJ-009
-slug: authored-by
 schema: 1
-title: Provenance carrying an author
-actor: returning-user
-actor_description: "Returns daily."
+title: Journey recording an author
+actor: "Returning user with a handful of tasks, opens the app daily"
+author: "someone@example.com"
 goal: "Capture a task"
 criticality: high
 entry_point: "/"
@@ -16,21 +15,20 @@ steps:
     expect: "The input takes focus"
 success_criteria:
   - "The task persists after reload"
-authored:
-  date: 2026-07-16T10:00:00Z
-  by: "someone@example.com"
-  method: interview
-  revision: 1
 ---
 
 # CUJ-009 — Author recorded
 
 ## Narrative
 
-Invalid fixture: `authored.by` carries an email address. CUJ files record no author by
-design (SPEC.md §9.7) — git history answers "who decided this mattered" more honestly than
-a self-reported field, and no PII in the artifact beats a rule about handling PII in it.
-The rule is enforced here rather than merely documented.
+Invalid fixture: a top-level `author` key carrying an email address. CUJ files record no
+author and no provenance block at all (SPEC.md §9.7) — git already answers who wrote this,
+when, and through how many revisions, and answers it honestly, unlike hand-maintained
+frontmatter that goes stale the moment someone forgets.
+
+Removing the `authored` block from the schema is not by itself a guarantee: nothing stops
+someone adding `author:` back by hand. So the rule stays executable. A privacy rule that
+isn't enforced is a comment, and this file is what keeps it from becoming one.
 
 ## Out of scope
 

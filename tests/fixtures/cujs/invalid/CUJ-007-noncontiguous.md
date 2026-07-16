@@ -1,10 +1,8 @@
 ---
 id: CUJ-007
-slug: noncontiguous
 schema: 1
 title: Steps that skip a number
-actor: returning-user
-actor_description: "Returns daily."
+actor: "Returning user with a handful of tasks, opens the app daily"
 goal: "Capture a task"
 criticality: high
 entry_point: "/"
@@ -19,10 +17,6 @@ steps:
     expect: "A new row appears at the top of the list"
 success_criteria:
   - "The task persists after reload"
-authored:
-  date: 2026-07-16T10:00:00Z
-  method: manual
-  revision: 1
 ---
 
 # CUJ-007 — Non-contiguous steps

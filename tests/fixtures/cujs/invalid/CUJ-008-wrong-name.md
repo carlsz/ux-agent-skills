@@ -1,10 +1,8 @@
 ---
-id: CUJ-008
-slug: a-different-slug
+id: CUJ-042
 schema: 1
-title: Slug that disagrees with the filename
-actor: returning-user
-actor_description: "Returns daily."
+title: Frontmatter id that disagrees with the filename
+actor: "Returning user with a handful of tasks, opens the app daily"
 goal: "Capture a task"
 criticality: medium
 entry_point: "/"
@@ -16,18 +14,20 @@ steps:
     expect: "The input takes focus"
 success_criteria:
   - "The task persists after reload"
-authored:
-  date: 2026-07-16T10:00:00Z
-  method: manual
-  revision: 1
 ---
 
-# CUJ-008 — Wrong filename
+# CUJ-042 — Wrong filename
 
 ## Narrative
 
-Invalid fixture: `slug` is `a-different-slug` but the file is `CUJ-008-wrong-name.md`. The
-generated SPEC.md index links by `<id>-<slug>.md`, so a mismatch produces a dead link.
+Invalid fixture: the file is named `CUJ-008-wrong-name.md` but frontmatter declares
+`id: CUJ-042`. There is no `slug` key to disagree — the filename carries the slug — but the
+id still lives in frontmatter because reports cite it, so this is the one identity mismatch
+that survives.
+
+It matters because the two are read by different consumers: the generated SPEC.md index
+links by *filename*, while every finding cites the *frontmatter id*. When they disagree the
+host's spec points at one journey and the report names another.
 
 ## Out of scope
 

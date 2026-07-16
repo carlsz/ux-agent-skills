@@ -252,12 +252,12 @@ and can be reviewed as its own PR.
 - **Acceptance:** mirrors `validate_report.py` conventions (`validate()` → list of
   violations, `[]` = valid; `main()` → 0/1/2). Exposes `validate(path)`,
   `validate_dir(dir)`, `render_index(dir)`; CLI `<file>… | --dir | --index`.
-  Per-file: required keys, `schema == 1`, id/slug patterns, `criticality` vocabulary,
+  Per-file: the ten required keys, `schema == 1`, `id` pattern, `criticality` vocabulary,
   non-empty `preconditions`/`steps`/`success_criteria`, each step a mapping with
-  non-empty `n`/`action`/`expect`, `n` contiguous 1..N, `authored` shape (`date` ISO-8601,
-  `method` in vocabulary, `revision` a positive int), body has both headings.
-  **Rejects a stray `authored.by`** (SPEC §9.7). Cross-file: **duplicate `id`**, and
-  **filename ≠ `<id>-<slug>.md`**.
+  non-empty `n`/`action`/`expect`, `n` contiguous 1..N, body has both headings.
+  **Rejects `author`/`authored`/`by`/`email`** (SPEC §9.7) — deleting the field from the
+  schema is not the guarantee. Cross-file: **duplicate `id`**, and a filename whose id
+  disagrees with frontmatter (the slug can no longer disagree — the filename carries it).
 - **Verify:** `--index` over the same directory twice is **byte-identical**; run against the
   T7.1 sample → clean.
 - **Deps:** T7.1.
@@ -266,8 +266,8 @@ and can be reviewed as its own PR.
 - [x] Mirror `test_report_contract.py` beat for beat.
 - **Files:** `tests/test_cuj_contract.py`; `tests/fixtures/cujs/valid/{CUJ-001-add-a-task.md,
   CUJ-002-complete-a-task.md}`; `tests/fixtures/cujs/invalid/` — blank `expect`, bad
-  `criticality`, empty `steps`, missing `authored`, non-contiguous `n`, filename mismatch,
-  **stray `authored.by`**, plus a `dupes/` pair sharing an id.
+  `criticality`, empty `steps`, non-contiguous `n`, filename/frontmatter id mismatch,
+  **a stray top-level `author`**, plus a `dupes/` pair sharing an id.
 - **Acceptance:** every invalid fixture fails **for the right reason** (needle substring, as
   `test_report_contract.py:58-71` does). Two index assertions: `render_index` twice is
   byte-identical; rows sorted by `id` with the correct columns.
@@ -378,7 +378,7 @@ and can be reviewed as its own PR.
 - **Acceptance:** checks assert the load-bearing prose, not mere presence — the skill's
   `interview-me` + fallback disclosure, the ask + `spec.md` gate, `validate_cuj`, the marker
   block, and exit criteria; the references cover `actor`/`precondition`/`step`/`expect`/
-  `success criteria`/`criticality`/`authored`.
+  `success criteria`/`criticality`.
 - **Verify:** `python3 tests/test_components.py` + `python3 tests/test_docs.py` green;
   deliberately break one asserted string → the check **fails** (proves it's wired).
 - **Deps:** T8.1–T8.4.

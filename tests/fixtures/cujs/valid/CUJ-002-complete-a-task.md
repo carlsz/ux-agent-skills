@@ -1,10 +1,8 @@
 ---
 id: CUJ-002
-slug: complete-a-task
 schema: 1
 title: Complete a task
-actor: returning-user
-actor_description: "Has 3-10 existing tasks, returns daily to clear finished ones."
+actor: "Returning user with 3-10 existing tasks, opens the app daily to clear finished ones"
 goal: "Mark a task done and see it leave the active list"
 criticality: high
 entry_point: "/"
@@ -19,10 +17,6 @@ steps:
     expect: "The 'Buy milk' row leaves the active list and the remaining count decrements by one"
 success_criteria:
   - "'Buy milk' is absent from the active list after a full page reload"
-authored:
-  date: 2026-07-16T10:05:00Z
-  method: interview
-  revision: 2
 ---
 
 # CUJ-002 — Complete a task

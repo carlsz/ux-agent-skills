@@ -45,7 +45,7 @@ passes silently, checked only for non-emptiness.
 ### [sev2] CUJ-001 — placeholder finding
 
 - **Issue Description:** Placeholder; this fixture exists to be rejected on its frameworks.
-- **Framework Violation:** CUJ-001 "Add a task" (rev 1) — step 1.
+- **Framework Violation:** CUJ-001 "Add a task" — step 1.
 - **Severity:** 2 — placeholder.
 - **Evidence:** placeholder.
 - **Recommended Fix:** placeholder.

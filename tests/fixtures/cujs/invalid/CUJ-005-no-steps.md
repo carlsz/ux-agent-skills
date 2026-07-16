@@ -1,10 +1,8 @@
 ---
 id: CUJ-005
-slug: no-steps
 schema: 1
 title: A journey with no steps
-actor: returning-user
-actor_description: "Returns daily."
+actor: "Returning user with a handful of tasks, opens the app daily"
 goal: "Do something unspecified"
 criticality: low
 entry_point: "/"
@@ -13,10 +11,6 @@ preconditions:
 steps: []
 success_criteria:
   - "Something happened"
-authored:
-  date: 2026-07-16T10:00:00Z
-  method: manual
-  revision: 1
 ---
 
 # CUJ-005 — No steps

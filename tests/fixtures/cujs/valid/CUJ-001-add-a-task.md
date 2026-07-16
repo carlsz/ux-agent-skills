@@ -1,10 +1,8 @@
 ---
 id: CUJ-001
-slug: add-a-task
 schema: 1
 title: Add a task to the list
-actor: returning-user
-actor_description: "Has 3-10 existing tasks, returns daily to capture new ones."
+actor: "Returning user with 3-10 existing tasks, opens the app daily to capture new ones"
 goal: "Capture a new task from the list view without navigating away"
 criticality: critical
 entry_point: "/"
@@ -21,10 +19,6 @@ steps:
 success_criteria:
   - "'Buy milk' is still present after a full page reload"
   - "No full-page navigation occurred during the journey"
-authored:
-  date: 2026-07-16T10:00:00Z
-  method: interview
-  revision: 1
 ---
 
 # CUJ-001 — Add a task

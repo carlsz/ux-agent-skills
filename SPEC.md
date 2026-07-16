@@ -372,18 +372,22 @@ Contract document: `skills/spec-cuj/references/cuj-contract.md`, owned by **spec
 *produces* the artifact, consumers link across. Machine-checked by `scripts/validate_cuj.py`, which is
 the executable form of that document; if the two disagree, reconcile them.
 
+**Ten keys**, and the smallness is a requirement rather than an accident. A journey is written
+by a human answering an interview, so every field is one more thing to answer before they get
+any value — and the failure mode of a heavy schema isn't bad journeys, it's *no journeys*.
+Anything derivable from the filename, from git, or from another field is ceremony and is
+excluded.
+
 ```yaml
 ---
-id: CUJ-001                  # ^CUJ-\d{3}$ — unique across .ux/cujs/
-slug: add-a-task             # ^[a-z0-9-]+$ — filename MUST equal <id>-<slug>.md
+id: CUJ-001                  # ^CUJ-\d{3}$ — unique; must match the filename's id
 schema: 1                    # cuj-contract version
 title: Add a task to the list
-actor: returning-user        # a named persona — never "the user"
-actor_description: "Has 3-10 existing tasks, returns daily to capture new ones."
+actor: "Returning user with 3-10 existing tasks, opens the app daily to capture new ones"
 goal: "Capture a new task from the list view without navigating away"   # an outcome, not features
 criticality: critical        # critical | high | medium | low
 entry_point: "/"             # route, URL, or named screen
-preconditions:               # non-empty
+preconditions:               # non-empty; what must already be TRUE (not what you do)
   - "App loaded at / with at least one existing task"
 steps:                       # non-empty, ordered, n contiguous 1..N
   - n: 1
@@ -394,15 +398,23 @@ steps:                       # non-empty, ordered, n contiguous 1..N
     expect: "A row reading 'Buy milk' appears at the top of the list and the input clears"
 success_criteria:            # evaluated AFTER the steps complete
   - "'Buy milk' is still present after a full page reload"
-authored:                    # provenance only — deliberately records no author (see §9.7)
-  date: 2026-07-16T10:00:00Z # ISO-8601, UTC
-  method: interview          # interview | interview-fallback | manual | imported
-  revision: 1                # bump on every material edit
 ---
 ```
 
 Body: `## Narrative` (2–4 sentences: why this journey exists, what breaks for the business if it
 breaks) and `## Out of scope` (what this journey deliberately does not cover).
+
+**What is deliberately absent**, and why each was cut:
+
+| Not a field | Because |
+|-------------|---------|
+| `slug` | The filename carries it. A field whose only job is to be compared against the filename is ceremony — removing it removes the whole mismatch class instead of validating it. `id` stays (reports cite it), so the filename's id must match frontmatter. |
+| `actor_description` | One specific `actor` sentence does the same work. Splitting it across two keys bought nothing. |
+| `authored` / `revision` / `author` | Git answers who, when, and how many revisions — honestly, and without a field anyone can forget to bump. An unbumped `revision: 1` on a journey edited four times is worse than no revision, because it lies with confidence. See §9.7. |
+
+**Why `preconditions` survives** the same cut: if setup folds into step 1, then *failing to
+establish the starting state* becomes indistinguishable from *the journey being broken*, and
+`/audit-cuj` would report a severity-4 catastrophe for what is really "couldn't run this".
 
 **`expect` is the load-bearing field.** It must be *observable*: a visible element, a specific string,
 a URL change, a persisted value. "It works", "the state updates", "it saves" are not expected outcomes
@@ -451,9 +463,9 @@ Rules:
 1:1 with runs.
 
 - `auditor: cuj`
-- **Framework Violation** carries the journey and the step: `CUJ-001 "Add a task" (rev 1) — step 2
+- **Framework Violation** carries the journey and the step: `CUJ-001 "Add a task" — step 2
   (cuj-contract); expected "…"`.
-- The CUJ manifest (ids verified, each `authored.revision`, steps verified, steps not observed) goes
+- The CUJ manifest (ids verified, steps verified, steps not observed) goes
   in the **Appendix**, not in new frontmatter keys. The frontmatter stays at the shared nine. Adding
   auditor-specific keys to a *shared* contract is how comparability erodes.
 
@@ -530,7 +542,7 @@ step.
 question at a time. It is an **optional, undeclared dependency** — the same degrade-and-disclose
 pattern the roll-up already uses for `web-quality-skills`. If it isn't installed, `spec-cuj` falls back to
 its own question set in `references/interview-fallback.md`, **says so**, offers to install without
-auto-installing, and records `authored.method: interview-fallback`. It is not added to `plugin.json`
+auto-installing, and says so in its summary. It is not added to `plugin.json`
 `dependencies`: the capability degrades rather than fails, so a hard dependency would overstate it.
 
 ### Suite membership
@@ -545,13 +557,14 @@ Extends §5.2; the invariants there continue to hold unchanged.
 
 1. **CUJ contract validation** — `scripts/validate_cuj.py` checks each file (required keys, id/slug
    patterns, `criticality` vocabulary, non-empty `preconditions`/`steps`/`success_criteria`,
-   contiguous step numbering, non-empty `action`/`expect`, `authored` shape) and the directory as a
+   contiguous step numbering, non-empty `action`/`expect`) and the directory as a
    whole (**duplicate ids**, **filename ≠ `<id>-<slug>.md`**). The cross-file checks are the ones that
    actually break things: a duplicate id corrupts the index *and* every report's violation reference.
 2. **Index idempotency** — `render_index` over the same directory twice is **byte-identical**, and
    splicing preserves prose outside the markers.
-3. **No PII** — a CUJ carrying a stray `authored.by` is **rejected**, so the rule in §9.7 is executable
-   rather than merely documented.
+3. **No PII** — a CUJ carrying `author` / `authored` / `by` / `email` is **rejected**, so the rule in
+   §9.7 is executable rather than merely documented. Deleting the field from the schema is not the
+   guarantee; nothing stops someone adding it back by hand.
 4. **Report portability** — `auditor: cuj` fixtures (a sev3 report, and a `total: 0` clean pass)
    validate against the §3.4 contract; a `cuj` report citing `nielsen-10` is rejected.
 5. **The audit invariant does not weaken (critical)** — after an audit run, `.ux/cujs/` and `SPEC.md`
@@ -594,10 +607,13 @@ reconciliation must be stated plainly rather than left implicit:
 ### Never
 - **Edit, refactor, or "fix" host application code.** `/audit-cuj` reports the broken step; repairing
   it is the user's call.
-- **Record who authored a CUJ.** `authored` carries date, method, and revision only. No `git config`
-  read, no email, no fallback value. Git history already answers "who decided this mattered", and it
-  answers it more honestly than a self-reported field that goes stale the moment someone else edits
-  the file. No PII in the artifact beats a rule about handling PII in the artifact.
+- **Record a CUJ's own provenance — author, date, revision, or capture method.** There is no
+  `authored` block, and `author` / `authored` / `by` / `email` are rejected outright. No `git config`
+  read, no fallback value. Git answers who, when, and how many revisions, and answers it honestly;
+  a hand-maintained field is right only until the first person forgets, and an unbumped `revision: 1`
+  on a journey edited four times is worse than no revision because it lies with confidence. For the
+  author specifically this is also PII in a file that ships in the host's repo: **no PII in the
+  artifact beats a rule about handling PII in the artifact.**
 - Invent a step, an actor, or a criticality the user did not state — record the gap and stop.
 - Report a journey as passing when it was not observed to pass (see the static-mode rule in §9.4).
 - Rewrite or reorder anything in the host's `SPEC.md` outside the marker block.

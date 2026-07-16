@@ -36,31 +36,42 @@ plugin repo:
 ## 2. File naming
 
 ```
-<id>-<slug>.md
+<id>-<slug>.md          e.g. CUJ-001-add-a-task.md
 ```
 
 - `id` matches `^CUJ-\d{3}$` and is **unique across the directory**.
 - `slug` matches `^[a-z0-9]+(-[a-z0-9]+)*$`.
-- The filename must equal `<id>-<slug>.md` exactly. The generated index links by this name,
-  so a mismatch is a dead link in the host's spec.
 
-Journeys are **long-lived and editable** — unlike an audit report, a CUJ is expected to be
-revised in place as the product changes. Bump `authored.revision` when you do.
+**The filename carries the slug — there is no `slug` key.** A field whose only job is to be
+compared against the filename is ceremony; deleting it deletes the entire class of
+slug-vs-filename mismatch rather than validating it.
+
+`id` does stay in frontmatter, because reports cite it (`CUJ-001 step 2`) and it should not
+change silently when a file is renamed. So one identity check survives: **the id in the
+filename must equal the id in frontmatter.** They are read by different consumers — the
+generated index links by *filename*, every finding cites the *frontmatter id* — so when they
+disagree the host's spec points at one journey and the report names another.
+
+Journeys are **long-lived and editable**: unlike an audit report, a CUJ is expected to be
+revised in place as the product changes. Nothing in the file records that history — see §8.
 
 ## 3. Frontmatter schema (required)
 
+Ten keys. The schema is deliberately small: a journey is written by a human answering an
+interview, so every required field has to earn its place. Anything derivable from the
+filename, from git, or from another field is ceremony — and ceremony is what makes people
+stop writing journeys.
+
 ```yaml
 ---
-id: CUJ-001                  # ^CUJ-\d{3}$ — unique across .ux/cujs/
-slug: add-a-task             # ^[a-z0-9-]+$ — filename MUST equal <id>-<slug>.md
+id: CUJ-001                  # ^CUJ-\d{3}$ — unique across .ux/cujs/; must match the filename
 schema: 1                    # cuj-contract version — must be 1
 title: Add a task to the list
-actor: returning-user        # a NAMED persona — never "the user" (§4)
-actor_description: "Has 3-10 existing tasks, returns daily to capture new ones."
+actor: "Returning user with 3-10 existing tasks, opens the app daily to capture new ones"
 goal: "Capture a new task from the list view without navigating away"   # outcome, not features
 criticality: critical        # critical | high | medium | low — drives severity capping (§6)
 entry_point: "/"             # route, URL, or named screen where the journey starts
-preconditions:               # non-empty; what must already be true
+preconditions:               # non-empty; what must already be TRUE (not what you do — §5)
   - "App loaded at / with at least one existing task"
 steps:                       # non-empty, ordered; n contiguous 1..N
   - n: 1
@@ -71,15 +82,13 @@ steps:                       # non-empty, ordered; n contiguous 1..N
     expect: "A row reading 'Buy milk' appears at the top of the list and the input clears"
 success_criteria:            # evaluated AFTER the steps complete (§5)
   - "'Buy milk' is still present after a full page reload"
-authored:                    # provenance only — records no author (§8)
-  date: 2026-07-16T10:00:00Z # ISO-8601, UTC
-  method: interview          # interview | interview-fallback | manual | imported
-  revision: 1                # bump on every material edit
 ---
 ```
 
 **Rules**
-- All thirteen keys are required.
+- All ten keys are required. There is no `slug` (the filename carries it, §2), no
+  `actor_description` (one specific `actor` string does that work, §4), and **no provenance
+  block at all** (§8).
 - `schema` must equal `1`.
 - `criticality` ∈ {`critical`, `high`, `medium`, `low`}. Not decoration — `audit-cuj` caps
   finding severity by it (§6), so an unknown level has no defined cap.
@@ -87,8 +96,7 @@ authored:                    # provenance only — records no author (§8)
 - Each step is a mapping with `n`, `action`, and `expect`, all non-empty. **`n` must be
   contiguous `1..N` in order** — findings cite `step <n>` by number, so the numbering has to
   be trustworthy.
-- `authored` carries `date` (ISO-8601), `method`, and `revision` (a positive integer), and
-  **must not carry an author** (§8).
+- No `author`, `authored`, `by`, or `email` key may appear (§8). Rejected, not ignored.
 
 ## 4. The observable-`expect` rule
 
@@ -107,23 +115,31 @@ that requires reading English. That judgement lives with the `cuj-author` person
 is to refuse it during the interview. **This is the one contract rule a machine cannot hold
 the line on** — which is why the persona states it as a refusal rather than a preference.
 
-The same bar applies to the actor. `actor` is a named persona (`returning-user`,
-`first-time-visitor`, `admin`), never "the user". If the honest answer is "everyone", the
-journey isn't critical — it's generic, and it belongs in a usability audit instead.
+The same bar applies to the actor. `actor` is **one specific sentence** — who they are and
+what they bring to the journey ("Returning user with 3-10 existing tasks, opens the app daily
+to capture new ones"), never "the user". If the honest answer is "everyone", the journey isn't
+critical — it's generic, and it belongs in a usability audit instead.
 
-## 5. `steps` vs `success_criteria`
+## 5. `preconditions` vs `steps` vs `success_criteria`
 
-They answer different questions, and the split is what makes the silent-data-loss class
-detectable at all:
+Three fields, three questions, and each split earns its keep by making a distinct failure
+visible:
 
-- **`steps`** — what the actor does, and what they should observe *as they go*.
-- **`success_criteria`** — what must be true *after the journey completes*. Evaluated
+- **`preconditions`** — what must already be **true** before the journey starts. Not actions.
+- **`steps`** — what the actor **does**, and what they should observe *as they go*.
+- **`success_criteria`** — what must be true **after** the journey completes. Evaluated
   separately, once.
 
-A journey can pass every step and still fail its criteria: the task appears in the list,
-the user believes they succeeded, and it's gone after a reload. `audit-cuj` grades that at
-severity 3 rather than 2 for exactly that reason (§6). If `success_criteria` merely restated
-the last step's `expect`, this whole class of failure would be invisible.
+**Why `preconditions` isn't just step 0.** If setup folds into the steps, then *failing to
+establish the starting state* becomes indistinguishable from *the journey being broken* — and
+`audit-cuj` would report a severity 4 catastrophe for what is really "couldn't run this".
+Keeping them apart is what lets a run say "skipped, precondition unmet" honestly.
+
+**Why `success_criteria` isn't just the last step.** A journey can pass every step and still
+fail its criteria: the row appears, the user believes they succeeded, and it's gone after a
+reload. `audit-cuj` grades that at severity 3 rather than 2 for exactly that reason (§6). If
+`success_criteria` merely restated the last step's `expect`, this entire class of silent data
+loss would be invisible.
 
 ## 6. Body layout
 
@@ -177,25 +193,42 @@ Splicing rules:
   of truth.
 - Never reorder or rewrite anything else in the host's `SPEC.md`.
 
-## 8. Provenance records no author
+## 8. No provenance, no author
 
-`authored` carries `date`, `method`, and `revision`. It carries **no author, email, or
-handle**, and `validate_cuj.py` rejects `by` / `author` / `email` outright.
+A CUJ records **nothing about its own history** — no author, no date, no revision, no capture
+method. `validate_cuj.py` rejects `author`, `authored`, `by`, and `email` outright.
 
-This is a privacy decision with a practical edge. Git history already answers *"who decided
-this journey mattered"*, and answers it more honestly than a self-reported field that goes
-stale the moment someone else edits the file. **No PII in the artifact beats a rule about
-handling PII in the artifact** — so there is no `git config user.email` read, no fallback
-value, and nothing to leak when the host repo goes public.
+**Git already answers all of it, and answers it honestly.** Who wrote this journey, when, and
+how many times it has been revised are questions `git log .ux/cujs/CUJ-001-*.md` gets right by
+construction. Hand-maintained frontmatter gets them right only until the first person forgets
+— and an unbumped `revision: 1` on a journey edited four times is worse than no revision at
+all, because it lies with confidence. A field that is silently wrong is a liability; a field
+you have to remember to update will eventually be silently wrong.
 
-`method` records *how* the journey was captured, which is the part that affects how much you
-should trust it: `interview` (via `agent-skills:interview-me`), `interview-fallback` (the
-built-in question set, because `interview-me` wasn't installed), `manual`, or `imported`.
+The author field is the sharpest case: it is **PII in a file that ships in the host's repo**.
+Removing it means there is no `git config user.email` read, no fallback value, and nothing to
+leak when that repo goes public. **No PII in the artifact beats a rule about handling PII in
+the artifact.**
+
+Deleting the field from the schema is not by itself the guarantee — nothing stops someone
+adding `author:` back by hand — which is why the rejection is executable and has a fixture.
+A privacy rule that isn't enforced is a comment.
+
+**What a report cites.** With no `revision`, a finding names the journey and step only
+(`CUJ-001 "Add a task" — step 2`). To recover which version of a journey a given report
+verified, take the report's `date` and `git log` the CUJ file. That is one more step than
+reading `rev: 1` off the page, and it is the step that gives you the true answer.
 
 ## 9. Extending the contract
 
-Adding a field means every existing CUJ becomes invalid unless the field is optional — so
-prefer the narrative until a machine genuinely needs to read it.
+The bar is high, and §3's ten keys are the argument: every field here is one more thing a
+human has to answer before they get a journey, and the failure mode of a heavy schema is not
+bad journeys — it's **no journeys**.
+
+Before adding a field, check it isn't derivable from the filename, from git, or from another
+field. Those are exactly the three sources that already cost `slug`, `authored`, and
+`actor_description` their place. Prefer the narrative until a machine genuinely needs to read
+it.
 
 If a change is unavoidable: bump `schema`, update
 [`scripts/validate_cuj.py`](../../../scripts/validate_cuj.py) and

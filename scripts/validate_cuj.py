@@ -13,6 +13,11 @@ directory, and only a script can promise byte-identical regeneration. An agent
 rewriting the table from memory cannot, and the block is spliced into a file the user
 owns.
 
+The schema is deliberately small — ten keys. A journey is written by a human answering
+an interview, so every required field has to earn its place: anything derivable from the
+filename, from git, or from another field is ceremony, and ceremony is what makes people
+stop writing journeys.
+
 Usage:
     python3 scripts/validate_cuj.py <cuj.md> [<cuj.md> ...]   # per-file
     python3 scripts/validate_cuj.py --dir  .ux/cujs           # + cross-file checks
@@ -24,28 +29,28 @@ from __future__ import annotations
 
 import re
 import sys
-from datetime import datetime
 from pathlib import Path
 
 import yaml
 
-REQUIRED_KEYS = ["id", "slug", "schema", "title", "actor", "actor_description", "goal",
-                 "criticality", "entry_point", "preconditions", "steps",
-                 "success_criteria", "authored"]
+REQUIRED_KEYS = ["id", "schema", "title", "actor", "goal", "criticality", "entry_point",
+                 "preconditions", "steps", "success_criteria"]
 
 # Criticality is not decoration: `audit-cuj` clamps finding severity by it, so a level
 # outside this set has no defined cap.
 CRITICALITY = ["critical", "high", "medium", "low"]
-METHODS = {"interview", "interview-fallback", "manual", "imported"}
 
-AUTHORED_KEYS = ["date", "method", "revision"]
-# Provenance records WHEN and HOW, never WHO. Git history answers "who decided this
-# mattered" more honestly than a self-reported field that goes stale the moment someone
-# else edits the file — and no PII in the artifact beats a rule about handling it.
-AUTHORED_FORBIDDEN = ["by", "author", "email"]
+# CUJ files record no author, and no provenance block at all — git history answers when,
+# how, and by whom, and answers it honestly, unlike hand-maintained fields that go stale
+# the moment someone forgets. Rejected rather than merely undocumented: a privacy rule
+# that isn't executable is a comment.
+FORBIDDEN_KEYS = ["author", "authored", "by", "email"]
 
 ID_RE = re.compile(r"^CUJ-\d{3}$")
-SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+# The filename carries the slug — there is no `slug` key, because a field whose only job
+# is to be checked against the filename is ceremony. The id stays in frontmatter (reports
+# cite it), so it is the one thing that can still disagree with the name on disk.
+FILENAME_RE = re.compile(r"^(CUJ-\d{3})-([a-z0-9]+(?:-[a-z0-9]+)*)\.md$")
 
 REQUIRED_HEADINGS = ["## Narrative", "## Out of scope"]
 
@@ -77,24 +82,25 @@ def _split_frontmatter(text: str) -> tuple[dict, str] | tuple[None, str]:
 
 
 def _check_identity(fm: dict, path: Path) -> list[str]:
-    """id/slug patterns, and the filename they jointly determine."""
+    """The id, and the filename that carries it plus the slug."""
     errors: list[str] = []
 
     cuj_id = fm.get("id")
     if not (isinstance(cuj_id, str) and ID_RE.match(cuj_id)):
         errors.append(f"'id' must match CUJ-NNN (three digits), got {cuj_id!r}")
 
-    slug = fm.get("slug")
-    if not (isinstance(slug, str) and SLUG_RE.match(slug)):
-        errors.append(f"'slug' must be lowercase kebab-case, got {slug!r}")
-
-    # The generated index links by <id>-<slug>.md; a mismatch is a dead link in the
-    # host's SPEC.md, which is why this is worth failing over.
-    if isinstance(cuj_id, str) and isinstance(slug, str):
-        expected = f"{cuj_id}-{slug}.md"
-        if path.name != expected:
-            errors.append(
-                f"filename {path.name!r} must equal '<id>-<slug>.md' ({expected!r})")
+    match = FILENAME_RE.match(path.name)
+    if not match:
+        errors.append(
+            f"filename {path.name!r} must be '<id>-<slug>.md' — a CUJ-NNN id and a "
+            f"lowercase kebab-case slug (e.g. 'CUJ-001-add-a-task.md')")
+    elif isinstance(cuj_id, str) and match.group(1) != cuj_id:
+        # The generated index links by filename while reports cite the frontmatter id.
+        # If they disagree, the host's SPEC.md points at one journey and every finding
+        # names another.
+        errors.append(
+            f"filename {path.name!r} declares id {match.group(1)!r} but frontmatter "
+            f"says {cuj_id!r}")
 
     if fm.get("schema") != 1:
         errors.append("'schema' must equal 1")
@@ -131,47 +137,22 @@ def _check_steps(fm: dict) -> list[str]:
     return errors
 
 
-def _check_authored(fm: dict) -> list[str]:
-    errors: list[str] = []
-    authored = fm.get("authored")
+def _check_no_provenance(fm: dict) -> list[str]:
+    """CUJ files carry no author and no provenance block.
 
-    if not isinstance(authored, dict):
-        if "authored" in fm:
-            errors.append("'authored' must be a mapping with date, method, revision")
-        return errors
+    Git already records who wrote a journey, when, and through how many revisions — and
+    records it honestly, unlike hand-maintained frontmatter that goes stale the moment
+    someone forgets to bump it. An unbumped revision is worse than no revision, because
+    it lies with confidence.
 
-    for key in AUTHORED_KEYS:
-        if key not in authored:
-            errors.append(f"'authored' missing required key: {key!r}")
-
-    for forbidden in AUTHORED_FORBIDDEN:
-        if forbidden in authored:
-            errors.append(
-                f"'authored' must not contain {forbidden!r} — CUJ files record no "
-                f"author (no PII); git history already answers who wrote this")
-
-    date = authored.get("date")
-    if isinstance(date, datetime):
-        pass  # PyYAML parsed an ISO timestamp — fine.
-    elif isinstance(date, str):
-        try:
-            datetime.fromisoformat(date.replace("Z", "+00:00"))
-        except ValueError:
-            errors.append(f"'authored.date' is not ISO-8601: {date!r}")
-    elif "date" in authored:
-        errors.append("'authored.date' must be an ISO-8601 string")
-
-    method = authored.get("method")
-    if "method" in authored and method not in METHODS:
-        errors.append(
-            f"'authored.method' must be one of {sorted(METHODS)}, got {method!r}")
-
-    revision = authored.get("revision")
-    if "revision" in authored and (not isinstance(revision, int)
-                                   or isinstance(revision, bool) or revision < 1):
-        errors.append(f"'authored.revision' must be a positive integer, got {revision!r}")
-
-    return errors
+    Enforced rather than documented, because no PII in the artifact beats a rule about
+    handling PII in the artifact.
+    """
+    return [
+        f"{key!r} must not appear — CUJ files record no author or provenance; "
+        f"git history answers who/when/which revision"
+        for key in FORBIDDEN_KEYS if key in fm
+    ]
 
 
 def _check_body(body: str) -> list[str]:
@@ -205,7 +186,7 @@ def validate(path: str | Path) -> list[str]:
 
     errors += _check_identity(fm, path)
 
-    for field in ("title", "actor", "actor_description", "goal", "entry_point"):
+    for field in ("title", "actor", "goal", "entry_point"):
         if field in fm and not (isinstance(fm[field], str) and fm[field].strip()):
             errors.append(f"{field!r} must be a non-empty string")
 
@@ -222,7 +203,7 @@ def validate(path: str | Path) -> list[str]:
             errors.append(f"{field!r} entries must be non-empty strings")
 
     errors += _check_steps(fm)
-    errors += _check_authored(fm)
+    errors += _check_no_provenance(fm)
     errors += _check_body(body)
     return errors
 

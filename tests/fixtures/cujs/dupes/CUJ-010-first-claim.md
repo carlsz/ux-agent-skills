@@ -1,10 +1,8 @@
 ---
 id: CUJ-010
-slug: first-claim
 schema: 1
 title: First journey claiming CUJ-010
-actor: returning-user
-actor_description: "Returns daily."
+actor: "Returning user with a handful of tasks, opens the app daily"
 goal: "Capture a task"
 criticality: high
 entry_point: "/"
@@ -16,10 +14,6 @@ steps:
     expect: "The input takes focus"
 success_criteria:
   - "The task persists after reload"
-authored:
-  date: 2026-07-16T10:00:00Z
-  method: manual
-  revision: 1
 ---
 
 # CUJ-010 — First claim
