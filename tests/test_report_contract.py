@@ -58,6 +58,12 @@ def main() -> int:
     failures += _expect_valid(FIXTURES / "valid" / "usability-20260715-143000.md")
     # Portability: a DIFFERENT auditor (accessibility/WCAG) shares the same contract.
     failures += _expect_valid(FIXTURES / "valid" / "accessibility-20260716-090000.md")
+    # Portability again, for an auditor whose standard is the host's own journey files
+    # rather than an external framework.
+    failures += _expect_valid(FIXTURES / "valid" / "cuj-20260716-120000.md")
+    # For `cuj`, an empty report is the SUCCESS state (every journey passed), not the
+    # "found nothing" state. total: 0 with no findings must validate.
+    failures += _expect_valid(FIXTURES / "valid" / "cuj-20260716-130000.md")
 
     # Each malformed report must be rejected for the right reason.
     failures += _expect_invalid(FIXTURES / "invalid" / "sev0-present.md", "sev0")
@@ -65,6 +71,11 @@ def main() -> int:
     failures += _expect_invalid(FIXTURES / "invalid" / "missing-key.md", "auditor")
     # Coverage honesty: a report with no appendix / not-inspected section is rejected.
     failures += _expect_invalid(FIXTURES / "invalid" / "missing-appendix.md", "coverage")
+    # Proves `cuj` is actually REGISTERED in FRAMEWORKS_BY_AUDITOR: an unregistered
+    # auditor's frameworks are only checked for non-emptiness, so without this fixture
+    # the registration would be untested and a typo in it would pass silently.
+    failures += _expect_invalid(FIXTURES / "invalid" / "cuj-bad-framework.md",
+                                "unknown to auditor")
 
     # index.md: a conforming index passes; a malformed one is rejected.
     failures += _expect_valid_index(FIXTURES / "valid" / "index.md")
@@ -75,7 +86,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (8 checks)")
+    print("PASS — report contract (11 checks)")
     return 0
 
 

@@ -31,6 +31,12 @@ FRAMEWORKS_BY_AUDITOR = {
     "usability": {"nielsen-10", "shneiderman-8", "ai-heuristics", "npcis"},
     "accessibility": {"wcag-2.2", "wcag-2.1", "aria"},
     "web-performance": {"core-web-vitals", "lighthouse", "rail"},
+    # `cuj` is the odd one out: the others cite external standards, but CUJ verification
+    # has none — the host's own journey files ARE the standard. So these name which lens
+    # the run could actually apply, which makes the list a machine-readable statement of
+    # how much it proved: a static run honestly emits `cuj-contract` alone, because it
+    # traced source without completing the task or observing persistence.
+    "cuj": {"cuj-contract", "task-completion", "success-criteria"},
 }
 SEVERITY_KEYS = ["sev4", "sev3", "sev2", "sev1"]  # sev0 is intentionally absent
 
