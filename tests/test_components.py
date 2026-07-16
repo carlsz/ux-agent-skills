@@ -253,10 +253,87 @@ def check_cuj_author_persona() -> list[str]:
     _require("never invent" in low or "fabricat" in low,
              "cuj-author: must never invent a step the user didn't state", errs)
     # Boundary: the host's SPEC.md is ask-first, and host code is off limits entirely.
-    _require("ask" in low and "spec.md" in low,
+    # "ask before"/"ask first", not bare "ask" — the substring 'ask' is also satisfied by
+    # the word "task", and a to-do app is this suite's running example. Not vacuous today,
+    # but one example away from it, and a check that silently stops checking is the worst
+    # kind (see AGENTS.md on the silent trap).
+    _require(("ask before" in low or "ask first" in low) and "spec.md" in low,
              "cuj-author: must ask before writing the host's SPEC.md", errs)
     _require("never" in low and ("edit" in low or "modif" in low) and "host" in low,
              "cuj-author: must state the never-edit-host-code boundary", errs)
+    return errs
+
+
+def check_spec_cuj_skill() -> list[str]:
+    """The authoring workflow: interview -> write -> validate -> ask -> splice."""
+    errs: list[str] = []
+    path = ROOT / "skills" / "spec-cuj" / "SKILL.md"
+    if not path.exists():
+        return [f"missing {path.relative_to(ROOT)}"]
+    fm, body = _frontmatter(path)
+    _require(isinstance(fm, dict), "spec-cuj: frontmatter must parse to a mapping", errs)
+    if isinstance(fm, dict):
+        _require(fm.get("name") == "spec-cuj",
+                 "spec-cuj: frontmatter 'name' must match the directory ('spec-cuj')",
+                 errs)
+        _require(bool(str(fm.get("description", "")).strip()),
+                 "spec-cuj: frontmatter needs a non-empty 'description'", errs)
+    low = body.lower()
+    _require(".ux/cujs" in low, "spec-cuj: must write journeys to .ux/cujs", errs)
+    _require("cuj-contract" in low, "spec-cuj: must reference the CUJ file contract", errs)
+    _require("cuj-author" in low, "spec-cuj: must invoke the cuj-author persona", errs)
+    # The interview, and its graceful degradation.
+    _require("interview-me" in low,
+             "spec-cuj: must drive agent-skills:interview-me when available", errs)
+    _require("fallback" in low or "not installed" in low,
+             "spec-cuj: must fall back when interview-me is unavailable", errs)
+    _require("disclos" in low or "say so" in low or "tell the user" in low,
+             "spec-cuj: must disclose when it fell back (never a silent degrade)", errs)
+    _require("offer" in low and "install" in low,
+             "spec-cuj: must offer to install interview-me, never auto-install", errs)
+    # The index splice — the one place it touches a file the user owns.
+    _require("validate_cuj" in low,
+             "spec-cuj: must self-check its output with validate_cuj.py", errs)
+    _require("--index" in low,
+             "spec-cuj: must GENERATE the index block, not write the table by hand", errs)
+    _require("marker" in low,
+             "spec-cuj: must only replace bytes between the index markers", errs)
+    _require(("ask before" in low or "ask first" in low) and "spec.md" in low,
+             "spec-cuj: must ask before writing the host's SPEC.md", errs)
+    _require("diff" in low,
+             "spec-cuj: must show the diff before splicing the host's SPEC.md", errs)
+    _require("declin" in low or "if they say no" in low,
+             "spec-cuj: must handle a declined SPEC.md write (journeys stand alone)",
+             errs)
+    # Safety.
+    _require("audit_safety" in low and "authoring" in low,
+             "spec-cuj: must confirm its footprint with the authoring safety profile",
+             errs)
+    _require("never" in low and ("edit" in low or "modif" in low) and "host" in low,
+             "spec-cuj: must state the never-edit-host-code boundary", errs)
+    _require("exit" in low or "done when" in low or "acceptance" in low,
+             "spec-cuj: must state explicit exit criteria", errs)
+    return errs
+
+
+def check_cuj_references() -> list[str]:
+    """spec-cuj's skill-local references must exist and carry their defining terms."""
+    errs: list[str] = []
+    refs = ROOT / "skills" / "spec-cuj" / "references"
+    expected = {
+        "cuj-contract.md": ["actor", "precondition", "step", "expect", "success_criteria",
+                            "criticality", "observable"],
+        "interview-fallback.md": ["actor", "goal", "out of scope", "criticality",
+                                  "observable"],
+    }
+    for fname, terms in expected.items():
+        path = refs / fname
+        if not path.exists():
+            errs.append(f"missing reference: skills/spec-cuj/references/{fname}")
+            continue
+        low = path.read_text(encoding="utf-8").lower()
+        for term in terms:
+            _require(term in low, f"{fname}: must cover {term!r}", errs)
     return errs
 
 
@@ -284,7 +361,8 @@ def check_references() -> list[str]:
 def main() -> int:
     failures = (check_persona() + check_skill() + check_command() + check_references()
                 + check_rollup_skill() + check_rollup_command()
-                + check_cuj_author_persona())
+                + check_cuj_author_persona() + check_spec_cuj_skill()
+                + check_cuj_references())
     if failures:
         print("FAIL — components:")
         for f in failures:

@@ -1,0 +1,40 @@
+{
+  "skill_name": "spec-cuj",
+  "trigger": {
+    "positive": [
+      { "prompt": "Define the critical user journeys for my app", "top_k": 1 },
+      { "prompt": "Interview me and write down our CUJs", "top_k": 3 },
+      { "prompt": "Author a user journey for the signup flow", "top_k": 3 }
+    ],
+    "negative": [
+      { "prompt": "Do a heuristic usability audit of this screen", "owner": "usability-audit" },
+      { "prompt": "Write Playwright end-to-end tests for the checkout flow", "owner": "agent-skills:test-driven-development" }
+    ],
+    "_note": "The 'verify my CUJs against the running app' negative (owner: audit-cuj) belongs here too, but cannot pass until Phase 9 creates that skill: routing is corpus-relative, so an owner with no description has no vector to outrank spec-cuj with. Until then spec-cuj really IS the best CUJ match on offer, and asserting otherwise would be asserting a discrimination the plugin cannot yet make. Added in T9.3."
+  },
+  "behavioral_target": {
+    "name": "sprout",
+    "repo": "https://github.com/carlsz/sprout",
+    "run": "npm install && npm run dev"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "In the Sprout repo, run /ux-agent-skills:ux-spec and author critical user journeys for adding and completing a task. Answer the interview as a daily to-do user, and answer question 5 with 'it just works' the first time.",
+      "expected_output": "One .ux/cujs/<id>-<slug>.md per journey validating against the CUJ contract, every step carrying an observable expected outcome, plus a regenerated CUJ index in Sprout's SPEC.md — written only after asking, with the diff shown.",
+      "expectations": [
+        "Writes .ux/cujs/CUJ-001-<slug>.md and CUJ-002-<slug>.md that pass both `validate_cuj.py <file>` and `validate_cuj.py --dir .ux/cujs`",
+        "REFUSES the 'it just works' answer and asks what would be observed instead — the resulting expect names a visible element, string, count, or a value surviving a reload",
+        "Interviews one question at a time, and reads the draft back before writing anything",
+        "Asks before writing Sprout's SPEC.md and shows the diff; if declined, SPEC.md is untouched and the CUJ files still stand",
+        "The SPEC.md index block sits between the ux-agent-skills:cuj-index markers, was produced by `validate_cuj.py --index` rather than hand-written, and regenerating twice is byte-identical",
+        "Prose above and below the markers survives a regeneration unchanged",
+        "Records no author, date, or revision — frontmatter is the ten contract keys and nothing else",
+        "If agent-skills:interview-me is not installed, uses the fallback question set AND discloses that it did; offers to install but never auto-installs",
+        "Does not edit any of Sprout's application code",
+        "`audit_safety.py <sprout> --profile authoring` reports all changes confined to .ux/cujs/ and SPEC.md"
+      ],
+      "trust_level": "provisional"
+    }
+  ]
+}

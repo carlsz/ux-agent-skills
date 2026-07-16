@@ -24,6 +24,8 @@ DOC_FILES = [
     "agents/cuj-author.md",
     "commands/usability-audit.md",
     "skills/usability-audit/SKILL.md",
+    "skills/spec-cuj/SKILL.md",
+    "skills/spec-cuj/references/interview-fallback.md",
     "skills/ux-audit/SKILL.md",
     "skills/usability-audit/references/report-contract.md",
     "skills/spec-cuj/references/cuj-contract.md",

@@ -3,10 +3,10 @@
 The file contract for a **critical user journey** — one journey per file, stored in the host
 repository and treated as the single source of truth about what that app is *for*.
 
-Two skills share this contract. `spec-cuj` **produces** journeys through an interview;
-`audit-cuj` **consumes** them, replaying each against the running app and reporting the step
-that broke. A journey is therefore written once by a human and read many times by a machine —
-it has to be precise enough to execute and honest enough to argue with.
+Two skills share this contract. [`spec-cuj`](../SKILL.md) **produces** journeys through an
+interview; `audit-cuj` **consumes** them, replaying each against the running app and reporting
+the step that broke. A journey is therefore written once by a human and read many times by a
+machine — it has to be precise enough to execute and honest enough to argue with.
 
 - **Schema version:** `1`
 - **Machine-checked by:** [`scripts/validate_cuj.py`](../../../scripts/validate_cuj.py)
@@ -111,9 +111,10 @@ value that survives a reload.
 | "It saves" | Conflates the act with the evidence. | "'Buy milk' is still present after a full page reload" |
 
 The validator rejects an **empty** `expect`; it cannot judge an *unobservable* one, since
-that requires reading English. That judgement lives with the `cuj-author` persona, whose job
-is to refuse it during the interview. **This is the one contract rule a machine cannot hold
-the line on** — which is why the persona states it as a refusal rather than a preference.
+that requires reading English. That judgement lives with the
+[`cuj-author`](../../../agents/cuj-author.md) persona, whose job is to refuse it during the
+interview. **This is the one contract rule a machine cannot hold the line on** — which is why
+the persona states it as a refusal rather than a preference.
 
 The same bar applies to the actor. `actor` is **one specific sentence** — who they are and
 what they bring to the journey ("Returning user with 3-10 existing tasks, opens the app daily
