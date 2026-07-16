@@ -19,7 +19,7 @@ LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
 # Files whose relative links we resolve.
 DOC_FILES = [
-    "README.md", "SPEC.md", "CHANGELOG.md",
+    "README.md", "AGENTS.md", "CONTRIBUTING.md", "SPEC.md", "CHANGELOG.md",
     "agents/usability-auditor.md",
     "commands/usability-audit.md",
     "skills/usability-audit/SKILL.md",

@@ -6,7 +6,17 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-16
+
 ### Added
+- **`AGENTS.md`** — how the repo is laid out and how to author new components: the
+  three-layer composition rule (moved here from the README), frontmatter per layer, the
+  end-to-end checklist for adding an auditor, and the authoring rules the tests enforce.
+  `CLAUDE.md` symlinks to it.
+- **`CONTRIBUTING.md`** — setup, what to work on, PR expectations, and the release process.
+- README section on composing with [agent-skills](https://github.com/addyosmani/agent-skills):
+  a report's prioritized-fixes queue feeds `/spec`, `/plan`, or `/build`, then a re-run
+  confirms the severity dropped.
 - Declared the `web-quality-skills@addy-web-quality-skills` dependency (which the roll-up
   wraps) in `plugin.json` and `marketplace.json`, and added the `$schema` reference to both.
 - **Evals system** (`evals/`) — modelled on agent-skills' evals, using Sprout as the
