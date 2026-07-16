@@ -2,7 +2,7 @@
   "skill_name": "usability-audit",
   "trigger": {
     "positive": [
-      { "prompt": "Do a usability audit of my checkout flow", "top_k": 1 },
+      { "prompt": "Do a usability audit of my to-do app's add-task flow", "top_k": 1 },
       { "prompt": "Run a heuristic evaluation of this screen", "top_k": 3 },
       { "prompt": "Review my app's UX for usability problems before user testing", "top_k": 3 }
     ],
