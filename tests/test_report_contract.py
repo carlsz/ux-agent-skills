@@ -61,6 +61,8 @@ def main() -> int:
     failures += _expect_invalid(FIXTURES / "invalid" / "sev0-present.md", "sev0")
     failures += _expect_invalid(FIXTURES / "invalid" / "count-mismatch.md", "summary")
     failures += _expect_invalid(FIXTURES / "invalid" / "missing-key.md", "auditor")
+    # Coverage honesty: a report with no appendix / not-inspected section is rejected.
+    failures += _expect_invalid(FIXTURES / "invalid" / "missing-appendix.md", "coverage")
 
     # index.md: a conforming index passes; a malformed one is rejected.
     failures += _expect_valid_index(FIXTURES / "valid" / "index.md")
@@ -71,7 +73,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (6 checks)")
+    print("PASS — report contract (7 checks)")
     return 0
 
 

@@ -144,6 +144,24 @@ def _check_finding_fields(body: str) -> list[str]:
     return errors
 
 
+def _check_coverage(body: str) -> list[str]:
+    """The report must own an Appendix that states coverage honestly.
+
+    Coverage honesty is a first-class contract rule: a report that never says what it
+    did NOT inspect reads as "covered everything" when it may not have. Require an
+    Appendix section and an explicit coverage / not-inspected statement.
+    """
+    low = body.lower()
+    errors: list[str] = []
+    if "## appendix" not in low:
+        errors.append("report missing the '## Appendix' section (coverage honesty)")
+    if "not inspected" not in low and "coverage" not in low:
+        errors.append(
+            "report appendix must state coverage — what was 'not inspected' / a "
+            "'coverage' note; silent gaps are prohibited")
+    return errors
+
+
 def validate(path: str | Path) -> list[str]:
     """Return a list of contract violations for the report at `path` ([] = valid)."""
     path = Path(path)
@@ -158,6 +176,7 @@ def validate(path: str | Path) -> list[str]:
     errors = _check_frontmatter(fm)
     errors += _check_summary(fm, body)
     errors += _check_finding_fields(body)
+    errors += _check_coverage(body)
     return errors
 
 

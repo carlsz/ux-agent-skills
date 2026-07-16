@@ -120,7 +120,7 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
 - **Deps:** Phase 2.
 
 ### T4.2 — Schema validation & coverage honesty
-- [ ] Skill self-checks generated frontmatter (required keys present; `summary` counts ==
+- [x] Skill self-checks generated frontmatter (required keys present; `summary` counts ==
   findings by severity) and always writes the coverage/appendix section.
 - **Files:** `skills/usability-audit/SKILL.md`; `references/report-contract.md`
   (validation rules).
