@@ -12,10 +12,10 @@ complete heuristic evaluation and emit a report that conforms to the
 **Framework scope:** [Nielsen's 10 heuristics](./references/nng-ux-heuristics.md). (The
 other three frameworks — Shneiderman, AI heuristics, NPCIS — arrive in a later phase.)
 
-**Evaluation modes:** `static` (read source) and `live` (drive the running app in a
-browser). Pick with `--mode`; hybrid auto-selection lands in a follow-up task. The two
-modes differ only in how evidence is gathered — the frameworks, severity rubric, and
-report format are identical.
+**Evaluation modes:** `static` (read source), `live` (drive the running app in a
+browser), and `hybrid` (both). The modes differ only in how evidence is gathered — the
+frameworks, severity rubric, and report format are identical. Mode is auto-selected by
+default (see step 1); `--mode` forces one.
 
 ---
 
@@ -24,12 +24,23 @@ report format are identical.
 - `target` — a URL (live mode) or a repo path/glob (static mode). If omitted, infer from
   the running dev server or the repo's UI source.
 - `--scope` — narrow the audit to a flow/area (e.g. "checkout"). Optional.
-- `--mode static | live` — how to gather evidence. Default `static`.
+- `--mode static | live | hybrid` — force an evidence-gathering mode. Optional; default is
+  auto (see step 1).
 
 ## Workflow
 
-1. **Scope the audit.** Resolve `target`, `--scope`, and `--mode`. Identify the host repo
-   root (where `.ux/` will live). List what you intend to cover.
+1. **Scope the audit and select the mode.** Resolve `target` and `--scope`, and identify
+   the host repo root (where `.ux/` will live). Then choose the mode:
+   - If `--mode` is given, use it.
+   - Otherwise **auto-select**: **prefer live** when a target URL is given or a dev server
+     is already running/detectable; **fall back to static** when no running app is
+     reachable. Use **hybrid** when both a URL and the source are available — inspect the
+     render for runtime behavior and use the source to locate the `file:line` a fix
+     belongs to.
+   - Record the mode you **actually** used (not the one requested) in the report
+     frontmatter and appendix — e.g. a requested `live` that fell back because no server
+     was reachable is reported as `static`, with the reason.
+   List what you intend to cover.
 
 2. **Read the frameworks.** Load [Nielsen's 10](./references/nng-ux-heuristics.md) and the
    [report contract](./references/report-contract.md). Cite the numbered heuristic from

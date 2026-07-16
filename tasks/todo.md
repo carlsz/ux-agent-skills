@@ -70,7 +70,7 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
 - **Deps:** Phase 1 complete (Checkpoint A passed).
 
 ### T2.2 — Hybrid auto-mode selection
-- [ ] Implement auto mode: prefer live when URL/dev-server present, fall back to static;
+- [x] Implement auto mode: prefer live when URL/dev-server present, fall back to static;
   use static to locate `file:line` for live findings' fixes. Record actual `mode`.
 - **Files:** `skills/usability-audit/SKILL.md`; `commands/usability-audit.md` (`--mode`
   now fully supported).

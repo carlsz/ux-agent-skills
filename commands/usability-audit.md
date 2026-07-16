@@ -1,7 +1,7 @@
 ---
 name: usability-audit
 description: Run an expert heuristic usability audit of a host app and write a severity-scored report to .ux/audits. Invokes the usability-auditor persona via the usability-audit skill.
-argument-hint: "[target] [--scope <area>] [--mode static]"
+argument-hint: "[target] [--scope <area>] [--mode static|live|hybrid]"
 ---
 
 # /usability-audit
@@ -15,13 +15,14 @@ Run a heuristic usability evaluation and write a durable, severity-scored report
 
 `$ARGUMENTS`:
 
-- **`target`** — a repo path or glob to audit (static mode). Omit to infer the host app's
-  UI source from the repo. Examples: `/usability-audit src/checkout`,
-  `/usability-audit` (whole app).
+- **`target`** — a URL (live) or a repo path/glob (static). Omit to infer from the running
+  dev server or the repo's UI source. Examples: `/usability-audit https://localhost:3000`,
+  `/usability-audit src/checkout`, `/usability-audit` (whole app).
 - **`--scope <area>`** — narrow the audit to a flow or area, e.g. `--scope checkout`.
-- **`--mode static`** — evaluation mode. **Phase 1 supports `static` only**; a `live` or
-  `hybrid` request is acknowledged and downgraded to static, with a note in the report
-  appendix. (Live/hybrid inspection lands in a later phase.)
+- **`--mode static | live | hybrid`** — force an evaluation mode. Optional; the skill
+  **auto-selects** by default: prefer `live` when a URL or running dev server is
+  available, fall back to `static` otherwise, and use `hybrid` when both the render and
+  source are reachable. The mode actually used is recorded in the report.
 
 ## Behavior
 

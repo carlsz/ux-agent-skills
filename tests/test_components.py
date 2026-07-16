@@ -98,6 +98,16 @@ def check_skill() -> list[str]:
              "skill: must require asking before starting a server / navigating", errs)
     _require("verified" in low,
              "skill: live-mode runtime findings are verified (vs static's unverified)", errs)
+    # T2.2 — hybrid auto mode-selection.
+    _require("hybrid" in low, "skill: must describe hybrid mode", errs)
+    _require("prefer" in low and "live" in low,
+             "skill: hybrid must prefer live when a URL / dev server is available", errs)
+    _require("fall" in low and "back" in low,
+             "skill: hybrid must fall back to static when no live target", errs)
+    _require("actual" in low or "actually" in low,
+             "skill: must record the mode actually used (not the one requested)", errs)
+    _require("gap" in low or "not inspected" in low,
+             "skill: must log coverage gaps, never silently", errs)
     return errs
 
 
@@ -120,6 +130,9 @@ def check_command() -> list[str]:
     # Documents its arguments.
     for arg in ("target", "scope", "mode"):
         _require(arg in low, f"command: must document the {arg!r} argument", errs)
+    # T2.2 — all three modes supported (no longer static-only).
+    for mode in ("static", "live", "hybrid"):
+        _require(mode in low, f"command: must document the {mode!r} mode", errs)
     return errs
 
 
