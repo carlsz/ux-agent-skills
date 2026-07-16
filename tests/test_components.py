@@ -31,6 +31,17 @@ def _require(cond: bool, msg: str, bucket: list[str]) -> None:
         bucket.append(msg)
 
 
+def _asks_first(low: str) -> bool:
+    """True if the body states an ask-first gate, in any of its usual spellings.
+
+    Deliberately NOT a bare `"ask" in low`: that substring is also satisfied by the word
+    "task", and a to-do app is this suite's running example — so the loose form is one
+    edit away from silently passing forever. Accepts the hyphenated adjective too
+    ("the write is ask-first"), which reads better in prose than a bare imperative.
+    """
+    return any(p in low for p in ("ask before", "ask first", "ask-first"))
+
+
 def check_persona() -> list[str]:
     errs: list[str] = []
     path = ROOT / "agents" / "usability-auditor.md"
@@ -253,11 +264,7 @@ def check_cuj_author_persona() -> list[str]:
     _require("never invent" in low or "fabricat" in low,
              "cuj-author: must never invent a step the user didn't state", errs)
     # Boundary: the host's SPEC.md is ask-first, and host code is off limits entirely.
-    # "ask before"/"ask first", not bare "ask" — the substring 'ask' is also satisfied by
-    # the word "task", and a to-do app is this suite's running example. Not vacuous today,
-    # but one example away from it, and a check that silently stops checking is the worst
-    # kind (see AGENTS.md on the silent trap).
-    _require(("ask before" in low or "ask first" in low) and "spec.md" in low,
+    _require(_asks_first(low) and "spec.md" in low,
              "cuj-author: must ask before writing the host's SPEC.md", errs)
     _require("never" in low and ("edit" in low or "modif" in low) and "host" in low,
              "cuj-author: must state the never-edit-host-code boundary", errs)
@@ -298,7 +305,7 @@ def check_spec_cuj_skill() -> list[str]:
              "spec-cuj: must GENERATE the index block, not write the table by hand", errs)
     _require("marker" in low,
              "spec-cuj: must only replace bytes between the index markers", errs)
-    _require(("ask before" in low or "ask first" in low) and "spec.md" in low,
+    _require(_asks_first(low) and "spec.md" in low,
              "spec-cuj: must ask before writing the host's SPEC.md", errs)
     _require("diff" in low,
              "spec-cuj: must show the diff before splicing the host's SPEC.md", errs)
@@ -313,6 +320,36 @@ def check_spec_cuj_skill() -> list[str]:
              "spec-cuj: must state the never-edit-host-code boundary", errs)
     _require("exit" in low or "done when" in low or "acceptance" in low,
              "spec-cuj: must state explicit exit criteria", errs)
+    return errs
+
+
+def check_ux_spec_command() -> list[str]:
+    errs: list[str] = []
+    path = ROOT / "commands" / "ux-spec.md"
+    if not path.exists():
+        return [f"missing {path.relative_to(ROOT)}"]
+    fm, body = _frontmatter(path)
+    _require(isinstance(fm, dict), "ux-spec command: frontmatter must parse to a mapping",
+             errs)
+    if isinstance(fm, dict):
+        _require(fm.get("name") == "ux-spec",
+                 "ux-spec command: frontmatter 'name' must be 'ux-spec'", errs)
+        _require(bool(str(fm.get("description", "")).strip()),
+                 "ux-spec command: frontmatter needs a non-empty 'description'", errs)
+        _require(bool(str(fm.get("argument-hint", "")).strip()),
+                 "ux-spec command: frontmatter needs an 'argument-hint'", errs)
+    low = body.lower()
+    _require("spec-cuj" in low, "ux-spec command: must invoke the spec-cuj skill", errs)
+    _require("cuj-author" in low, "ux-spec command: must invoke the cuj-author persona",
+             errs)
+    _require("--cuj" in low, "ux-spec command: must document the '--cuj' argument", errs)
+    _require(".ux/cujs" in low, "ux-spec command: must say where journeys are written",
+             errs)
+    # This is the one command in the suite that writes outside .ux/ — its entry point
+    # should say so, rather than surprising the user once the interview is over.
+    _require(_asks_first(low) and "spec.md" in low,
+             "ux-spec command: must state that the host's SPEC.md write is ask-first",
+             errs)
     return errs
 
 
@@ -362,7 +399,7 @@ def main() -> int:
     failures = (check_persona() + check_skill() + check_command() + check_references()
                 + check_rollup_skill() + check_rollup_command()
                 + check_cuj_author_persona() + check_spec_cuj_skill()
-                + check_cuj_references())
+                + check_ux_spec_command() + check_cuj_references())
     if failures:
         print("FAIL — components:")
         for f in failures:
