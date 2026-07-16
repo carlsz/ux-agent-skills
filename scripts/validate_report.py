@@ -22,7 +22,16 @@ import yaml
 REQUIRED_KEYS = ["auditor", "schema", "version", "date", "target", "mode", "scope",
                  "frameworks", "summary"]
 KNOWN_MODES = {"live", "static", "hybrid"}
-KNOWN_FRAMEWORKS = {"nielsen-10", "shneiderman-8", "ai-heuristics", "npcis"}
+
+# Framework vocabulary is PER-AUDITOR — the contract is auditor-agnostic, so each suite
+# member declares its own set. An auditor absent from this map (a new suite member) is
+# accepted as long as its frameworks are non-empty strings, keeping the contract
+# forward-compatible; known auditors are checked against their vocabulary.
+FRAMEWORKS_BY_AUDITOR = {
+    "usability": {"nielsen-10", "shneiderman-8", "ai-heuristics", "npcis"},
+    "accessibility": {"wcag-2.2", "wcag-2.1", "aria"},
+    "web-performance": {"core-web-vitals", "lighthouse", "rail"},
+}
 SEVERITY_KEYS = ["sev4", "sev3", "sev2", "sev1"]  # sev0 is intentionally absent
 
 # A finding is a level-3 heading tagged with its severity, e.g. "### [sev3] Foo".
@@ -81,9 +90,17 @@ def _check_frontmatter(fm: dict) -> list[str]:
     if not isinstance(frameworks, list) or not frameworks:
         errors.append("frontmatter 'frameworks' must be a non-empty list")
     else:
-        unknown = [f for f in frameworks if f not in KNOWN_FRAMEWORKS]
-        if unknown:
-            errors.append(f"frontmatter 'frameworks' has unknown entries: {unknown}")
+        vocab = FRAMEWORKS_BY_AUDITOR.get(fm.get("auditor"))
+        if vocab is not None:
+            unknown = [f for f in frameworks if f not in vocab]
+            if unknown:
+                errors.append(
+                    f"frontmatter 'frameworks' has entries unknown to auditor "
+                    f"{fm.get('auditor')!r}: {unknown}")
+        elif any(not (isinstance(f, str) and f.strip()) for f in frameworks):
+            # Unknown auditor: no vocabulary to check against, but entries must be
+            # non-empty strings.
+            errors.append("frontmatter 'frameworks' entries must be non-empty strings")
 
     return errors
 

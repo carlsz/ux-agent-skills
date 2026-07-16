@@ -139,7 +139,7 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
 - **Deps:** T4.1.
 
 ### T4.4 — Contract portability (mock second auditor)
-- [ ] Produce a mock `auditor: accessibility` report using the same schema; confirm it
+- [x] Produce a mock `auditor: accessibility` report using the same schema; confirm it
   validates and coexists in `index.md` unchanged.
 - **Files:** throwaway sample under scratch (not committed) or a fixture note.
 - **Acceptance:** the contract needs no changes to host a different auditor.

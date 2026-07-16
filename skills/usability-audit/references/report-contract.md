@@ -148,8 +148,12 @@ rows):
 
 A new suite member (e.g. accessibility) reuses everything above and only:
 1. sets its own `auditor` value,
-2. defines its own `frameworks` vocabulary,
+2. defines its own `frameworks` vocabulary — register it in `FRAMEWORKS_BY_AUDITOR` in
+   [`scripts/validate_report.py`](../../../scripts/validate_report.py) (an unregistered
+   auditor still validates, but its frameworks are only checked for non-emptiness),
 3. keeps the same severity rubric, body layout, and `index.md` row shape.
 
-If a change to this contract is needed, bump `schema` and update
-`scripts/validate_report.py` in the same change.
+Auditors share one `.ux/audits/` directory and one `index.md`; reports from different
+auditors coexist and are distinguished by the `auditor` field. If a change to this
+contract is needed, bump `schema` and update `scripts/validate_report.py` in the same
+change.

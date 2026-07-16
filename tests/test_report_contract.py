@@ -56,6 +56,8 @@ def main() -> int:
 
     # A fully conforming report must validate cleanly.
     failures += _expect_valid(FIXTURES / "valid" / "usability-20260715-143000.md")
+    # Portability: a DIFFERENT auditor (accessibility/WCAG) shares the same contract.
+    failures += _expect_valid(FIXTURES / "valid" / "accessibility-20260716-090000.md")
 
     # Each malformed report must be rejected for the right reason.
     failures += _expect_invalid(FIXTURES / "invalid" / "sev0-present.md", "sev0")
@@ -73,7 +75,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (7 checks)")
+    print("PASS — report contract (8 checks)")
     return 0
 
 
