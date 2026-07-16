@@ -20,7 +20,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from audit_safety import changes_confined_to  # noqa: E402
+from audit_safety import EXTRA_BY_PROFILE, changes_confined_to  # noqa: E402
+
+# Bind to the PROFILES, not to the function's defaults. The profiles are what the CLI
+# resolves and therefore what every auditor actually runs under; asserting against a
+# hand-passed allowlist would leave a widened profile undetected.
+AUDIT = EXTRA_BY_PROFILE["audit"]
+AUTHORING = EXTRA_BY_PROFILE["authoring"]
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -83,6 +89,50 @@ def main() -> int:
         v = changes_confined_to(repo, ".ux/audits/")
         if v:
             failures.append(f"run 2 should be confined, got violations: {v}")
+
+        # --- The authoring allowlist (/ux-spec) -----------------------------------
+        # /ux-spec writes .ux/cujs/ and the host's SPEC.md. That is an OPT-IN widening
+        # for authoring only; the audit invariant above must survive it untouched.
+        (repo / ".ux" / "cujs").mkdir(parents=True, exist_ok=True)
+        (repo / ".ux" / "cujs" / "CUJ-001-add-a-task.md").write_text("# CUJ-001\n")
+        (repo / "SPEC.md").write_text("# Spec\n\n## Critical User Journeys\n")
+
+        # 1. THE INVARIANT DOES NOT WEAKEN. This is the assertion the whole allowlist
+        #    design exists to protect: an AUDIT run that touched .ux/cujs/ or SPEC.md is
+        #    still a violation. If this ever passes, the suite's safety story is gone.
+        #    Note it resolves the `audit` PROFILE rather than passing an allowlist by
+        #    hand — otherwise widening that profile would go undetected here, which is
+        #    the precise mistake this assertion exists to prevent.
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT)
+        if not any(".ux/cujs" in x for x in v):
+            failures.append(f"audit profile must still flag .ux/cujs/, got: {v}")
+        if not any("SPEC.md" in x for x in v):
+            failures.append(f"audit profile must still flag SPEC.md, got: {v}")
+
+        # 2. The authoring profile permits exactly those two paths.
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUTHORING)
+        if v:
+            failures.append(f"authoring profile should permit .ux/cujs/ + SPEC.md, got: {v}")
+
+        # 3. Authoring is not a licence to touch host code — findings-only still means
+        #    never editing host application code.
+        (repo / "app.tsx").write_text("// mutated during authoring\n")
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUTHORING)
+        if not any("app.tsx" in x for x in v):
+            failures.append(f"authoring profile must still flag app.tsx, got: {v}")
+        (repo / "app.tsx").write_text("export const App = () => null;\n")  # revert
+
+        # 4. Prefix confusion. A naive startswith() would read "SPEC.md" as permitting
+        #    SPEC.md.bak, and ".ux/cujs" as permitting .ux/cujs-evil/. An allowlist that
+        #    silently widens to neighbouring paths is worse than no allowlist.
+        (repo / "SPEC.md.bak").write_text("# sneaky\n")
+        (repo / ".ux" / "cujs-evil").mkdir(parents=True, exist_ok=True)
+        (repo / ".ux" / "cujs-evil" / "x.md").write_text("# sneaky\n")
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUTHORING)
+        if not any("SPEC.md.bak" in x for x in v):
+            failures.append(f"'SPEC.md' must be an exact match, not a prefix: {v}")
+        if not any("cujs-evil" in x for x in v):
+            failures.append(f"'.ux/cujs/' must be a directory prefix, not a substring: {v}")
 
     if failures:
         print("FAIL — safety:")
