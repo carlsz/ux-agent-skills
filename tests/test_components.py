@@ -215,6 +215,51 @@ def check_rollup_command() -> list[str]:
     return errs
 
 
+def check_cuj_author_persona() -> list[str]:
+    """The interviewer persona. Its value is REFUSAL, so that is what we assert.
+
+    Everything this persona rejects is a thing the validator structurally cannot: an
+    unobservable `expect` ("it works") parses as a perfectly good string, and "the user"
+    is a valid actor as far as YAML is concerned. If these refusals drift out of the
+    prose, nothing else in the system catches it.
+    """
+    errs: list[str] = []
+    path = ROOT / "agents" / "cuj-author.md"
+    if not path.exists():
+        return [f"missing {path.relative_to(ROOT)}"]
+    fm, body = _frontmatter(path)
+    _require(isinstance(fm, dict), "cuj-author: frontmatter must parse to a mapping", errs)
+    if isinstance(fm, dict):
+        _require(fm.get("name") == "cuj-author",
+                 "cuj-author: frontmatter 'name' must be 'cuj-author'", errs)
+        desc = str(fm.get("description", "")).lower()
+        _require(bool(desc.strip()),
+                 "cuj-author: frontmatter needs a non-empty 'description'", errs)
+        _require("journey" in desc or "cuj" in desc,
+                 "cuj-author: description should carry a trigger phrase (journey / CUJ)",
+                 errs)
+    low = body.lower()
+    _require("interview" in low, "cuj-author: must describe interviewing the user", errs)
+    _require(".ux/cujs" in low, "cuj-author: must state where journeys are written", errs)
+    _require("cuj-contract" in low,
+             "cuj-author: must point at the CUJ file contract", errs)
+    # The refusals — each one is a rule the validator cannot enforce.
+    _require("observable" in low,
+             "cuj-author: must demand an observable expected outcome per step", errs)
+    _require("the user" in low and "actor" in low,
+             "cuj-author: must reject \"the user\" and demand a specific actor", errs)
+    _require("criticality" in low,
+             "cuj-author: must resist criticality inflation", errs)
+    _require("never invent" in low or "fabricat" in low,
+             "cuj-author: must never invent a step the user didn't state", errs)
+    # Boundary: the host's SPEC.md is ask-first, and host code is off limits entirely.
+    _require("ask" in low and "spec.md" in low,
+             "cuj-author: must ask before writing the host's SPEC.md", errs)
+    _require("never" in low and ("edit" in low or "modif" in low) and "host" in low,
+             "cuj-author: must state the never-edit-host-code boundary", errs)
+    return errs
+
+
 def check_references() -> list[str]:
     """The skill-local framework lenses must exist and carry their defining terms."""
     errs: list[str] = []
@@ -238,7 +283,8 @@ def check_references() -> list[str]:
 
 def main() -> int:
     failures = (check_persona() + check_skill() + check_command() + check_references()
-                + check_rollup_skill() + check_rollup_command())
+                + check_rollup_skill() + check_rollup_command()
+                + check_cuj_author_persona())
     if failures:
         print("FAIL — components:")
         for f in failures:

@@ -21,6 +21,7 @@ FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
 DOC_FILES = [
     "README.md", "AGENTS.md", "CONTRIBUTING.md", "SPEC.md", "CHANGELOG.md",
     "agents/usability-auditor.md",
+    "agents/cuj-author.md",
     "commands/usability-audit.md",
     "skills/usability-audit/SKILL.md",
     "skills/ux-audit/SKILL.md",
