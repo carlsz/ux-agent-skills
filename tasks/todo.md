@@ -44,7 +44,7 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
 - **Deps:** T1.1, T1.2.
 
 ### T1.4 — Command wiring
-- [ ] Thin command that parses `target`/`--scope`/`--mode` and invokes persona + skill.
+- [x] Thin command that parses `target`/`--scope`/`--mode` and invokes persona + skill.
 - **Files:** `commands/usability-audit.md`.
 - **Acceptance:** `/ux-agent-skills:usability-audit <path>` triggers a static audit end to
   end; args honored; `--mode live` deferred to Phase 2 (documented as not-yet-supported).

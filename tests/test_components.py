@@ -91,14 +91,36 @@ def check_skill() -> list[str]:
     return errs
 
 
+def check_command() -> list[str]:
+    errs: list[str] = []
+    path = ROOT / "commands" / "usability-audit.md"
+    if not path.exists():
+        return [f"missing {path.relative_to(ROOT)}"]
+    fm, body = _frontmatter(path)
+    _require(isinstance(fm, dict), "command: frontmatter must parse to a mapping", errs)
+    if isinstance(fm, dict):
+        _require(bool(str(fm.get("name", "")).strip()),
+                 "command: frontmatter needs a 'name'", errs)
+        _require(bool(str(fm.get("description", "")).strip()),
+                 "command: frontmatter needs a non-empty 'description'", errs)
+    low = body.lower()
+    # Thin wiring: routes to the skill / persona.
+    _require("usability-audit" in low or "usability-auditor" in low,
+             "command: must invoke the usability-audit skill / persona", errs)
+    # Documents its arguments.
+    for arg in ("target", "scope", "mode"):
+        _require(arg in low, f"command: must document the {arg!r} argument", errs)
+    return errs
+
+
 def main() -> int:
-    failures = check_persona() + check_skill()
+    failures = check_persona() + check_skill() + check_command()
     if failures:
         print("FAIL — components:")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — components (persona, skill)")
+    print("PASS — components (persona, skill, command)")
     return 0
 
 
