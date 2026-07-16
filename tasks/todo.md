@@ -151,7 +151,7 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
 ## Phase 5 — Docs & release
 
 ### T5.1 — README + CHANGELOG
-- [ ] Document the usability auditor and the shared report contract; add a CHANGELOG entry.
+- [x] Document the usability auditor and the shared report contract; add a CHANGELOG entry.
 - **Files:** `README.md`, `CHANGELOG.md`.
 - **Acceptance:** README explains invocation, modes, `.ux/audits` output, and the
   suite-wide contract; CHANGELOG under `[Unreleased]`.
