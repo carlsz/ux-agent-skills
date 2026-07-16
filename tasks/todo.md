@@ -182,3 +182,25 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
 - [x] Post-run `git status` scoped to `.ux/audits/` only.
 - [x] Every finding: framework citation + 0–4 severity + evidence + fix.
 - [x] README/CHANGELOG updated.
+
+---
+
+## Phase 6 — Suite roll-up (post-plan, user-directed)
+
+Fan-out meta-command (SPEC §8), standardizing on wrapping `web-quality-skills` for the
+non-native auditors.
+
+### T6.1 — Roll-up skill + command
+- [x] `skills/ux-audit/SKILL.md` — fan out to usability (native) + accessibility +
+      web-performance (wrapping `web-quality-skills`), normalize each into the shared
+      contract, append the index, write `rollup-<ts>.md` with a go/no-go verdict; skip
+      unavailable auditors with disclosure.
+- [x] `commands/ux-audit.md` — `/ux-agent-skills:ux-audit` (namespaced to avoid collision).
+- **Verify:** `check_rollup_skill()` + `check_rollup_command()` in test_components.
+
+### T6.2 — Docs
+- [ ] README + CHANGELOG document the roll-up and the web-quality-skills wrap.
+
+### T6.3 — Dogfood the roll-up (optional)
+- [ ] Run `/ux-agent-skills:ux-audit` against sprout, invoking the wrapped
+      web-quality-skills auditors end-to-end.

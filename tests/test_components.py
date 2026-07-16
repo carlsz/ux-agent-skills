@@ -153,6 +153,68 @@ def check_command() -> list[str]:
     return errs
 
 
+def check_rollup_skill() -> list[str]:
+    """The suite roll-up skill fans out to auditors and normalizes into the contract."""
+    errs: list[str] = []
+    path = ROOT / "skills" / "ux-audit" / "SKILL.md"
+    if not path.exists():
+        return [f"missing {path.relative_to(ROOT)}"]
+    fm, body = _frontmatter(path)
+    _require(isinstance(fm, dict), "rollup skill: frontmatter must parse to a mapping",
+             errs)
+    if isinstance(fm, dict):
+        _require(bool(str(fm.get("name", "")).strip()),
+                 "rollup skill: frontmatter needs a 'name'", errs)
+        _require(bool(str(fm.get("description", "")).strip()),
+                 "rollup skill: frontmatter needs a non-empty 'description'", errs)
+    low = body.lower()
+    # Fans out to all three auditors.
+    for auditor in ("usability", "accessibility", "web-performance"):
+        _require(auditor in low, f"rollup skill: must fan out to the {auditor} auditor",
+                 errs)
+    # Wraps the external web-quality-skills suite for a11y + performance.
+    _require("web-quality-skills" in low,
+             "rollup skill: must wrap the web-quality-skills suite", errs)
+    # Normalizes into the shared contract.
+    _require("report-contract" in low or "shared contract" in low,
+             "rollup skill: must normalize into the shared report contract", errs)
+    _require("normaliz" in low or "map" in low,
+             "rollup skill: must map external findings to the 0-4 severity scale", errs)
+    _require(".ux/audits" in low,
+             "rollup skill: must write into .ux/audits", errs)
+    # Resilience: skip missing auditors, disclosed honestly.
+    _require(("skip" in low or "not installed" in low or "unavailable" in low)
+             and "note" in low,
+             "rollup skill: must skip unavailable auditors and disclose it", errs)
+    # Produces a combined roll-up / verdict.
+    _require("roll-up" in low or "rollup" in low or "go/no-go" in low or "verdict" in low,
+             "rollup skill: must produce a combined roll-up / verdict", errs)
+    # Safety boundary restated.
+    _require("never" in low and "outside" in low,
+             "rollup skill: must forbid writing outside .ux/audits", errs)
+    return errs
+
+
+def check_rollup_command() -> list[str]:
+    errs: list[str] = []
+    path = ROOT / "commands" / "ux-audit.md"
+    if not path.exists():
+        return [f"missing {path.relative_to(ROOT)}"]
+    fm, body = _frontmatter(path)
+    _require(isinstance(fm, dict), "rollup command: frontmatter must parse to a mapping",
+             errs)
+    if isinstance(fm, dict):
+        _require(bool(str(fm.get("name", "")).strip()),
+                 "rollup command: frontmatter needs a 'name'", errs)
+        _require(bool(str(fm.get("description", "")).strip()),
+                 "rollup command: frontmatter needs a non-empty 'description'", errs)
+    low = body.lower()
+    _require("ux-audit" in low, "rollup command: must invoke the ux-audit skill", errs)
+    for arg in ("target", "scope", "only"):
+        _require(arg in low, f"rollup command: must document the {arg!r} argument", errs)
+    return errs
+
+
 def check_references() -> list[str]:
     """The skill-local framework lenses must exist and carry their defining terms."""
     errs: list[str] = []
@@ -175,13 +237,14 @@ def check_references() -> list[str]:
 
 
 def main() -> int:
-    failures = check_persona() + check_skill() + check_command() + check_references()
+    failures = (check_persona() + check_skill() + check_command() + check_references()
+                + check_rollup_skill() + check_rollup_command())
     if failures:
         print("FAIL — components:")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — components (persona, skill, command, references)")
+    print("PASS — components (persona, skill, command, references, roll-up)")
     return 0
 
 

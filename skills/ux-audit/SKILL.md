@@ -1,0 +1,96 @@
+---
+name: ux-audit
+description: Suite roll-up — fan out to every available UX auditor (usability, accessibility, web performance) against one target, normalize all findings into the shared .ux/audits contract, and produce one combined go/no-go roll-up. Use for "full UX audit", "audit everything", "ux-audit".
+---
+
+# UX Audit — suite roll-up
+
+Run the whole auditor suite against one target and merge the results. This is the
+fan-out the [report contract](../usability-audit/references/report-contract.md) was built
+for: every auditor writes the same schema into `.ux/audits/`, so their reports are
+comparable and can be rolled up into a single verdict.
+
+One native auditor plus two wrapped from **[web-quality-skills](https://github.com/addyosmani/web-quality-skills)**
+(the same-author companion to `agent-skills`, a coherent suite of web-quality checks):
+
+| Auditor | Source | Frameworks | Report `auditor` |
+|---------|--------|------------|------------------|
+| Usability | native `skills/usability-audit` | Nielsen / Shneiderman / AI / NPCIS | `usability` |
+| Accessibility | wrap `web-quality-skills:accessibility` | WCAG 2.2 | `accessibility` |
+| Web performance | wrap `web-quality-skills:performance` (+ `core-web-vitals`) | Core Web Vitals | `web-performance` |
+
+> Extensible: `web-quality-skills` also ships `seo` and `best-practices`; add them as
+> future suite members the same way (register their frameworks in
+> [`scripts/validate_report.py`](../../scripts/validate_report.py)).
+
+---
+
+## Inputs
+
+- `target` — a URL (preferred; a11y and web-perf need a render) or a repo path. Omit to
+  infer from the running dev server / repo.
+- `--scope` — narrow to a flow or area, shared by all auditors.
+- `--only <list>` — run a subset, e.g. `--only usability,accessibility`. Default: all
+  available.
+- `--mode` — passed through to auditors that support it (usability).
+
+## Workflow
+
+1. **Discover available auditors.** Usability is always available (native). For
+   accessibility and web performance, check whether the wrapping skills
+   (`web-quality-skills:accessibility`, `web-quality-skills:performance`) are installed.
+   **Skip any auditor whose skill is not installed / unavailable, and record it as
+   skipped with a note giving the reason** in the roll-up — a missing auditor must never
+   read as a clean pass. Honor `--only`.
+
+2. **Fan out.** Run each selected auditor against the same `target`/`--scope`:
+   - **Usability** — invoke the native `usability-audit` skill; it already writes a
+     contract report.
+   - **Accessibility** — invoke `web-quality-skills:accessibility`; capture its WCAG
+     findings.
+   - **Web performance** — invoke `web-quality-skills:performance` (and
+     `core-web-vitals`); capture its findings, respecting its metric-honesty rule
+     (unmeasured = potential, never fabricated).
+
+3. **Normalize into the shared contract.** For each wrapped auditor, write a
+   contract-conforming report at `.ux/audits/<auditor>-<YYYYMMDD>-<HHMMSS>.md` — same
+   frontmatter schema, body layout, and appendix. **Map each tool's severity onto the
+   0–4 scale**:
+   - **Accessibility (WCAG):** blocker on a core flow / Level A name-role-value failure →
+     3–4; Level AA (e.g. 1.4.3 contrast) → 3; minor/AAA or edge → 2; cosmetic → 1.
+   - **Web performance:** a Core Web Vital in the "poor" band (measured) → 3; "needs
+     improvement" → 2; a structural anti-pattern with only *potential* impact → 1–2,
+     labeled potential per the metric-honesty rule.
+   - **Omit severity 0** (non-problems), same as usability.
+   Set `auditor` and `frameworks` per the table above; carry the tool's evidence
+   (screenshots, `file:line`, measured metrics) into the Evidence field.
+
+4. **Append the index.** Add one `.ux/audits/index.md` row per auditor run (append-only),
+   exactly as a single-auditor run does.
+
+5. **Write the roll-up.** Create `.ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md`: a per-auditor
+   severity table, the auditors that ran vs. were skipped (with reasons), a merged
+   top-issues list ordered by severity across all auditors, and an overall **go/no-go
+   verdict** (e.g. no-go if any sev4, or any auditor reports a sev3 blocker). Link to each
+   individual report.
+
+6. **Self-check.** Validate every report and the index with
+   [`scripts/validate_report.py`](../../scripts/validate_report.py), and confirm the safety
+   invariant with [`scripts/audit_safety.py`](../../scripts/audit_safety.py) `<host-repo>`.
+
+## Boundaries
+
+- **Findings only.** No auditor in the roll-up edits host application code.
+- **Never write outside `.ux/audits/`** in the host repo — the suite-wide safety invariant.
+- **Ask first** before starting a dev server, navigating a browser, or installing anything
+  (including a missing wrapped skill — offer, don't auto-install).
+- **Never fabricate**, and honor each wrapped auditor's own honesty rules (usability's
+  render-vs-source; web performance's metric-honesty).
+
+## Exit criteria (done when)
+
+- Each selected, available auditor produced a contract-valid report under `.ux/audits/`,
+  with one appended index row apiece.
+- A `rollup-<timestamp>.md` exists with the per-auditor table, skipped auditors (with
+  reasons), merged issues, and a go/no-go verdict.
+- Every report validates; `audit_safety.py` reports all changes confined to `.ux/audits/`.
