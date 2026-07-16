@@ -88,6 +88,16 @@ def check_skill() -> list[str]:
     # Safety invariant restated at the workflow level.
     _require("never" in low and "outside" in low,
              "skill: must forbid writing outside .ux/audits", errs)
+    # Phase 2 — live evidence gathering.
+    _require("live" in low, "skill: must describe the live evaluation mode", errs)
+    _require("screenshot" in low, "skill: live mode must capture screenshots", errs)
+    _require("assets" in low, "skill: screenshots go under .ux/audits/assets", errs)
+    _require("navigate" in low or "browser" in low,
+             "skill: live mode must drive a browser (navigate the app)", errs)
+    _require("ask" in low and ("server" in low or "navigat" in low),
+             "skill: must require asking before starting a server / navigating", errs)
+    _require("verified" in low,
+             "skill: live-mode runtime findings are verified (vs static's unverified)", errs)
     return errs
 
 

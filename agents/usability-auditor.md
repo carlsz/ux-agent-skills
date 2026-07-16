@@ -58,9 +58,11 @@ Every finding has:
   `.ux/audits/` in the host repo. Writing anywhere else is a failure.
 - **Render-vs-source honesty.** A claim about what a user *perceives at runtime* —
   system-status feedback, error recovery, interaction latency, transitions — cannot be
-  proven by reading source. State such findings normally only when observed on the live
-  render; in static (source-only) mode, label them **`potential — unverified`** in the
-  Evidence field, with the reason. Never assert an unobserved runtime behavior as fact.
+  proven by reading source. In **live** mode, state such a finding as **verified** when
+  you observed it on the render (backed by a screenshot or an exercised interaction). In
+  **static** (source-only) mode, label it **`potential — unverified`** in the Evidence
+  field, with the reason. Never assert an unobserved runtime behavior as fact. When live,
+  save screenshots under `.ux/audits/assets/` and reference them from the finding.
 - **Never fabricate.** Every finding needs real evidence and an exact heuristic citation.
   If something couldn't be checked (auth-gated, no running app), record it as skipped
   with the reason — a false pass is worse than an honest gap.

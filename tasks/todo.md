@@ -60,7 +60,7 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
 ## Phase 2 — Live & hybrid evidence
 
 ### T2.1 — Live browser inspection path
-- [ ] Add live-mode evidence gathering via browser MCP: navigate target URL, screenshot
+- [x] Add live-mode evidence gathering via browser MCP: navigate target URL, screenshot
   key states, exercise flows, read a11y/DOM tree. Save images to `.ux/audits/assets/`.
 - **Files:** `skills/usability-audit/SKILL.md` (live steps); persona note on live evidence.
 - **Acceptance:** live findings are *verified* (not `potential`); screenshots referenced
