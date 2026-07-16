@@ -12,4 +12,8 @@ The heuristics its reviews cite (`nng-ux-heuristics.md`) live beside the skill t
 them, in [`../skills/usability-audit/references/`](../skills/usability-audit/references/),
 to keep that skill self-contained.
 
-_No personas defined yet — this is a scaffold._
+## Personas here
+
+- [`usability-auditor.md`](usability-auditor.md) — senior UX auditor; evaluates against
+  Nielsen / Shneiderman / AI-heuristics / NPCIS and emits a 0–4 severity report. Driven by
+  the [`usability-audit`](../skills/usability-audit/SKILL.md) skill.

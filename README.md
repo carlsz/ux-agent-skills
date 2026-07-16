@@ -45,8 +45,9 @@ Reports land in the host repo under **`.ux/audits/`**:
 
 ### Shared report contract
 
-Every auditor in this suite (usability today; accessibility, web-performance next) emits
-the same [report contract](skills/usability-audit/references/report-contract.md) — one
+Every auditor in this suite — usability (native), plus accessibility and web-performance
+(wrapped, see the roll-up below) — emits the same
+[report contract](skills/usability-audit/references/report-contract.md) — one
 `.ux/audits/` directory, one frontmatter schema, one severity scale, one rolling index —
 so their outputs are comparable and can be rolled up together. Only the `auditor` value and
 framework vocabulary differ. Reports self-validate via
@@ -70,6 +71,45 @@ and are summarized in a `rollup-<timestamp>.md` with a per-auditor table and an 
 **go/no-go verdict**. Auditors whose wrapping skill isn't installed are skipped and
 disclosed — never silently treated as a pass. See the
 [roll-up skill](skills/ux-audit/SKILL.md).
+
+## Example — auditing a real app (Sprout)
+
+[Sprout](https://github.com/carlsz/sprout) is a small Next.js todo app. From inside its
+repo, just ask in plain language — the trigger phrases route to the right skill:
+
+```
+> Do a usability audit of Sprout's task flows.
+```
+
+or invoke the command directly, pointing at a running dev server for a live pass:
+
+```
+> /ux-agent-skills:usability-audit http://localhost:3000 --scope "add / edit / complete / delete"
+```
+
+The auditor drives the flow in a browser, then writes a severity-scored report to
+`Sprout/.ux/audits/usability-<timestamp>.md` — for example:
+
+```markdown
+### [sev2] Edit save/cancel is invisible and blur commits silently
+- Framework Violation: Nielsen #6 — Recognition Rather than Recall (primary);
+  corroborating Shneiderman #7 — Keep Users in Control.
+- Evidence: Verified live — entered edit mode; the row showed only the text field with
+  no Save/Cancel control or hint. Source: components/todo/TodoItem.tsx:41-62.
+- Recommended Fix: add visible Save / Cancel controls or an "Enter to save · Esc to
+  cancel" hint, and commit on blur only when the value changed.
+```
+
+To run the **whole suite** (usability + accessibility + web performance) before shipping:
+
+```
+> Run a full UX audit of Sprout before launch.
+> /ux-agent-skills:ux-audit http://localhost:3000
+```
+
+That writes one normalized report per auditor plus a `rollup-<timestamp>.md` with a
+per-auditor severity table and a go/no-go verdict — all under `Sprout/.ux/audits/`, and
+nothing else in the repo is touched.
 
 ## Installation
 
@@ -101,10 +141,12 @@ ux-agent-skills/
 │   └── marketplace.json    # marketplace catalog (self-lists this plugin)
 ├── agents/                 # personas — the who (usability-auditor)
 ├── skills/                 # skills — the how
-│   └── usability-audit/
-│       ├── SKILL.md            # the audit workflow
-│       └── references/         # framework lenses + the shared report contract
-├── commands/               # slash commands — the when (/usability-audit)
+│   ├── usability-audit/
+│   │   ├── SKILL.md            # the usability audit workflow
+│   │   └── references/         # framework lenses + the shared report contract
+│   └── ux-audit/
+│       └── SKILL.md            # the suite roll-up (fan-out + normalize + verdict)
+├── commands/               # slash commands — the when (/usability-audit, /ux-audit)
 ├── scripts/                # validate_report.py, audit_safety.py
 ├── tests/                  # contract / component / safety / docs checks
 └── references/             # original seed material (persona spec)
