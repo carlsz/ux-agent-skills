@@ -199,7 +199,7 @@ non-native auditors.
 - **Verify:** `check_rollup_skill()` + `check_rollup_command()` in test_components.
 
 ### T6.2 — Docs
-- [ ] README + CHANGELOG document the roll-up and the web-quality-skills wrap.
+- [x] README + CHANGELOG document the roll-up and the web-quality-skills wrap.
 
 ### T6.3 — Dogfood the roll-up (optional)
 - [ ] Run `/ux-agent-skills:ux-audit` against sprout, invoking the wrapped

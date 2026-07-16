@@ -53,6 +53,24 @@ framework vocabulary differ. Reports self-validate via
 [`scripts/validate_report.py`](scripts/validate_report.py); the safety invariant (writes
 stay under `.ux/audits/`) is checked by [`scripts/audit_safety.py`](scripts/audit_safety.py).
 
+## Suite roll-up
+
+One command runs every available auditor against a single target and merges the results:
+
+```
+/ux-agent-skills:ux-audit [target] [--scope <area>] [--only usability,accessibility,web-performance]
+```
+
+It fans out to the **usability** auditor (native) plus **accessibility** and **web
+performance** — the latter two wrapped from
+[web-quality-skills](https://github.com/addyosmani/web-quality-skills), the same-author
+companion to `agent-skills`. Every result is **normalized into the shared contract**
+(0–4 severity), so all reports land in one `.ux/audits/` directory, share one `index.md`,
+and are summarized in a `rollup-<timestamp>.md` with a per-auditor table and an overall
+**go/no-go verdict**. Auditors whose wrapping skill isn't installed are skipped and
+disclosed — never silently treated as a pass. See the
+[roll-up skill](skills/ux-audit/SKILL.md).
+
 ## Installation
 
 Via the marketplace:

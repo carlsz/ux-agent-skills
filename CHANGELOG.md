@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Suite roll-up** — `/ux-agent-skills:ux-audit` fans out to usability (native) plus
+  accessibility and web performance (wrapped from
+  [web-quality-skills](https://github.com/addyosmani/web-quality-skills)), normalizes every
+  result into the shared `.ux/audits` contract, and writes a `rollup-<ts>.md` with a
+  per-auditor table and a go/no-go verdict. Unavailable auditors are skipped and disclosed.
 - **Usability Auditor** — the suite's first auditor: the `usability-auditor` persona
   (`agents/`), the `usability-audit` skill (`skills/`), and the `/usability-audit`
   command (`commands/`).
