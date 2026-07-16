@@ -36,7 +36,7 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
   10 → produce evidence-backed findings (`file:line`) → write report to `.ux/audits/`.
   Runtime-perception heuristics labeled `potential — unverified` in static mode.
 - **Files:** `skills/usability-audit/SKILL.md` (frontmatter + numbered steps + explicit
-  exit criteria); reuse existing `references/nng-ux-heuristics.md`.
+  exit criteria); reuse `skills/usability-audit/references/nng-ux-heuristics.md`.
 - **Acceptance:** creates `.ux/` + `.ux/audits/` if absent; writes a timestamped report;
   every finding has evidence + Nielsen citation + fix + severity; honesty labeling applied.
 - **Verify:** dry-run against a small sample component set produces a contract-valid

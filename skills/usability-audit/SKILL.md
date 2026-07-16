@@ -10,7 +10,7 @@ complete heuristic evaluation and emit a report that conforms to the
 [shared report contract](./references/report-contract.md).
 
 **Phase 1 scope:** static (source-only) evaluation against
-[Nielsen's 10 heuristics](../../references/nng-ux-heuristics.md). Live/hybrid inspection
+[Nielsen's 10 heuristics](./references/nng-ux-heuristics.md). Live/hybrid inspection
 and the other three frameworks arrive in later phases — a `--mode live` request is
 acknowledged as not-yet-supported and run as static.
 
@@ -29,7 +29,7 @@ acknowledged as not-yet-supported and run as static.
 1. **Scope the audit.** Resolve `target` and `--scope`. Identify the host repo root
    (where `.ux/` will live) and the UI source to inspect. List what you intend to cover.
 
-2. **Read the frameworks.** Load [Nielsen's 10](../../references/nng-ux-heuristics.md) and
+2. **Read the frameworks.** Load [Nielsen's 10](./references/nng-ux-heuristics.md) and
    the [report contract](./references/report-contract.md). Do not recite heuristics from
    memory — cite the numbered heuristic from the reference.
 

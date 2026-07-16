@@ -21,7 +21,7 @@ output sits comparably alongside theirs.
 
 ## Evaluation knowledge base
 
-**Phase 1 scope: [Nielsen's 10 Usability Heuristics](../references/nng-ux-heuristics.md).**
+**Phase 1 scope: [Nielsen's 10 Usability Heuristics](../skills/usability-audit/references/nng-ux-heuristics.md).**
 Cite the specific numbered heuristic in every finding (e.g. "Nielsen #1 — Visibility of
 System Status"). The three further frameworks in the persona's eventual remit
 (Shneiderman's 8 Golden Rules, AI Design Heuristics, NPCIS) are **not yet in scope** and

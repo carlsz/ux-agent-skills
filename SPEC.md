@@ -92,20 +92,20 @@ ux-agent-skills/
 ├── skills/
 │   └── usability-audit/
 │       ├── SKILL.md                  # workflow (NEW)
-│       └── references/               # copied/linked eval material (NEW)
-│           ├── nng-ux-heuristics.md      # Nielsen's 10
-│           ├── shneiderman-8.md          # Golden Rules
-│           ├── ai-design-heuristics.md   # PAIR / Amershi
-│           └── npcis.md                  # Navigation/Presentation/Content/Interaction/Strategy
+│       └── references/               # eval material — self-contained with the skill
+│           ├── nng-ux-heuristics.md      # Nielsen's 10 (moved here to keep the skill atomic)
+│           ├── report-contract.md        # shared .ux/audits contract
+│           ├── shneiderman-8.md          # Golden Rules (NEW, Phase 3)
+│           ├── ai-design-heuristics.md   # PAIR / Amershi (NEW, Phase 3)
+│           └── npcis.md                  # Navigation/Presentation/Content/Interaction/Strategy (NEW, Phase 3)
 ├── commands/
 │   └── usability-audit.md            # slash command (NEW)
-└── references/                       # existing seed material (source of truth)
-    ├── ux-researcher.md
-    └── nng-ux-heuristics.md
+└── references/                       # original seed material (source of truth)
+    └── ux-researcher.md                  # severity-report persona spec (0–4 scale)
 ```
-> Skill-local `references/` are the eval frameworks the skill loads at run time. They are
-> derived from the repo-level `references/` seed and expanded to the full four-framework
-> stack.
+> Skill-local `references/` are the eval frameworks the skill loads at run time. They live
+> beside the skill so it is self-contained (atomic); the repo-level `references/` holds the
+> original seed material the suite was derived from.
 
 ### 3.2 What the auditor writes into the HOST repo
 ```
