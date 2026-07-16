@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from validate_report import validate  # noqa: E402
+from validate_report import validate, validate_index  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures"
 
@@ -35,6 +35,22 @@ def _expect_invalid(path: Path, needle: str) -> list[str]:
     return []
 
 
+def _expect_valid_index(path: Path) -> list[str]:
+    errors = validate_index(path)
+    if errors:
+        return [f"expected VALID index but got errors: {path.name}: {errors}"]
+    return []
+
+
+def _expect_invalid_index(path: Path, needle: str) -> list[str]:
+    errors = validate_index(path)
+    if not errors:
+        return [f"expected INVALID index but passed: {path.name}"]
+    if not any(needle in e for e in errors):
+        return [f"{path.name}: expected an index error mentioning {needle!r}, got {errors}"]
+    return []
+
+
 def main() -> int:
     failures: list[str] = []
 
@@ -46,12 +62,16 @@ def main() -> int:
     failures += _expect_invalid(FIXTURES / "invalid" / "count-mismatch.md", "summary")
     failures += _expect_invalid(FIXTURES / "invalid" / "missing-key.md", "auditor")
 
+    # index.md: a conforming index passes; a malformed one is rejected.
+    failures += _expect_valid_index(FIXTURES / "valid" / "index.md")
+    failures += _expect_invalid_index(FIXTURES / "invalid" / "index-badcols.md", "column")
+
     if failures:
         print("FAIL — report contract:")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (4 checks)")
+    print("PASS — report contract (6 checks)")
     return 0
 
 

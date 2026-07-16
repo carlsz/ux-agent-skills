@@ -161,9 +161,68 @@ def validate(path: str | Path) -> list[str]:
     return errors
 
 
+INDEX_COLUMNS = ["Date (UTC)", "Auditor", "Scope", "Sev4", "Sev3", "Sev2", "Sev1",
+                 "Report"]
+
+
+def _table_cells(line: str) -> list[str]:
+    """Split a markdown table row into trimmed cells (ignoring the outer pipes)."""
+    return [c.strip() for c in line.strip().strip("|").split("|")]
+
+
+def validate_index(path: str | Path) -> list[str]:
+    """Return contract violations for a `.ux/audits/index.md` ([] = valid).
+
+    The index is append-only: this checks structure (header row + column count +
+    integer severity cells), not history, since prior rows must never be rewritten.
+    """
+    path = Path(path)
+    if not path.exists():
+        return [f"index not found: {path}"]
+    lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+
+    header_idx = next((i for i, ln in enumerate(lines)
+                       if "Date (UTC)" in ln and "Report" in ln), None)
+    if header_idx is None:
+        return [f"index missing the table header row (columns: {INDEX_COLUMNS})"]
+
+    header = _table_cells(lines[header_idx])
+    if header != INDEX_COLUMNS:
+        return [f"index header has wrong columns: expected {INDEX_COLUMNS}, got {header}"]
+
+    errors: list[str] = []
+    # Data rows follow the header separator (|---|---|). Skip the separator line.
+    for ln in lines[header_idx + 1:]:
+        cells = _table_cells(ln)
+        if set("".join(cells)) <= set("-: "):  # separator row
+            continue
+        if len(cells) != len(INDEX_COLUMNS):
+            errors.append(
+                f"index row has {len(cells)} columns, expected {len(INDEX_COLUMNS)}: {ln!r}")
+            continue
+        for sev_cell in cells[3:7]:  # Sev4..Sev1
+            if not sev_cell.isdigit():
+                errors.append(f"index severity cell not an integer: {sev_cell!r} in {ln!r}")
+    return errors
+
+
 def main(argv: list[str]) -> int:
+    if argv and argv[0] == "--index":
+        rest = argv[1:] or ["index.md"]
+        ok = True
+        for arg in rest:
+            errors = validate_index(arg)
+            if errors:
+                ok = False
+                print(f"INVALID index: {arg}", file=sys.stderr)
+                for e in errors:
+                    print(f"  - {e}", file=sys.stderr)
+            else:
+                print(f"valid index: {arg}")
+        return 0 if ok else 1
     if not argv:
-        print("usage: validate_report.py <report.md> [...]", file=sys.stderr)
+        print("usage: validate_report.py <report.md> [...]  |  --index <index.md>",
+              file=sys.stderr)
         return 2
     ok = True
     for arg in argv:

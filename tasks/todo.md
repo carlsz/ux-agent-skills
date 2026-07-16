@@ -112,7 +112,7 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
 ## Phase 4 — Contract hardening & suite portability
 
 ### T4.1 — Rolling index
-- [ ] Append one row per run to `.ux/audits/index.md`; create it if absent; never rewrite
+- [x] Append one row per run to `.ux/audits/index.md`; create it if absent; never rewrite
   prior rows.
 - **Files:** `skills/usability-audit/SKILL.md`.
 - **Acceptance:** two consecutive runs yield two index rows + two report files.

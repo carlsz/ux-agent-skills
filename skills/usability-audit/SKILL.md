@@ -104,9 +104,16 @@ default (see step 1); `--mode` forces one.
    appendix. The appendix records the `mode` used, the frameworks applied, and — honestly
    — everything in scope you did **not** inspect.
 
-7. **Self-check before finishing.** Ensure `summary` counts reconcile with the findings in
-   the body and no `[sev0]` appears. Validate with
-   [`scripts/validate_report.py`](../../scripts/validate_report.py).
+7. **Append to the index.** Add one row for this run to `.ux/audits/index.md` — create the
+   file with the contract's header if it doesn't exist. The index is **append-only**: add
+   your row, never rewrite or reorder prior rows (they may belong to earlier runs or other
+   auditors). The row records date, auditor, scope, and the four severity counts, linking
+   to the report file.
+
+8. **Self-check before finishing.** Ensure `summary` counts reconcile with the findings in
+   the body and no `[sev0]` appears. Validate the report and index with
+   [`scripts/validate_report.py`](../../scripts/validate_report.py) — `validate_report.py
+   <report>` and `validate_report.py --index .ux/audits/index.md`.
 
 ## Boundaries
 
@@ -120,6 +127,8 @@ default (see step 1); `--mode` forces one.
 ## Exit criteria (done when)
 
 - A timestamped report exists under `.ux/audits/` and validates against the contract.
+- One row was appended to `.ux/audits/index.md` (created if absent), with no prior rows
+  rewritten.
 - Every reported finding has a framework citation (primary + any corroborating), a 0–4
   severity, evidence, and a fix, with no issue filed under more than one finding.
 - Runtime-perception findings are `verified` (live) or `potential — unverified` (static),
