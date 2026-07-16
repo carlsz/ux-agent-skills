@@ -20,7 +20,7 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
 - **Deps:** none (foundational).
 
 ### T1.2 — Minimal persona
-- [ ] Create the usability-auditor persona (Nielsen scope for now), with the
+- [x] Create the usability-auditor persona (Nielsen scope for now), with the
   render-vs-source honesty rule and findings-only boundary stated explicitly.
 - **Files:** `agents/usability-auditor.md` — YAML frontmatter (`name`, `description` with
   trigger phrases: "usability audit", "heuristic evaluation", "UX audit"); role; output
