@@ -5,12 +5,9 @@
 Each file defines a subagent with a point of view (e.g. a senior UX auditor) and a
 structured way of reporting. Drop one Markdown file per persona in this directory.
 
-Seed material for the first persona lives in [`../references/`](../references/):
-- `ux-researcher.md` — a "Heuristic Evaluator" persona spec (UX-Heuristic-Bot).
-
-The heuristics its reviews cite (`nng-ux-heuristics.md`) live beside the skill that loads
-them, in [`../skills/usability-audit/references/`](../skills/usability-audit/references/),
-to keep that skill self-contained.
+The heuristics a persona's reviews cite live beside the skill that loads them, in
+[`../skills/usability-audit/references/`](../skills/usability-audit/references/), to keep
+that skill self-contained.
 
 ## Personas here
 

@@ -76,7 +76,7 @@ summary:                     # counts MUST reconcile (see §5)
 
 ## 4. Severity rubric (0–4)
 
-From [`references/ux-researcher.md`](../../../references/ux-researcher.md).
+Based on [Nielsen's severity ratings for usability problems](https://www.nngroup.com/articles/how-to-rate-the-severity-of-usability-problems/).
 
 | Score | Meaning | Appears in report? |
 |-------|---------|--------------------|

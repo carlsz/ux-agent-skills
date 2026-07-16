@@ -100,12 +100,12 @@ ux-agent-skills/
 │           └── npcis.md                  # Navigation/Presentation/Content/Interaction/Strategy (NEW, Phase 3)
 ├── commands/
 │   └── usability-audit.md            # slash command (NEW)
-└── references/                       # original seed material (source of truth)
-    └── ux-researcher.md                  # severity-report persona spec (0–4 scale)
+└── skills/usability-audit/references/   # eval frameworks + the shared report contract
 ```
 > Skill-local `references/` are the eval frameworks the skill loads at run time. They live
-> beside the skill so it is self-contained (atomic); the repo-level `references/` holds the
-> original seed material the suite was derived from.
+> beside the skill so it is self-contained (atomic). The original seed material
+> (`references/ux-researcher.md`, `nng-ux-heuristics.md`) has since been absorbed into the
+> persona, skill lenses, and report contract, and removed.
 
 ### 3.2 What the auditor writes into the HOST repo
 ```
@@ -190,7 +190,7 @@ Because the deliverables are Markdown persona/skill/command files plus generated
 | AI Design Heuristics (PAIR / Amershi) | Non-deterministic / generative-AI UI: expectation-setting, explainability, correction pathways. |
 | NPCIS | Holistic: Navigation, Presentation, Content, Interaction, Strategy. |
 
-### Severity rubric (0–4, from `references/ux-researcher.md`)
+### Severity rubric (0–4, Nielsen's severity ratings)
 | Score | Meaning | In report? |
 |-------|---------|-----------|
 | 0 | Not a usability problem | No — omit |

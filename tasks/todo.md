@@ -87,7 +87,7 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
 ### T3.1 — Author remaining framework references
 - [x] Write skill-local references for the other three frameworks.
 - **Files:** `skills/usability-audit/references/shneiderman-8.md`,
-  `ai-design-heuristics.md`, `npcis.md` (derived from `references/ux-researcher.md`).
+  `ai-design-heuristics.md`, `npcis.md` (derived from the UX-Heuristic-Bot persona spec).
 - **Acceptance:** each lists its rules/dimensions with a one-line evaluation lens, citable
   by name in findings.
 - **Verify:** references load; entries are specific enough to attribute a finding to.

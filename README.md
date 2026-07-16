@@ -148,8 +148,7 @@ ux-agent-skills/
 │       └── SKILL.md            # the suite roll-up (fan-out + normalize + verdict)
 ├── commands/               # slash commands — the when (/usability-audit, /ux-audit)
 ├── scripts/                # validate_report.py, audit_safety.py
-├── tests/                  # contract / component / safety / docs checks
-└── references/             # original seed material (persona spec)
+└── tests/                  # contract / component / safety / docs checks
 ```
 
 Run the checks with `python3 tests/test_report_contract.py` (and the sibling
