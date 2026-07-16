@@ -32,7 +32,7 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
 - **Deps:** T1.1.
 
 ### T1.3 — Skill: static evaluation path
-- [ ] Author the skill workflow for static mode: locate host UI source → apply Nielsen's
+- [x] Author the skill workflow for static mode: locate host UI source → apply Nielsen's
   10 → produce evidence-backed findings (`file:line`) → write report to `.ux/audits/`.
   Runtime-perception heuristics labeled `potential — unverified` in static mode.
 - **Files:** `skills/usability-audit/SKILL.md` (frontmatter + numbered steps + explicit

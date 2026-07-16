@@ -62,14 +62,43 @@ def check_persona() -> list[str]:
     return errs
 
 
+def check_skill() -> list[str]:
+    errs: list[str] = []
+    path = ROOT / "skills" / "usability-audit" / "SKILL.md"
+    if not path.exists():
+        return [f"missing {path.relative_to(ROOT)}"]
+    fm, body = _frontmatter(path)
+    _require(isinstance(fm, dict), "skill: frontmatter must parse to a mapping", errs)
+    if isinstance(fm, dict):
+        _require(bool(str(fm.get("name", "")).strip()),
+                 "skill: frontmatter needs a 'name'", errs)
+        _require(bool(str(fm.get("description", "")).strip()),
+                 "skill: frontmatter needs a non-empty 'description'", errs)
+    low = body.lower()
+    _require(".ux/audits" in low,
+             "skill: must document writing reports to .ux/audits", errs)
+    _require("report-contract" in low,
+             "skill: must reference the shared report-contract", errs)
+    _require("nielsen" in low, "skill: must apply Nielsen's heuristics", errs)
+    _require("static" in low, "skill: must describe the static evaluation mode", errs)
+    _require("unverified" in low,
+             "skill: static-mode runtime findings must be labeled unverified", errs)
+    _require("exit" in low or "done when" in low or "acceptance" in low,
+             "skill: must state explicit exit criteria", errs)
+    # Safety invariant restated at the workflow level.
+    _require("never" in low and "outside" in low,
+             "skill: must forbid writing outside .ux/audits", errs)
+    return errs
+
+
 def main() -> int:
-    failures = check_persona()
+    failures = check_persona() + check_skill()
     if failures:
         print("FAIL — components:")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — components (persona)")
+    print("PASS — components (persona, skill)")
     return 0
 
 
