@@ -1,0 +1,11 @@
+{
+  "name": "ux-agent-skills",
+  "displayName": "UX Agent Skills",
+  "version": "0.1.0",
+  "description": "Audit, spec, design, and ship production-grade experiences for humans and agents alike.",
+  "author": { "name": "Carl Sziebert", "email": "carlsz@gmail.com" },
+  "homepage": "https://github.com/carlsz/ux-agent-skills",
+  "repository": "https://github.com/carlsz/ux-agent-skills",
+  "license": "MIT",
+  "keywords": ["ux", "usability", "heuristics", "design", "accessibility", "agent-skills"]
+}

@@ -11,3 +11,40 @@ This plugin inherits the composition rule from [addyosmani/agent-skills](https:/
 - **Personas** (`agents/*.md`) — roles with a perspective and an output format. *The who.*
 - **Skills** (`skills/<name>/SKILL.md`) — workflows with steps and exit criteria. *The how.*
 - **Slash commands** (`commands/*.md`) — user-facing entry points. *The when.*
+
+## Installation
+
+Via the marketplace:
+
+```
+/plugin marketplace add carlsz/ux-agent-skills
+/plugin install ux-agent-skills@ux-agent-skills
+```
+
+Or install the plugin directly from the repo:
+
+```
+/plugin install carlsz/ux-agent-skills
+```
+
+For local development, load the working copy without installing:
+
+```
+claude --plugin-dir .
+```
+
+## Repo layout
+
+```
+ux-agent-skills/
+├── .claude-plugin/
+│   ├── plugin.json         # plugin manifest
+│   └── marketplace.json    # marketplace catalog (self-lists this plugin)
+├── agents/                 # personas — the who
+├── skills/                 # skills — the how
+├── commands/               # slash commands — the when
+└── references/             # source material (NN/g heuristics, persona specs)
+```
+
+> **Status:** scaffolding only. The component directories hold placeholder docs;
+> personas, skills, and commands are authored from the `references/` seed material next.

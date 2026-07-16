@@ -1,0 +1,12 @@
+{
+  "name": "ux-agent-skills",
+  "description": "Audit, spec, design, and ship production-grade experiences for humans and agents alike.",
+  "owner": { "name": "Carl Sziebert", "email": "carlsz@gmail.com" },
+  "plugins": [
+    {
+      "name": "ux-agent-skills",
+      "source": "./",
+      "description": "Audit, spec, design, and ship production-grade experiences for humans and agents alike."
+    }
+  ]
+}
