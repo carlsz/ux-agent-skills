@@ -12,7 +12,7 @@
 - **Status:** Draft — awaiting approval
 - **Owner:** Carl Sziebert (carlsz@gmail.com)
 - **Date:** 2026-07-15
-- **Plugin:** `ux-agent-skills` v0.1.0
+- **Plugin:** `ux-agent-skills` v0.2.0
 
 ---
 

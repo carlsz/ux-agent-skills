@@ -4,17 +4,25 @@
 
 **[ux-agent-skills](https://github.com/carlsz/ux-agent-skills)** equips AI agents with structured workflows to specify, generate, and rigorously verify interfaces against critical user journeys, bringing production-grade UX discipline to AI-driven development. It ships personas, skills, and slash commands as a UX-focused complement to [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills).
 
-## Composition — three layers
+## Commands
 
-This plugin inherits the composition rule from [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills):
+Slash commands that map to the UX design and software development lifecycle. Each one activates the right skills automatically.
 
-- **Personas** (`agents/*.md`) — roles with a perspective and an output format. *The who.*
-- **Skills** (`skills/<name>/SKILL.md`) — workflows with steps and exit criteria. *The how.*
-- **Slash commands** (`commands/*.md`) — user-facing entry points. *The when.*
+| What you're doing | Command | Key principle |
+|-------------------|---------|---------------|
+| Audit your UX | `/usability-audit` | Expert usability heuristic evals |
+| End-to-end UX evals | `/ux-audit` | Usability + accessibility + web perf evals |
+
+**Composing with agent-skills.** The auditor stops at findings by design — which is exactly what
+makes it compose with [agent-skills](https://github.com/addyosmani/agent-skills): hand a report's
+`## Prioritized fixes` queue straight to `/spec`, `/plan`, or `/build`, since every finding already
+carries a `file:line` and a concrete Recommended Fix. Then re-run
+`/ux-agent-skills:usability-audit` to confirm the severity actually dropped — audit here, make
+there, verify here.
 
 ## Usability Auditor
 
-The first auditor in the suite. It runs an expert **heuristic evaluation** of a host app
+Senior UX auditor that runs an expert **heuristic evaluation** of a host app
 and writes a severity-scored report into that app's repo — findings only, it never edits
 your code.
 
@@ -43,18 +51,7 @@ Reports land in the host repo under **`.ux/audits/`**:
 └── usability-20260715-143000.md   # one report per run
 ```
 
-### Shared report contract
-
-Every auditor in this suite — usability (native), plus accessibility and web-performance
-(wrapped, see the roll-up below) — emits the same
-[report contract](skills/usability-audit/references/report-contract.md) — one
-`.ux/audits/` directory, one frontmatter schema, one severity scale, one rolling index —
-so their outputs are comparable and can be rolled up together. Only the `auditor` value and
-framework vocabulary differ. Reports self-validate via
-[`scripts/validate_report.py`](scripts/validate_report.py); the safety invariant (writes
-stay under `.ux/audits/`) is checked by [`scripts/audit_safety.py`](scripts/audit_safety.py).
-
-## Suite roll-up
+## End-to-end usability, accessibility, and web performance roll-up
 
 One command runs every available auditor against a single target and merges the results:
 
@@ -71,6 +68,17 @@ and are summarized in a `rollup-<timestamp>.md` with a per-auditor table and an 
 **go/no-go verdict**. Auditors whose wrapping skill isn't installed are skipped and
 disclosed — never silently treated as a pass. See the
 [roll-up skill](skills/ux-audit/SKILL.md).
+
+### Shared reporting contract
+
+Every auditor in this suite — usability (native), plus accessibility and web-performance
+(wrapped, see the roll-up below) — emits the same
+[report contract](skills/usability-audit/references/report-contract.md) — one
+`.ux/audits/` directory, one frontmatter schema, one severity scale, one rolling index —
+so their outputs are comparable and can be rolled up together. Only the `auditor` value and
+framework vocabulary differ. Reports self-validate via
+[`scripts/validate_report.py`](scripts/validate_report.py); the safety invariant (writes
+stay under `.ux/audits/`) is checked by [`scripts/audit_safety.py`](scripts/audit_safety.py).
 
 ## Example — auditing a real app (Sprout)
 
