@@ -7,6 +7,8 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- Declared the `web-quality-skills@addy-web-quality-skills` dependency (which the roll-up
+  wraps) in `plugin.json` and `marketplace.json`, and added the `$schema` reference to both.
 - **Evals system** (`evals/`) — modelled on agent-skills' evals, using Sprout as the
   behavioral target. Tier 2 (trigger routing via stemmed TF-IDF over skill descriptions,
   schema + minimums + collision checks) runs deterministically in CI via

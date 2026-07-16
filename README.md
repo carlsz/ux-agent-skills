@@ -132,6 +132,14 @@ For local development, load the working copy without installing:
 claude --plugin-dir .
 ```
 
+### Dependency
+
+The suite roll-up wraps [web-quality-skills](https://github.com/addyosmani/web-quality-skills)
+for its accessibility and web-performance auditors, so it's declared as a dependency
+(`web-quality-skills@addy-web-quality-skills`) in the plugin manifest. The usability
+auditor works without it; if it isn't installed, the roll-up simply skips those two
+auditors and says so.
+
 ## Repo layout
 
 ```
