@@ -323,7 +323,7 @@ and can be reviewed as its own PR.
 **T8.2 + T8.3 must land in the same commit** (the loud trap). T8.1/T8.4/T8.5 ride along.
 
 ### T8.1 — `cuj-author` persona
-- [ ] The persona whose value is **refusal**.
+- [x] The persona whose value is **refusal**.
 - **Files:** `agents/cuj-author.md`; `DOC_FILES`.
 - **Acceptance:** frontmatter `name: cuj-author` matching the filename; `description` carries
   trigger phrases in prose (no `triggers:` key). Body states every refusal from SPEC §9.5:
@@ -335,7 +335,7 @@ and can be reviewed as its own PR.
 - **Deps:** CHECKPOINT D.
 
 ### T8.2 — `spec-cuj` skill + fallback question set
-- [ ] The authoring workflow, with numbered steps and explicit exit criteria.
+- [x] The authoring workflow, with numbered steps and explicit exit criteria.
 - **Files:** `skills/spec-cuj/SKILL.md`; `skills/spec-cuj/references/interview-fallback.md`;
   `DOC_FILES`.
 - **Acceptance:** `name` matches the **directory**. Workflow: validate `.ux/cujs` first
@@ -352,7 +352,7 @@ and can be reviewed as its own PR.
 - **Deps:** T7.1, T7.2, T7.5, T8.1.
 
 ### T8.3 — `spec-cuj` eval case
-- [ ] **Same commit as T8.2.**
+- [x] **Same commit as T8.2.**
 - **Files:** `evals/cases/spec-cuj.json`.
 - **Acceptance:** `skill_name: "spec-cuj"` matching the directory; ≥3 positives, ≥2 negatives
   each with an `owner`, ≥1 behavioral with `id`/`prompt`/`expected_output`/`expectations`;
@@ -363,7 +363,7 @@ and can be reviewed as its own PR.
 - **Deps:** T8.2.
 
 ### T8.4 — `/ux-spec` command
-- [ ] Thin entry point — parse args, invoke persona + skill, nothing more.
+- [x] Thin entry point — parse args, invoke persona + skill, nothing more.
 - **Files:** `commands/ux-spec.md`; `DOC_FILES`.
 - **Acceptance:** frontmatter `name`, `description`, `argument-hint`; documents `--cuj <id>`;
   names the skill and persona it invokes.
@@ -371,7 +371,7 @@ and can be reviewed as its own PR.
 - **Deps:** T8.2.
 
 ### T8.5 — Component checks + doc wiring (the silent trap)
-- [ ] Hand-write the checks; nothing warns you if you don't.
+- [x] Hand-write the checks; nothing warns you if you don't.
 - **Files:** `tests/test_components.py` — `check_cuj_author_persona()`,
   `check_spec_cuj_skill()`, `check_ux_spec_command()`, `check_cuj_references()`, **each
   wired into the `main()` concatenation at `:240-241`**; `tests/test_docs.py` `DOC_FILES`.
