@@ -204,3 +204,319 @@ non-native auditors.
 ### T6.3 — Dogfood the roll-up (optional)
 - [ ] Run `/ux-agent-skills:ux-audit` against sprout, invoking the wrapped
       web-quality-skills auditors end-to-end.
+
+---
+
+# TODO — Critical User Journeys (CUJs)
+
+Task list for [`plan.md`](./plan.md) §9–16, implementing [`SPEC.md` §9](../SPEC.md). Same
+conventions as above: `[ ]` todo, `[~]` in progress, `[x]` done; every task carries
+**Files**, **Acceptance**, **Verify**, **Deps**.
+
+> **Two rules that govern the commit boundaries** (AGENTS.md §"The two test traps"):
+> **(1)** A `skills/*/SKILL.md` without `evals/cases/<name>.json` reds CI **immediately** —
+> they land in the **same commit**. **(2)** `test_components.py` and `DOC_FILES` are
+> hardcoded and fail **silent** — a component's `check_*()` and doc path are acceptance
+> criteria of the task that creates it, never a follow-up.
+
+### T0 — Spec (was PS)
+- [x] SPEC.md §6 ask-first line (host `SPEC.md` writes) + new §9 (CUJ design spec).
+- **Verify:** all five suites green; approved by the user 2026-07-16.
+
+---
+
+## Phase 7 — Foundations (contract, registration, safety)
+
+T7.1–7.3, T7.4, and T7.5 are **three mutually independent tracks**. Each lands green alone
+and can be reviewed as its own PR.
+
+### T7.1 — CUJ file contract doc
+- [ ] Author the `.ux/cujs` file contract as a reference doc, owned by `spec-cuj`.
+- **Files:** `skills/spec-cuj/references/cuj-contract.md`; add it to `DOC_FILES` in
+  `tests/test_docs.py`.
+- **Acceptance:** specifies every frontmatter key per SPEC §9.2; the `^CUJ-\d{3}$` /
+  `^[a-z0-9-]+$` patterns; the `<id>-<slug>.md` filename rule; body layout (`## Narrative`,
+  `## Out of scope`); the **observable-`expect`** rule; the **no-author** rule; and names
+  `scripts/validate_cuj.py` as its executable form, mirroring `report-contract.md:12-14`.
+  States explicitly that the body does **not** restate the steps, and why.
+- **Verify:** a hand-written sample CUJ parses as YAML and satisfies every stated rule;
+  `python3 tests/test_docs.py` green. **Host paths (`.ux/cujs/…`) appear only in backticks
+  or fenced blocks — never as markdown links**, which resolve against the plugin repo.
+- **Deps:** T0.
+- **Note:** creates `skills/spec-cuj/` **without** a `SKILL.md` — safe, since `test_evals.py`
+  globs `skills/*/SKILL.md`, so no eval case is owed until T8.2.
+
+### T7.2 — `validate_cuj.py`
+- [ ] Implement the executable form of the contract + the index generator.
+- **Files:** `scripts/validate_cuj.py`.
+- **Acceptance:** mirrors `validate_report.py` conventions (`validate()` → list of
+  violations, `[]` = valid; `main()` → 0/1/2). Exposes `validate(path)`,
+  `validate_dir(dir)`, `render_index(dir)`; CLI `<file>… | --dir | --index`.
+  Per-file: required keys, `schema == 1`, id/slug patterns, `criticality` vocabulary,
+  non-empty `preconditions`/`steps`/`success_criteria`, each step a mapping with
+  non-empty `n`/`action`/`expect`, `n` contiguous 1..N, `authored` shape (`date` ISO-8601,
+  `method` in vocabulary, `revision` a positive int), body has both headings.
+  **Rejects a stray `authored.by`** (SPEC §9.7). Cross-file: **duplicate `id`**, and
+  **filename ≠ `<id>-<slug>.md`**.
+- **Verify:** `--index` over the same directory twice is **byte-identical**; run against the
+  T7.1 sample → clean.
+- **Deps:** T7.1.
+
+### T7.3 — CUJ fixtures + `test_cuj_contract.py`
+- [ ] Mirror `test_report_contract.py` beat for beat.
+- **Files:** `tests/test_cuj_contract.py`; `tests/fixtures/cujs/valid/{CUJ-001-add-a-task.md,
+  CUJ-002-complete-a-task.md}`; `tests/fixtures/cujs/invalid/` — blank `expect`, bad
+  `criticality`, empty `steps`, missing `authored`, non-contiguous `n`, filename mismatch,
+  **stray `authored.by`**, plus a `dupes/` pair sharing an id.
+- **Acceptance:** every invalid fixture fails **for the right reason** (needle substring, as
+  `test_report_contract.py:58-71` does). Two index assertions: `render_index` twice is
+  byte-identical; rows sorted by `id` with the correct columns.
+- **Verify:** `python3 tests/test_cuj_contract.py` green — auto-discovered by CI
+  (`.github/workflows/tests.yml:24-27`), no wiring needed.
+- **Deps:** T7.2.
+
+### T7.4 — Register the `cuj` auditor in the report contract
+- [ ] Add `cuj` to the shared contract's known auditors, **with fixtures** — an unregistered
+  auditor passes silently (`validate_report.py:93-103`), so registration without a fixture
+  is untested.
+- **Files:** `scripts/validate_report.py:30-34` (`"cuj": {"cuj-contract", "task-completion",
+  "success-criteria"}`); `tests/fixtures/valid/cuj-20260716-120000.md` (one sev3, `mode:
+  live`, all three frameworks, Framework Violation naming `CUJ-001` step 2);
+  `tests/fixtures/valid/cuj-20260716-130000.md` (**`total: 0` clean pass**);
+  `tests/fixtures/invalid/cuj-bad-framework.md` (`frameworks: [nielsen-10]`);
+  `tests/test_report_contract.py`.
+- **Acceptance:** both valid fixtures validate; the bad-framework fixture is rejected
+  (needle `unknown to auditor`); check count `(8 checks)` → `(11 checks)` at `:78`. No
+  schema, body, or index changes — the contract is auditor-agnostic by design.
+- **Verify:** `python3 tests/test_report_contract.py` → PASS (11 checks).
+- **Deps:** T0. *(Independent of T7.1–7.3.)*
+
+### T7.5 — `audit_safety.py` allowlist + profiles
+- [ ] Add opt-in path allowlisting **without weakening the audit invariant**.
+- **Files:** `scripts/audit_safety.py`; `tests/test_safety.py`.
+- **Acceptance:** `changes_confined_to(repo, prefix=DEFAULT_PREFIX, *, allow=())` — `allow`
+  is **keyword-only**, so an allowlist can never be passed where `prefix` was expected.
+  `EXTRA_BY_PROFILE = {"audit": (), "authoring": (".ux/cujs/", "SPEC.md")}`. `_allowed()`
+  treats a trailing slash as a directory prefix and a bare entry as an **exact match**.
+  CLI gains `--profile audit|authoring`; **the output strings at `:56,:60` render the
+  effective allowlist** instead of hardcoding `.ux/audits/`, or `--profile authoring` prints
+  a lie. **Module docstring rewritten** — "The usability auditor is findings-only" (`:2-15`)
+  is false with two profiles, and this file is the canonical statement of the invariant.
+  All three existing callers (`test_safety.py:60,64,83`, `run_evals.py:275`, the CLI) are
+  byte-identical without modification.
+- **Verify:** `python3 tests/test_safety.py` green with four **added** assertions (extend,
+  never rewrite): **(1)** the invariant does not weaken — an `audit`-profile call **still
+  flags** `.ux/cujs/`; **(2)** `authoring` permits `.ux/cujs/` + `SPEC.md`; **(3)**
+  `authoring` still flags `app.tsx`; **(4)** prefix confusion — `SPEC.md.bak` and
+  `.ux/cujs-evil/x.md` are **both flagged**.
+- **Deps:** T0. *(Independent of T7.1–7.4.)*
+
+> ### ✅ CHECKPOINT D — human review
+> Review `cuj-contract.md` and a hand-authored sample CUJ. Confirm the schema, the
+> observable-`expect` bar, and `criticality`'s four levels BEFORE any skill is written
+> against them. Cheapest point to change the shape. Stop here for sign-off.
+
+---
+
+## Phase 8 — Authoring path (`/ux-spec`) ⭐
+
+**T8.2 + T8.3 must land in the same commit** (the loud trap). T8.1/T8.4/T8.5 ride along.
+
+### T8.1 — `cuj-author` persona
+- [ ] The persona whose value is **refusal**.
+- **Files:** `agents/cuj-author.md`; `DOC_FILES`.
+- **Acceptance:** frontmatter `name: cuj-author` matching the filename; `description` carries
+  trigger phrases in prose (no `triggers:` key). Body states every refusal from SPEC §9.5:
+  reject "the user" (demand a named actor); reject unobservable outcomes; reject feature-list
+  goals; split bundled steps; reject criticality inflation; and **never invent a step the
+  user didn't state** — record the gap and stop. States the ask-first gate on the host's
+  `SPEC.md`.
+- **Verify:** frontmatter parses; `check_cuj_author_persona()` green (T8.5).
+- **Deps:** CHECKPOINT D.
+
+### T8.2 — `spec-cuj` skill + fallback question set
+- [ ] The authoring workflow, with numbered steps and explicit exit criteria.
+- **Files:** `skills/spec-cuj/SKILL.md`; `skills/spec-cuj/references/interview-fallback.md`;
+  `DOC_FILES`.
+- **Acceptance:** `name` matches the **directory**. Workflow: validate `.ux/cujs` first
+  (never author onto a broken directory) → compute next free `id` → drive
+  `agent-skills:interview-me`, **or** fall back to `interview-fallback.md` + **disclose** +
+  offer-but-never-auto-install + record `method: interview-fallback` → read the draft back
+  for confirmation → write → self-check with `validate_cuj.py` → **regenerate the index via
+  `validate_cuj.py --index` and ASK, showing the diff, before splicing** → confirm footprint
+  with `audit_safety.py --profile authoring`. Fallback set ≈9 questions per SPEC §9.5.
+  Description is the **exact string** in plan.md §7 of the approved implementation plan.
+- **Verify:** `python3 tests/test_evals.py` green (requires T8.3 in the same commit);
+  `python3 evals/run_evals.py` → **all four skills**, no collision ≥0.50, no regression to
+  `usability-audit`/`ux-audit`'s existing `top_k: 1` positives.
+- **Deps:** T7.1, T7.2, T7.5, T8.1.
+
+### T8.3 — `spec-cuj` eval case
+- [ ] **Same commit as T8.2.**
+- **Files:** `evals/cases/spec-cuj.json`.
+- **Acceptance:** `skill_name: "spec-cuj"` matching the directory; ≥3 positives, ≥2 negatives
+  each with an `owner`, ≥1 behavioral with `id`/`prompt`/`expected_output`/`expectations`;
+  `behavioral_target` = Sprout. **`competitors.json` needs no new entries** — `audit-cuj` and
+  `usability-audit` are native owners already in the corpus (the `ux-audit.json:10`
+  precedent).
+- **Verify:** `python3 tests/test_evals.py` green.
+- **Deps:** T8.2.
+
+### T8.4 — `/ux-spec` command
+- [ ] Thin entry point — parse args, invoke persona + skill, nothing more.
+- **Files:** `commands/ux-spec.md`; `DOC_FILES`.
+- **Acceptance:** frontmatter `name`, `description`, `argument-hint`; documents `--cuj <id>`;
+  names the skill and persona it invokes.
+- **Verify:** `check_ux_spec_command()` green.
+- **Deps:** T8.2.
+
+### T8.5 — Component checks + doc wiring (the silent trap)
+- [ ] Hand-write the checks; nothing warns you if you don't.
+- **Files:** `tests/test_components.py` — `check_cuj_author_persona()`,
+  `check_spec_cuj_skill()`, `check_ux_spec_command()`, `check_cuj_references()`, **each
+  wired into the `main()` concatenation at `:240-241`**; `tests/test_docs.py` `DOC_FILES`.
+- **Acceptance:** checks assert the load-bearing prose, not mere presence — the skill's
+  `interview-me` + fallback disclosure, the ask + `spec.md` gate, `validate_cuj`, the marker
+  block, and exit criteria; the references cover `actor`/`precondition`/`step`/`expect`/
+  `success criteria`/`criticality`/`authored`.
+- **Verify:** `python3 tests/test_components.py` + `python3 tests/test_docs.py` green;
+  deliberately break one asserted string → the check **fails** (proves it's wired).
+- **Deps:** T8.1–T8.4.
+
+> ### ✅ CHECKPOINT E — human review
+> Author a real CUJ against Sprout by answering the interview yourself. Review: is `expect`
+> genuinely observable on every step? Did it refuse your vague answers? Did it **ask** before
+> writing Sprout's `SPEC.md`, and does declining leave it untouched? Is the spliced block
+> byte-identical on re-run, with prose above/below preserved? This is the interview's tone and
+> rigor — the part a spec can't pin down. **Stop here for sign-off.**
+
+---
+
+## Phase 9 — Verification path (`/audit-cuj`)
+
+**T9.2 + T9.3 in one commit.**
+
+### T9.1 — `cuj-auditor` persona
+- [ ] The inverse of `usability-auditor`: **holds no heuristics, offers no opinions.**
+- **Files:** `agents/cuj-auditor.md`; `DOC_FILES`.
+- **Acceptance:** `name: cuj-auditor`. Body states: *you execute the contract, you do not
+  evaluate the design*; the **two-stage** 0–4 mapping (classify, then clamp by
+  `criticality`); the `<CUJ-id> step <n>` Framework Violation format; render-vs-source
+  honesty; findings-only / never edit host code; and that **passing steps go in the Appendix,
+  never as sev0**.
+- **Verify:** `check_cuj_auditor_persona()` green.
+- **Deps:** CHECKPOINT E.
+
+### T9.2 — `audit-cuj` skill
+- [ ] Select → validate → replay → grade → report.
+- **Files:** `skills/audit-cuj/SKILL.md`; `DOC_FILES`.
+- **Acceptance:** `name` matches the directory. **Empty/absent `.ux/cujs/` → stop and say so**
+  ("no CUJs authored; run `/ux-spec`"), never an empty pass. Malformed CUJ → skip + disclose,
+  never half-walk. Prefer live; ask before server start / navigation; screenshots to
+  `.ux/audits/assets/`; evaluate `success_criteria` after the steps. **Static mode traces
+  source only** → findings labeled `potential — unverified`, `frameworks: [cuj-contract]`
+  only, and steps not observed go in the Appendix — **a static run cannot produce a verified
+  pass**. **One report per run, not per CUJ** (keeps `index.md` rows 1:1 with runs).
+  Executive summary **leads with "N/N journeys passed, M steps verified"** (SPEC §9.4).
+  Self-check under the **default `audit` profile** — `audit-cuj` writes only to `.ux/audits/`.
+  Description is the **exact string** in plan.md §7 of the approved implementation plan.
+- **Verify:** `python3 tests/test_evals.py` + `python3 evals/run_evals.py` green (four skills).
+- **Deps:** T7.1–T7.4, T9.1.
+
+### T9.3 — `audit-cuj` eval case
+- [ ] **Same commit as T9.2.**
+- **Files:** `evals/cases/audit-cuj.json`.
+- **Acceptance:** as T8.3. Negatives: one owned by `spec-cuj`, one ("write Playwright E2E
+  tests") resolving against the **existing** `agent-skills:test-driven-development` entry —
+  that's the real-world confusion worth guarding.
+- **Verify:** `python3 tests/test_evals.py` green.
+- **Deps:** T9.2.
+- **Known:** this behavioral eval is **non-hermetic** — Sprout has no `.ux/cujs/`, so Tier 3
+  must run `/ux-spec` first, chaining spec-cuj → audit-cuj. A spec-cuj regression will surface
+  as an audit-cuj failure. The T7.3 fixture CUJs remain the deterministic path.
+
+### T9.4 — `/audit-cuj` command
+- [ ] Thin entry point.
+- **Files:** `commands/audit-cuj.md`; `DOC_FILES`.
+- **Acceptance:** documents `target`, `--cuj <id|all|critical>`, `--mode static|live|hybrid`.
+- **Verify:** `check_audit_cuj_command()` green.
+- **Deps:** T9.2.
+
+### T9.5 — Component checks + doc wiring
+- [ ] **Files:** `tests/test_components.py` — `check_cuj_auditor_persona()`,
+  `check_audit_cuj_skill()`, `check_audit_cuj_command()`, wired into `main()`;
+  `tests/test_docs.py` `DOC_FILES`.
+- **Verify:** both suites green; break an asserted string → check fails.
+- **Deps:** T9.1–T9.4.
+
+> ### ✅ CHECKPOINT F — the detection test
+> Run `/audit-cuj` against unmodified Sprout → journeys pass, `total: 0`, steps in the
+> Appendix and **not** as sev0. Then **break a journey deliberately** (e.g. make the add-task
+> input a no-op) → require a **sev4 naming `CUJ-001` step 2**. A verifier that only ever
+> passes is worthless; this is the only check that proves detection over narration.
+> Also run `--mode static` → `potential — unverified`, `frameworks: [cuj-contract]` only.
+
+---
+
+## Phase 10 — Suite roll-up
+
+### T10.1 — Wire `audit-cuj` into `/ux-audit`
+- [ ] Add the fourth, **conditional** suite member.
+- **Files:** `skills/ux-audit/SKILL.md` (4th auditor-table row; step 1 discovery; step 2
+  fan-out; step 3 severity mapping); `commands/ux-audit.md` (`argument-hint` + `--only`);
+  `tests/test_components.py:172` tuple → `("usability", "accessibility", "web-performance",
+  "audit-cuj")`.
+- **Acceptance:** `audit-cuj` is native but **conditional** on a non-empty `.ux/cujs/` —
+  absent → **skipped with the reason recorded**, never a silent pass, and the go/no-go must
+  not read a *skipped* run as a *passed* one. Use **`"audit-cuj"`, not `"cuj"`**, in the
+  tuple: it's a bare substring check, so `"cuj"` would match the word anywhere in the body
+  and assert essentially nothing.
+- **Verify:** `python3 tests/test_components.py` green; `/ux-audit` against Sprout shows cuj
+  in the roll-up; delete `.ux/cujs/` and re-run → **skipped with a reason**.
+- **Deps:** CHECKPOINT F.
+
+---
+
+## Phase 11 — Docs & release
+
+### T11.1 — README + AGENTS + sub-READMEs
+- [ ] **Files:** `README.md` (`/ux-spec` + `/audit-cuj` rows, a CUJ section, repo layout, and
+  a note that `interview-me` is **optional and undeclared**, unlike `web-quality-skills`);
+  `AGENTS.md` (repo layout + a CUJ-family note beside the auditor checklist);
+  `agents/README.md`, `skills/README.md`, `commands/README.md` catalogs.
+- **Acceptance:** a new user can author and verify a CUJ from the README alone. Adopt **"the
+  host's `SPEC.md`" vs "this repo's `SPEC.md`"** throughout — two files now share the name.
+- **Verify:** `python3 tests/test_docs.py` green; all links resolve.
+- **Deps:** Phases 7–10.
+
+### T11.2 — CHANGELOG + version
+- [ ] **Files:** `CHANGELOG.md` (`[Unreleased]` → `### Added`); `.claude-plugin/plugin.json`
+  `version` 0.2.0 → 0.3.0, keywords `+ "cuj"`, `"journeys"`.
+- **Acceptance:** **no `dependencies` change → no `marketplace.json` change** (it carries no
+  version, only dependencies).
+- **Verify:** full suite green.
+- **Deps:** T11.1.
+
+> ### ✅ CHECKPOINT G — go/no-go
+> SPEC §9.8 DoD satisfied; all five suites + `run_evals.py` green; the audit invariant still
+> flags `.ux/cujs/` under the default profile. Ship or iterate.
+
+---
+
+## Definition of Done (SPEC §9.8)
+- [ ] Both triads exist and are wired per the composition rule.
+- [ ] `cuj-contract.md` and `validate_cuj.py` agree.
+- [ ] `/ux-spec` authors a valid CUJ via interview; degrades with disclosure when
+      `interview-me` is absent.
+- [ ] Every authored step carries an observable `expect`.
+- [ ] Host `SPEC.md` index regenerates byte-identically, preserves surrounding prose, is
+      written only after asking, and declining leaves it untouched.
+- [ ] `/audit-cuj` emits a §3.4-valid `auditor: cuj` report naming the CUJ id + broken step;
+      a passing journey yields `total: 0` with steps in the Appendix.
+- [ ] Static mode labels findings `potential — unverified`, `frameworks: [cuj-contract]` only.
+- [ ] **A deliberately broken journey produces a sev4 naming the correct step.**
+- [ ] `audit_safety.py` **still flags** `.ux/cujs/` and `SPEC.md` under the default `audit`
+      profile.
+- [ ] `audit-cuj` appears in the `/ux-audit` roll-up; skipped **with a reason** when no CUJs
+      exist.
+- [ ] README / AGENTS / CHANGELOG updated; `plugin.json` at 0.3.0.

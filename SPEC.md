@@ -260,6 +260,8 @@ and safety invariants:
 - Installing anything, or running host build/test scripts.
 - Adding `.ux/` to the host's `.gitignore` (recommend, don't do silently).
 - Writing outside `.ux/audits/` for any reason (e.g. saving screenshots elsewhere).
+- **Writing the host's `SPEC.md`** — only `/ux-spec` may, and only to splice the generated CUJ index
+  block, showing the diff first (§9.3). Auditors never write it.
 
 ### Never
 - **Edit, refactor, or "fix" host application code** — this is a findings-only auditor.
@@ -296,3 +298,325 @@ and safety invariants:
   captured evidence images.
 - **VCS treatment** — leave `.ux/` committed vs. ignored to the host team; auditor only
   recommends.
+
+---
+
+# 9. Critical User Journeys (CUJs)
+
+> A second capability in the same plugin: author a host app's critical user journeys through an
+> interview, store them as canonical files under `.ux/cujs/`, and verify them against the running app
+> as a member of the audit suite defined above.
+>
+> Sections 1–8 specify the **usability auditor** and the shared report contract. This section reuses
+> both and does not change either.
+
+- **Status:** Draft — awaiting approval
+- **Date:** 2026-07-16
+- **Adds:** `/ux-spec`, `/audit-cuj`; personas `cuj-author`, `cuj-auditor`; skills `spec-cuj`,
+  `audit-cuj`; the CUJ file contract; `auditor: cuj` reports.
+
+## 9.1 Objective
+
+### Problem
+The suite audits an app against *generic* frameworks. Nielsen's 10 heuristics will tell you a button
+has poor affordance; they will not tell you that the one flow the business depends on is broken. The
+plugin has no representation of what the app is **for**, so it cannot regress-test the things that
+actually matter. [`README.md`](README.md) already promises agents that "rigorously verify interfaces
+against **critical user journeys**" — today that promise is unbacked.
+
+### Goal
+Give a host app a durable, machine-checkable definition of its critical journeys, and an auditor that
+replays them and reports the exact step that broke. The suite then answers both *"is this
+well-designed?"* (heuristics) and *"does the thing users came for still work?"* (journeys).
+
+### Target users
+- **Product engineers / AI coding agents** who want to know a refactor didn't break the money flow.
+- **Designers / PMs** who want the team's assumptions about *who does what, and why it matters*
+  written down and testable rather than tribal.
+- **The existing auditors**, which gain a scope signal: a CUJ names the flows worth auditing.
+
+### Non-goals
+- **Not a test framework.** CUJs are prose journeys verified by an agent, not Playwright specs. They
+  describe what a *person* is trying to do; they do not replace E2E tests, and `/audit-cuj` is not a
+  CI gate.
+- **Not a fixer.** `/audit-cuj` reports broken steps; it never repairs them (§9.7).
+- **Not user research.** A CUJ records what the team believes is critical. It is not evidence that
+  users agree — that still takes talking to users.
+
+### Success criteria
+1. `/ux-spec` produces `.ux/cujs/<id>-<slug>.md` files that validate against the §9.2 contract, with
+   every step carrying an **observable** expected outcome.
+2. The host's `SPEC.md` gains a CUJ index that regenerates byte-identically and never clobbers
+   surrounding prose — and is only ever written after asking.
+3. `/audit-cuj` replays a stored journey and emits a report valid against the §3.4 contract with
+   `auditor: cuj`, each finding naming the CUJ id and the step that broke.
+4. Breaking a journey in a real app produces a severity-4 finding that names the right step. Detection,
+   not narration.
+5. The audit safety invariant is **unchanged**: an audit run that touches anything outside
+   `.ux/audits/` — including `.ux/cujs/` — is still a violation.
+
+## 9.2 The CUJ file contract
+
+Canonical location in the **host** repo, one file per journey:
+
+```
+<host-repo>/
+└── .ux/
+    └── cujs/
+        ├── CUJ-001-add-a-task.md
+        └── CUJ-002-complete-a-task.md
+```
+
+Contract document: `skills/spec-cuj/references/cuj-contract.md`, owned by **spec-cuj** and linked by
+`audit-cuj`. This mirrors the report contract's precedent — the contract lives with the skill that
+*produces* the artifact, consumers link across. Machine-checked by `scripts/validate_cuj.py`, which is
+the executable form of that document; if the two disagree, reconcile them.
+
+```yaml
+---
+id: CUJ-001                  # ^CUJ-\d{3}$ — unique across .ux/cujs/
+slug: add-a-task             # ^[a-z0-9-]+$ — filename MUST equal <id>-<slug>.md
+schema: 1                    # cuj-contract version
+title: Add a task to the list
+actor: returning-user        # a named persona — never "the user"
+actor_description: "Has 3-10 existing tasks, returns daily to capture new ones."
+goal: "Capture a new task from the list view without navigating away"   # an outcome, not features
+criticality: critical        # critical | high | medium | low
+entry_point: "/"             # route, URL, or named screen
+preconditions:               # non-empty
+  - "App loaded at / with at least one existing task"
+steps:                       # non-empty, ordered, n contiguous 1..N
+  - n: 1
+    action: "Click the new-task input at the top of the list"
+    expect: "The input takes focus and shows the placeholder 'What needs doing?'"
+  - n: 2
+    action: "Type 'Buy milk' and press Enter"
+    expect: "A row reading 'Buy milk' appears at the top of the list and the input clears"
+success_criteria:            # evaluated AFTER the steps complete
+  - "'Buy milk' is still present after a full page reload"
+authored:                    # provenance only — deliberately records no author (see §9.7)
+  date: 2026-07-16T10:00:00Z # ISO-8601, UTC
+  method: interview          # interview | interview-fallback | manual | imported
+  revision: 1                # bump on every material edit
+---
+```
+
+Body: `## Narrative` (2–4 sentences: why this journey exists, what breaks for the business if it
+breaks) and `## Out of scope` (what this journey deliberately does not cover).
+
+**`expect` is the load-bearing field.** It must be *observable*: a visible element, a specific string,
+a URL change, a persisted value. "It works", "the state updates", "it saves" are not expected outcomes
+— they are the absence of one. The validator rejects an empty `expect`; the `cuj-author` persona
+rejects an unobservable one, since that judgement cannot be made statically.
+
+**The body does not restate the steps.** This departs from the report contract (§3.3), where the body
+restates the frontmatter and the validator reconciles the two. That works for a report because a
+report is written once and never edited. A CUJ is a living document a human maintains, so duplicating
+the steps into prose would guarantee drift and reduce the reconciliation check to a nag. Frontmatter
+is the single source; the narrative carries what YAML cannot.
+
+## 9.3 The host `SPEC.md` index
+
+Every host app that adopts CUJs gets one generated index section in **its own** `SPEC.md` — not the
+full journey text, which stays in `.ux/cujs/`:
+
+```markdown
+## Critical User Journeys
+
+<!-- BEGIN ux-agent-skills:cuj-index — generated from .ux/cujs/; edit the CUJ files, not this table -->
+| ID | Journey | Actor | Criticality | Goal | File |
+|----|---------|-------|-------------|------|------|
+| CUJ-001 | Add a task | returning-user | critical | Capture a new task from the list view | [.ux/cujs/CUJ-001-add-a-task.md](.ux/cujs/CUJ-001-add-a-task.md) |
+<!-- END ux-agent-skills:cuj-index -->
+```
+
+Rules:
+- **The block is a pure function of `.ux/cujs/`.** Every cell derives from frontmatter; nothing in it
+  is user-authored. That is what makes idempotent regeneration achievable rather than aspirational —
+  there is nothing to preserve.
+- Rows sort by `id`. Regenerating with no CUJ changes produces **byte-identical** output.
+- **Only bytes between the markers are replaced.** Prose above and below is untouched.
+- Generated by `python3 scripts/validate_cuj.py --index .ux/cujs`, **never** by improvising the table
+  in prose. An agent rewriting a table from memory is not idempotent.
+- Markers absent, or the host has no `SPEC.md` → **ask** before inserting or creating, showing the
+  diff. If declined, the CUJ files stand alone; the index is a convenience, not the source of truth.
+- This plugin's own `SPEC.md` — the file you are reading — gets **no** CUJ index. It has no journeys.
+  Throughout this section, "the host's `SPEC.md`" and "this repo's `SPEC.md`" are distinguished
+  explicitly.
+
+## 9.4 CUJ verification and the report contract
+
+`/audit-cuj` is an auditor like any other: it reuses the §3.4 contract unchanged, writing
+`.ux/audits/cuj-<YYYYMMDD>-<HHMMSS>.md` — **one report per run, not per CUJ**, so `index.md` rows stay
+1:1 with runs.
+
+- `auditor: cuj`
+- **Framework Violation** carries the journey and the step: `CUJ-001 "Add a task" (rev 1) — step 2
+  (cuj-contract); expected "…"`.
+- The CUJ manifest (ids verified, each `authored.revision`, steps verified, steps not observed) goes
+  in the **Appendix**, not in new frontmatter keys. The frontmatter stays at the shared nine. Adding
+  auditor-specific keys to a *shared* contract is how comparability erodes.
+
+### Severity mapping (0–4)
+
+Two stages: classify the failure, then clamp by the journey's own `criticality`.
+
+| Score | Class |
+|-------|-------|
+| **4** | **Journey blocked** — the expected outcome never occurs and the actor cannot reach `goal` by any route. No workaround. |
+| **3** | **Workaround required, or success criteria fail while the flow appears to succeed** — includes the silent-data-loss class: every step passed, then the task didn't persist. Rated 3 rather than 2 because the user *believes* they succeeded. |
+| **2** | **Observable mismatch, journey unaffected** — the goal is met, but `expect` is not what happened. |
+| **1** | **Cosmetic divergence** — label, copy, or ordering of a non-load-bearing element differs. |
+| **0** | **Match — omit.** Passing steps are listed in the Appendix, never as findings. |
+
+Then cap by `criticality`: `critical` / `high` → uncapped; `medium` → max 3; `low` → max 2. A blocked
+journey is only a *catastrophe* if the journey matters, and the author already ranked that — reusing
+their ranking is why `criticality` is mandatory. Each finding's justification names both stages.
+
+Severity 0 stays a non-finding, exactly as §4 requires. **A passing journey is `total: 0`** — unique
+in the suite, where empty normally means "found nothing". The executive summary must therefore lead
+with "N/N journeys passed, M steps verified", because the schema has no way to distinguish a clean
+pass from a run that checked nothing.
+
+### `frameworks` vocabulary
+
+```
+cuj: cuj-contract | task-completion | success-criteria
+```
+
+The sibling auditors cite external standards (nielsen-10, wcag-2.2). CUJ verification has none — the
+standard *is* the host's own journey files. So this vocabulary names which lens actually ran:
+
+| Value | Meaning |
+|-------|---------|
+| `cuj-contract` | The journey file is the rubric. Always present; a report without it isn't a CUJ verification. |
+| `task-completion` | The goal-reachability lens — did the actor reach `goal`, with or without a workaround? Separates sev4 from sev3. **Only claimable when the run actually completed (or failed to complete) the journey — live/hybrid only.** |
+| `success-criteria` | The post-steps check. Separable because a journey can pass every step and still fail its criteria. |
+
+This makes the list a machine-readable statement of *how much the run could prove*: a static run
+honestly emits `frameworks: [cuj-contract]` only — it traced source, it did not complete the task, it
+did not observe persistence. That is the render-vs-source honesty rule (§6 of the report contract)
+expressed in frontmatter.
+
+### Evaluation modes
+Prefer **live**, as §5.1 specifies. In **static** mode `/audit-cuj` can only trace the route, handler,
+or component behind each step and assess whether `expect` is plausible — every such finding is labeled
+`potential — unverified`. A static run also **cannot produce a verified pass**: steps it could not
+observe go in the Appendix "not observed" list, never as a silent pass.
+
+## 9.5 Components
+
+| Layer | Path | Role |
+|-------|------|------|
+| Persona | `agents/cuj-author.md` | *The who* — a UX researcher who thinks in journeys and **refuses vague ones**. |
+| Persona | `agents/cuj-auditor.md` | *The who* — executes the contract; does not evaluate the design. |
+| Skill | `skills/spec-cuj/SKILL.md` | *The how* — interview → draft → write → validate → ask → splice the index. |
+| Skill | `skills/audit-cuj/SKILL.md` | *The how* — select → validate → replay → grade → report. |
+| Command | `commands/ux-spec.md` | *The when* — `/ux-spec [--cuj <id>]`. |
+| Command | `commands/audit-cuj.md` | *The when* — `/audit-cuj [target] [--cuj <id\|all\|critical>] [--mode static\|live\|hybrid]`. |
+
+`cuj-author`'s value is **refusal**, and the persona states the refusals explicitly: reject "the user"
+(demand a named actor); reject unobservable outcomes; reject feature-list goals; split bundled steps;
+reject criticality inflation (if every CUJ is critical, none are); and **never invent a step the user
+didn't state** — an incomplete CUJ marked incomplete beats a fabricated one, inheriting the suite's
+never-fabricate rule.
+
+`cuj-auditor`'s point of view is the inverse of `usability-auditor`'s: **it holds no heuristics and
+offers no opinions.** The CUJ says what should happen; the auditor reports whether it did, and at which
+step.
+
+### Interview
+`/ux-spec` drives [`agent-skills:interview-me`](https://github.com/addyosmani/agent-skills) one
+question at a time. It is an **optional, undeclared dependency** — the same degrade-and-disclose
+pattern the roll-up already uses for `web-quality-skills`. If it isn't installed, `spec-cuj` falls back to
+its own question set in `references/interview-fallback.md`, **says so**, offers to install without
+auto-installing, and records `authored.method: interview-fallback`. It is not added to `plugin.json`
+`dependencies`: the capability degrades rather than fails, so a hard dependency would overstate it.
+
+### Suite membership
+`audit-cuj` joins the `/ux-audit` fan-out as a fourth auditor. It is native but **conditional**: it
+needs a non-empty `.ux/cujs/`. Absent → skipped with the reason recorded ("no CUJs authored; run
+`/ux-spec`"), never a silent pass. The roll-up's go/no-go must not read a *skipped* CUJ run as a
+*passed* one.
+
+## 9.6 Testing / validation strategy
+
+Extends §5.2; the invariants there continue to hold unchanged.
+
+1. **CUJ contract validation** — `scripts/validate_cuj.py` checks each file (required keys, id/slug
+   patterns, `criticality` vocabulary, non-empty `preconditions`/`steps`/`success_criteria`,
+   contiguous step numbering, non-empty `action`/`expect`, `authored` shape) and the directory as a
+   whole (**duplicate ids**, **filename ≠ `<id>-<slug>.md`**). The cross-file checks are the ones that
+   actually break things: a duplicate id corrupts the index *and* every report's violation reference.
+2. **Index idempotency** — `render_index` over the same directory twice is **byte-identical**, and
+   splicing preserves prose outside the markers.
+3. **No PII** — a CUJ carrying a stray `authored.by` is **rejected**, so the rule in §9.7 is executable
+   rather than merely documented.
+4. **Report portability** — `auditor: cuj` fixtures (a sev3 report, and a `total: 0` clean pass)
+   validate against the §3.4 contract; a `cuj` report citing `nielsen-10` is rejected.
+5. **The audit invariant does not weaken (critical)** — after an audit run, `.ux/cujs/` and `SPEC.md`
+   changes are **still violations**. The allowlist below is opt-in and applies to authoring only.
+6. **Detection, not narration** — the end-to-end test breaks a journey deliberately in a real app and
+   requires a sev4 naming the correct step. A tool that only ever passes is not a verifier.
+
+### The safety allowlist
+`scripts/audit_safety.py` grows a keyword-only `allow` parameter and two profiles:
+
+```
+audit      → .ux/audits/                  # unchanged, byte-for-byte
+authoring  → .ux/audits/, .ux/cujs/, SPEC.md
+```
+
+Keyword-only is the point: an allowlist cannot be passed positionally where the prefix was expected,
+so the audit invariant cannot be widened by accident. Matching distinguishes directory prefixes
+(`.ux/cujs/`) from exact files (`SPEC.md`) — a bare prefix test would also permit `SPEC.md.bak` and
+`.ux/cujs-evil/`, which is precisely what an allowlist must not enable.
+
+## 9.7 Boundaries
+
+Section 6 governs the auditors and is unchanged. CUJ authoring adds the following, and the
+reconciliation must be stated plainly rather than left implicit:
+
+> **Findings-only means never editing host *application code*.** `.ux/cujs/` and the host's `SPEC.md`
+> are documentation the user authors *through* the agent — they are the user's own words, captured.
+> `/ux-spec` is not an auditor. Auditors remain findings-only and write nowhere but `.ux/audits/`.
+
+### Always (no need to ask)
+- Create `.ux/cujs/` in the host repo root and write CUJ files there.
+- Read existing CUJs, and validate them before authoring or verifying.
+
+### Ask first
+- **Writing the host's `SPEC.md`** — only to splice the generated index block, and only after showing
+  the diff. If declined, the CUJ files stand alone.
+- Everything already listed in §6 (dev server, navigation, installing — including a missing
+  `interview-me`: offer, never auto-install).
+
+### Never
+- **Edit, refactor, or "fix" host application code.** `/audit-cuj` reports the broken step; repairing
+  it is the user's call.
+- **Record who authored a CUJ.** `authored` carries date, method, and revision only. No `git config`
+  read, no email, no fallback value. Git history already answers "who decided this mattered", and it
+  answers it more honestly than a self-reported field that goes stale the moment someone else edits
+  the file. No PII in the artifact beats a rule about handling PII in the artifact.
+- Invent a step, an actor, or a criticality the user did not state — record the gap and stop.
+- Report a journey as passing when it was not observed to pass (see the static-mode rule in §9.4).
+- Rewrite or reorder anything in the host's `SPEC.md` outside the marker block.
+
+## 9.8 Acceptance criteria (Definition of Done)
+
+- [ ] `agents/cuj-author.md`, `agents/cuj-auditor.md`, `skills/spec-cuj/`, `skills/audit-cuj/`,
+      `commands/ux-spec.md`, and `commands/audit-cuj.md` exist and are wired per the composition rule.
+- [ ] `skills/spec-cuj/references/cuj-contract.md` and `scripts/validate_cuj.py` agree.
+- [ ] `/ux-spec` authors a valid CUJ end-to-end via interview, degrading to the fallback question set
+      with disclosure when `interview-me` is absent.
+- [ ] Every authored step carries an observable `expect`.
+- [ ] The host's `SPEC.md` index regenerates byte-identically and preserves surrounding prose; it is
+      written only after asking, and declining leaves it untouched.
+- [ ] `/audit-cuj` emits a §3.4-valid report with `auditor: cuj`, each finding naming the CUJ id and
+      broken step; a passing journey yields `total: 0` with steps listed in the Appendix.
+- [ ] Static mode labels findings `potential — unverified` and emits `frameworks: [cuj-contract]` only.
+- [ ] A deliberately broken journey produces a sev4 naming the correct step.
+- [ ] `audit_safety.py` still flags `.ux/cujs/` and `SPEC.md` under the default `audit` profile.
+- [ ] `audit-cuj` appears in the `/ux-audit` roll-up, and is skipped **with a reason** when no CUJs
+      exist.
+- [ ] README / AGENTS / CHANGELOG updated; `plugin.json` at 0.3.0.

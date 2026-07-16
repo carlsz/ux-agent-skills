@@ -140,3 +140,147 @@ severity. Every finding has evidence + framework citation + fix. No fabricated f
 Meta-command fan-out (`/ux-agent-skills:audit` running all auditors), report
 diffing/regression tracking across runs, retention/pruning. The contract enables all
 three later; none are built now.
+
+*(Fan-out shipped in Phase 6. Report diffing and retention remain deferred.)*
+
+---
+
+# PLAN — Critical User Journeys (CUJs)
+
+Implementation plan for [`SPEC.md` §9](../SPEC.md). Second capability in the same plugin;
+sections 1–8 above cover the usability auditor and still hold unchanged.
+
+- **Spec:** [SPEC.md](../SPEC.md) §9 — approved 2026-07-16
+- **Date:** 2026-07-16
+- **Approach:** foundations first (three independent, individually-green landings), then
+  two vertical slices — author a journey end-to-end, then verify one end-to-end.
+
+## 9. What we're building (recap)
+
+Two triads plus a new file contract. `/ux-spec` interviews the user and writes canonical
+journeys to `.ux/cujs/` in the host repo, splicing a generated index into the host's
+`SPEC.md`. `/audit-cuj` replays a stored journey against the running app and reports the
+exact step that broke, as an `auditor: cuj` report under `.ux/audits/` using the **existing**
+shared contract. `audit-cuj` joins the `/ux-audit` fan-out as a fourth suite member.
+
+## 10. What shapes this plan
+
+- **The report contract is reused, not extended.** `auditor: cuj` needs one entry in
+  `FRAMEWORKS_BY_AUDITOR` and nothing else. Any pressure to add frontmatter keys is
+  pressure to erode comparability — it goes in the Appendix instead (SPEC §9.4).
+- **The two test traps (AGENTS.md §"The two test traps") drive the commit boundaries.**
+  `test_evals.py` globs `skills/*/SKILL.md` and reds *instantly* without a matching eval
+  case — so each SKILL.md and its case land in **one commit**. `test_components.py` and
+  `DOC_FILES` are hardcoded and fail **silent** — so every new component's `check_*()` and
+  doc path land with the component, never "later".
+- **`/ux-spec` is the plugin's first host write outside `.ux/`.** The audit invariant must
+  come out of this *unchanged*: an audit run that touches `.ux/cujs/` is still a violation.
+  That is a test (T7.5), not a promise.
+- **Idempotency is only achievable because the index block is a pure function of
+  `.ux/cujs/`.** Hence a script generates it (`validate_cuj.py --index`), never prose.
+
+## 11. Dependency graph
+
+```
+   SPEC §9 ✅ (approved — was PS)
+       │
+       ├──────────────┬──────────────────┐
+       ▼              ▼                  ▼
+  ┌──────────┐  ┌─────────────┐   ┌──────────────┐
+  │ T7.1-7.3 │  │    T7.4     │   │    T7.5      │   ← mutually independent,
+  │ CUJ      │  │ cuj auditor │   │ safety       │     each lands green alone
+  │ contract │  │ registered  │   │ allowlist    │
+  └────┬─────┘  └──────┬──────┘   └──────┬───────┘
+       │               │                 │
+       │               │                 │  ✅ CHECKPOINT D
+       ├───────────────┼─────────────────┤
+       ▼               │                 ▼
+  ┌─────────────────────────────────────────────┐
+  │ Phase 8 — authoring path (/ux-spec)  ⭐      │  needs contract + allowlist
+  └────────────────────┬────────────────────────┘
+                       │  ✅ CHECKPOINT E
+                       ▼
+  ┌─────────────────────────────────────────────┐
+  │ Phase 9 — verification path (/audit-cuj)    │  needs contract + registration
+  └────────────────────┬────────────────────────┘
+                       │  ✅ CHECKPOINT F
+                       ▼
+              Phase 10 — roll-up  →  Phase 11 — docs/release
+```
+
+**Leaf input:** the approved SPEC §9. **Phase 9 depends on Phase 8** only for its behavioral
+eval (Sprout has no journeys until `/ux-spec` authors some) — the code paths are independent.
+
+## 12. Vertical slices (phases)
+
+### Phase 7 — Foundations (contract, registration, safety)
+Three landings that touch nothing user-facing and are mutually independent: the CUJ file
+contract + its validator + its tests; the `cuj` entry in the report validator + fixtures;
+the `audit_safety.py` allowlist + its tests. Each leaves CI green on its own and can be
+reviewed separately. **Doing these first de-risks the whole capability** — the schema, the
+contract reuse, and the safety story are exactly the parts that are expensive to change once
+two skills depend on them.
+
+→ **CHECKPOINT D** — human reviews `cuj-contract.md` and a hand-authored sample CUJ. Cheapest
+  point to correct the schema, before any skill is written against it.
+
+### Phase 8 — Authoring path (`/ux-spec`) ⭐ first demoable slice
+The thinnest complete path: interview → draft → write `.ux/cujs/<id>-<slug>.md` → validate →
+ask → splice the host `SPEC.md` index. Includes the `interview-me` fallback with disclosure.
+
+→ **CHECKPOINT E** — human authors a real CUJ against Sprout by answering the interview.
+  Reviews journey quality (is `expect` genuinely observable?), the ask-first gate, and the
+  index splice. **Stop here for sign-off** — this is the interview's tone and rigor, and it's
+  the part a spec can't fully pin down.
+
+### Phase 9 — Verification path (`/audit-cuj`)
+Select → validate → replay live → grade (classify, then clamp by `criticality`) → one report
+per run → index row. Static mode traces source only and cannot produce a verified pass.
+
+→ **CHECKPOINT F** — **the detection test.** Break a journey deliberately in Sprout; require a
+  sev4 naming the correct step. A verifier that only ever passes is worthless, and this is the
+  only check that proves it detects rather than narrates.
+
+### Phase 10 — Suite roll-up
+`audit-cuj` joins the `/ux-audit` fan-out as a fourth, **conditional** member — skipped with a
+reason when `.ux/cujs/` is empty, never a silent pass.
+
+### Phase 11 — Docs & release
+README / AGENTS / sub-READMEs / CHANGELOG / `plugin.json` → 0.3.0.
+
+→ **CHECKPOINT G** — go/no-go against SPEC §9.8.
+
+## 13. Slicing rationale
+
+- **Foundations before skills, and all three in parallel** — they share no code, each is
+  independently reviewable, and every one of them is a thing that's costly to change later.
+- **Author before verify** — there is nothing to verify until journeys exist, and the CUJ
+  schema gets its real stress test from a human answering an interview, not from fixtures.
+- **Detection proven before roll-up** — no point wiring a fourth auditor into the go/no-go
+  before we know it can fail a broken app.
+- **Docs last** — same as Phases 1–5; they describe what actually shipped.
+
+## 14. Risks & mitigations
+
+| Risk | Mitigation |
+|------|-----------|
+| `/ux-spec`'s host write silently widens the audit invariant | `allow` is keyword-only; T7.5 asserts an audit-profile call **still flags** `.ux/cujs/`. Widening cannot happen by accident. |
+| Allowlist prefix confusion (`SPEC.md.bak`, `.ux/cujs-evil/`) | Trailing-slash = directory, bare = exact match; both cases are explicit regression tests in T7.5. |
+| Index regeneration clobbers user prose | Block is a pure function of `.ux/cujs/`; only bytes between markers are replaced; byte-identical test in T7.3; skill shows the diff before splicing. |
+| Interview produces vague CUJs ("it works") | The `cuj-author` persona's value is *refusal* — unobservable `expect` is a statically unenforceable judgement, so it lives in the persona and is reviewed at Checkpoint E. |
+| A passing journey (`total: 0`) reads as "ran nothing" | Executive summary leads with "N/N journeys passed, M steps verified"; roll-up must not read a *skipped* run as a *passed* one (Appendix "not observed" is the discriminator). |
+| Adding 2 skills re-rolls TF-IDF and breaks existing `top_k: 1` positives | `run_evals.py` is an acceptance gate on T8.3 **and** T9.3 — all four skills, not just the new one. |
+| CUJ files leak PII | `authored` has no author field, and T7.2/T7.3 make a stray `authored.by` a **rejection**, not a comment. |
+| A new skill goes unverified (silent trap) | Every phase's `check_*()` + `DOC_FILES` edits are acceptance criteria of the same task, not follow-ups. |
+
+## 15. Verification spine (applies every phase)
+
+All five suites stay green throughout — `for t in tests/test_*.py; do python3 "$t"; done`.
+Additionally: any phase touching a skill description re-runs `python3 evals/run_evals.py`;
+any phase touching the host re-runs `scripts/audit_safety.py` under **both** profiles.
+
+## 16. Out of scope
+
+Report diffing across runs; `.ux/cujs/` retention; CUJs as a CI gate; generating E2E tests
+from journeys; auto-deriving audit scope from CUJs. All are enabled by this work; none are
+built now.
