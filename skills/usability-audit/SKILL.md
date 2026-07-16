@@ -9,8 +9,11 @@ Drive the [`usability-auditor`](../../agents/usability-auditor.md) persona throu
 complete heuristic evaluation and emit a report that conforms to the
 [shared report contract](./references/report-contract.md).
 
-**Framework scope:** [Nielsen's 10 heuristics](./references/nng-ux-heuristics.md). (The
-other three frameworks — Shneiderman, AI heuristics, NPCIS — arrive in a later phase.)
+**Frameworks (four):** [Nielsen's 10](./references/nng-ux-heuristics.md),
+[Shneiderman's 8](./references/shneiderman-8.md),
+[AI Design Heuristics](./references/ai-design-heuristics.md) (AI features only), and
+[NPCIS](./references/npcis.md). Findings are **grouped and de-duplicated by framework** —
+one issue, one finding, attributed to its primary framework (see step 4).
 
 **Evaluation modes:** `static` (read source), `live` (drive the running app in a
 browser), and `hybrid` (both). The modes differ only in how evidence is gathered — the
@@ -42,17 +45,24 @@ default (see step 1); `--mode` forces one.
      was reachable is reported as `static`, with the reason.
    List what you intend to cover.
 
-2. **Read the frameworks.** Load [Nielsen's 10](./references/nng-ux-heuristics.md) and the
-   [report contract](./references/report-contract.md). Cite the numbered heuristic from
-   the reference — don't recite from memory.
+2. **Read the frameworks.** Load all four lenses —
+   [Nielsen's 10](./references/nng-ux-heuristics.md),
+   [Shneiderman's 8](./references/shneiderman-8.md),
+   [AI Design Heuristics](./references/ai-design-heuristics.md), and
+   [NPCIS](./references/npcis.md) — plus the
+   [report contract](./references/report-contract.md). Cite the exact rule from the
+   reference; don't recite from memory. If the surface has no AI features, mark the AI
+   lens not-applicable rather than inventing findings.
 
 3. **Gather evidence** using the selected mode:
 
    ### Static mode (source)
-   Read the in-scope components, markup, routes, and copy. For each Nielsen heuristic look
-   for violations: missing system-status feedback, jargon vs. real-world language, no
-   undo/exit on destructive actions, inconsistency, missing error prevention,
-   recall-over-recognition, no accelerators, clutter, unhelpful error text, absent help.
+   Read the in-scope components, markup, routes, and copy. Sweep each framework's rules
+   for violations — Nielsen (feedback, real-world language, undo/exit, consistency, error
+   prevention, recognition, accelerators, minimalism, error text, help); Shneiderman
+   (closure, locus of control, reversal); NPCIS (navigation flow, presentation hierarchy,
+   content clarity, and the Strategy/goal-alignment lens); and, if the surface has AI
+   features, the AI heuristics (expectation-setting, explainability, correction paths).
    Capture `file:line` for each.
 
    ### Live mode (render)
@@ -68,9 +78,15 @@ default (see step 1); `--mode` forces one.
    - Do not enter credentials or bypass auth to reach gated screens; record those as
      skipped with the reason.
 
-4. **Grade findings (0–4).** Apply the severity rubric from the contract. **Omit severity
-   0.** For each real finding capture the five fields: Issue Description, Framework
-   Violation (exact Nielsen #), Severity, Evidence, Recommended Fix.
+4. **De-duplicate, attribute, and grade.** The four frameworks overlap, so the same issue
+   often surfaces under several (e.g. missing feedback = Nielsen #1 = Shneiderman #3 =
+   NPCIS Interaction). Merge those into **one finding**, attributed to the **primary**
+   framework, noting the corroborating ones in the Framework Violation field — never file
+   a defect four times. Then apply the severity rubric from the contract (**omit severity
+   0**) and capture the five fields per finding: Issue Description, Framework Violation
+   (primary + corroborating), Severity, Evidence, Recommended Fix. Group findings by
+   framework in the report body if it aids readability; the severity ordering in the
+   prioritized-fix list still governs.
 
 5. **Apply the render-vs-source honesty rule.** A claim about what a user *perceives at
    runtime* — system-status feedback, error recovery, interaction latency, transitions —
@@ -104,7 +120,8 @@ default (see step 1); `--mode` forces one.
 ## Exit criteria (done when)
 
 - A timestamped report exists under `.ux/audits/` and validates against the contract.
-- Every reported finding has a Nielsen citation, a 0–4 severity, evidence, and a fix.
+- Every reported finding has a framework citation (primary + any corroborating), a 0–4
+  severity, evidence, and a fix, with no issue filed under more than one finding.
 - Runtime-perception findings are `verified` (live) or `potential — unverified` (static),
   matching the mode actually used.
 - Live-mode screenshots are saved under `.ux/audits/assets/` and referenced by findings.

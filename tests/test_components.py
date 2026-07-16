@@ -57,8 +57,14 @@ def check_persona() -> list[str]:
     # Output format = 0-4 severity report.
     _require("severity" in low and "0" in body and "4" in body,
              "persona: must define the 0-4 severity output format", errs)
-    # Nielsen scope for Phase 1.
-    _require("nielsen" in low, "persona: must reference Nielsen's heuristics", errs)
+    # All four frameworks (Phase 3), applied — not deferred.
+    for fw in ("nielsen", "shneiderman", "npcis"):
+        _require(fw in low, f"persona: must reference the {fw} framework", errs)
+    _require("ai design" in low or "ai-heuristics" in low or "ai heuristic" in low,
+             "persona: must reference the AI design heuristics", errs)
+    _require("not yet in scope" not in low and "not yet supported" not in low,
+             "persona: frameworks must be applied, not deferred (stale Phase-1 wording)",
+             errs)
     return errs
 
 
@@ -108,6 +114,17 @@ def check_skill() -> list[str]:
              "skill: must record the mode actually used (not the one requested)", errs)
     _require("gap" in low or "not inspected" in low,
              "skill: must log coverage gaps, never silently", errs)
+    # T3.2 — all four frameworks applied, findings grouped + de-duped by framework.
+    for fw in ("nielsen", "shneiderman", "npcis"):
+        _require(fw in low, f"skill: must apply the {fw} framework", errs)
+    _require("ai design" in low or "ai-heuristics" in low or "ai heuristic" in low,
+             "skill: must apply the AI design heuristics", errs)
+    _require("dedup" in low or "de-dup" in low or "duplicat" in low,
+             "skill: must de-duplicate overlapping findings across frameworks", errs)
+    _require("primary" in low,
+             "skill: overlapping findings attributed to a primary framework", errs)
+    _require("arrive in a later phase" not in low and "later phase" not in low,
+             "skill: frameworks must be applied now, not deferred to a later phase", errs)
     return errs
 
 

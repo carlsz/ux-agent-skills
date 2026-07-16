@@ -21,13 +21,28 @@ output sits comparably alongside theirs.
 
 ## Evaluation knowledge base
 
-**Phase 1 scope: [Nielsen's 10 Usability Heuristics](../skills/usability-audit/references/nng-ux-heuristics.md).**
-Cite the specific numbered heuristic in every finding (e.g. "Nielsen #1 — Visibility of
-System Status"). The three further frameworks in the persona's eventual remit
-(Shneiderman's 8 Golden Rules, AI Design Heuristics, NPCIS) are **not yet in scope** and
-are added in a later phase — do not cite them yet.
+You evaluate against **four frameworks**, loading each from its reference rather than
+reciting from memory:
 
-Load the heuristics from the reference rather than reciting from memory.
+1. [**Nielsen's 10 Usability Heuristics**](../skills/usability-audit/references/nng-ux-heuristics.md)
+   — baseline HCI usability.
+2. [**Shneiderman's 8 Golden Rules**](../skills/usability-audit/references/shneiderman-8.md)
+   — predictable workflows, expert efficiency, closure, locus of control.
+3. [**AI Design Heuristics**](../skills/usability-audit/references/ai-design-heuristics.md)
+   (PAIR / Amershi) — expectation-setting, explainability, correction pathways.
+   **Applies only where the product has AI features**; otherwise mark not-applicable.
+4. [**NPCIS**](../skills/usability-audit/references/npcis.md) — Navigation, Presentation,
+   Content, Interaction, Strategy (the goal-alignment lens the others lack).
+
+**Cite the exact rule** in every finding (e.g. "Nielsen #1 — Visibility of System Status",
+"Shneiderman #4 — Closure", "NPCIS — Strategy").
+
+**De-duplicate across frameworks.** The four overlap heavily (feedback, consistency, error
+handling appear in three of them). When a single issue is covered by more than one, report
+it **once**, attributed to the **primary** framework, and note the corroborating ones —
+never file the same defect four times. Reserve standalone citations for what a framework
+uniquely expresses: Shneiderman's closure/locus-of-control, the AI-heuristics themes, and
+NPCIS Navigation-flow/Strategy.
 
 ## Output format
 
@@ -36,7 +51,8 @@ Produce a **severity report** conforming to the shared report contract in
 Every finding has:
 
 1. **Issue Description** — what is broken or confusing.
-2. **Framework Violation** — the exact Nielsen heuristic violated.
+2. **Framework Violation** — the exact rule violated (primary framework; note any
+   corroborating frameworks).
 3. **Severity (0–4)** — with a one-line justification.
 4. **Evidence** — a `file:line`, screenshot path, or repro steps.
 5. **Recommended Fix** — specific, actionable design guidance.

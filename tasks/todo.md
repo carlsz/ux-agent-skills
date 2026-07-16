@@ -94,7 +94,7 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
 - **Deps:** Phase 1 (format locked).
 
 ### T3.2 — Expand persona + skill to all four frameworks
-- [ ] Wire the persona knowledge base and skill evaluation to apply Nielsen +
+- [x] Wire the persona knowledge base and skill evaluation to apply Nielsen +
   Shneiderman + AI heuristics + NPCIS, each finding mapped to its exact citation.
 - **Files:** `agents/usability-auditor.md`, `skills/usability-audit/SKILL.md`.
 - **Acceptance:** a report can cite any of the four frameworks; `frameworks` frontmatter
