@@ -113,7 +113,9 @@ default (see step 1); `--mode` forces one.
 8. **Self-check before finishing.** Ensure `summary` counts reconcile with the findings in
    the body and no `[sev0]` appears. Validate the report and index with
    [`scripts/validate_report.py`](../../scripts/validate_report.py) — `validate_report.py
-   <report>` and `validate_report.py --index .ux/audits/index.md`.
+   <report>` and `validate_report.py --index .ux/audits/index.md`. Then confirm the safety
+   invariant with [`scripts/audit_safety.py`](../../scripts/audit_safety.py)
+   `<host-repo>` — it must report all changes confined to `.ux/audits/`.
 
 ## Boundaries
 

@@ -130,7 +130,7 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
 - **Deps:** T4.1.
 
 ### T4.3 — Safety invariant + idempotency test
-- [ ] Document and exercise: post-run `git status` shows changes only under
+- [x] Document and exercise: post-run `git status` shows changes only under
   `.ux/audits/`; reruns never overwrite/delete prior reports.
 - **Files:** `skills/usability-audit/SKILL.md` (exit criteria); optional
   `tasks/` verification note.
