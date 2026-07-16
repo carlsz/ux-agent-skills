@@ -1,0 +1,35 @@
+{
+  "skill_name": "ux-audit",
+  "trigger": {
+    "positive": [
+      { "prompt": "Run a full UX audit of my app before launch", "top_k": 1 },
+      { "prompt": "Audit everything — usability, accessibility, and web performance", "top_k": 3 },
+      { "prompt": "Give me a go/no-go UX verdict across all the quality auditors", "top_k": 3 }
+    ],
+    "negative": [
+      { "prompt": "Do a usability heuristic evaluation of this one screen", "owner": "usability-audit" },
+      { "prompt": "Write unit tests for this module using TDD", "owner": "agent-skills:test-driven-development" }
+    ]
+  },
+  "behavioral_target": {
+    "name": "sprout",
+    "repo": "https://github.com/carlsz/sprout",
+    "run": "npm install && npm run dev"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Clone and run https://github.com/carlsz/sprout, then run the full suite roll-up (/ux-agent-skills:ux-audit) against it.",
+      "expected_output": "One normalized contract report per available auditor plus a rollup with a go/no-go verdict; unavailable auditors skipped and disclosed.",
+      "expectations": [
+        "Runs the native usability auditor and writes a contract-valid usability report under Sprout/.ux/audits/",
+        "For accessibility and web-performance, either writes a normalized contract report or discloses the auditor as skipped with a reason — never a silent pass",
+        "Writes a rollup-<timestamp>.md containing a per-auditor severity table and an overall go/no-go verdict",
+        "Appends one index.md row per auditor run (append-only)",
+        "No auditor edits any of Sprout's application code",
+        "All writes are confined to Sprout/.ux/audits/"
+      ],
+      "trust_level": "provisional"
+    }
+  ]
+}

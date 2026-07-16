@@ -148,8 +148,11 @@ ux-agent-skills/
 │       └── SKILL.md            # the suite roll-up (fan-out + normalize + verdict)
 ├── commands/               # slash commands — the when (/usability-audit, /ux-audit)
 ├── scripts/                # validate_report.py, audit_safety.py
-└── tests/                  # contract / component / safety / docs checks
+├── tests/                  # contract / component / safety / docs / evals checks
+└── evals/                  # trigger + behavioral evals (Sprout as the target)
 ```
 
-Run the checks with `python3 tests/test_report_contract.py` (and the sibling
-`test_components.py`, `test_safety.py`, `test_docs.py`).
+Run the checks with `python3 tests/test_report_contract.py` (and the siblings
+`test_components.py`, `test_safety.py`, `test_docs.py`, `test_evals.py`). The
+[evals system](evals/README.md) verifies trigger routing (Tier 2, in CI) and behavioral
+audits against Sprout (Tier 3, on demand).

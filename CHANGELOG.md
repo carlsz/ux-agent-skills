@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Evals system** (`evals/`) — modelled on agent-skills' evals, using Sprout as the
+  behavioral target. Tier 2 (trigger routing via stemmed TF-IDF over skill descriptions,
+  schema + minimums + collision checks) runs deterministically in CI via
+  `tests/test_evals.py`; Tier 3 (behavioral audits against Sprout, graded by
+  `evals/run_evals.py --grade`) runs on demand. Replaces the ad-hoc dogfood prompt.
 - **Suite roll-up** — `/ux-agent-skills:ux-audit` fans out to usability (native) plus
   accessibility and web performance (wrapped from
   [web-quality-skills](https://github.com/addyosmani/web-quality-skills)), normalizes every

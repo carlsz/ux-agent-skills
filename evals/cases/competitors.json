@@ -1,0 +1,9 @@
+{
+  "_comment": "Descriptions of external/other skills referenced as negative-trigger owners, so Tier 2 routing can rank our skills against real competitors. Paraphrased from each skill's own description; update if the upstream description changes.",
+  "competitors": {
+    "web-quality-skills:accessibility": "Audit and improve web accessibility following WCAG 2.2 guidelines. Screen reader support, keyboard navigation, color contrast, ARIA, make accessible, a11y audit, WCAG compliance.",
+    "web-quality-skills:core-web-vitals": "Optimize Core Web Vitals LCP INP CLS for better page experience and search ranking. Fix layout shifts, reduce input delay, largest contentful paint.",
+    "web-quality-skills:performance": "Optimize web performance for faster loading and better user experience. Speed up my site, reduce load time, page speed, performance audit.",
+    "agent-skills:test-driven-development": "Drive development with tests. Write failing tests, implement, verify. Prove that code works, bug report, red green refactor, TDD unit tests."
+  }
+}

@@ -27,6 +27,7 @@ DOC_FILES = [
     "skills/usability-audit/references/report-contract.md",
     "commands/ux-audit.md",
     "agents/README.md", "skills/README.md", "commands/README.md",
+    "evals/README.md",
 ]
 
 
