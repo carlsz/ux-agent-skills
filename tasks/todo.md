@@ -85,7 +85,7 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
 ## Phase 3 — Full four-framework stack
 
 ### T3.1 — Author remaining framework references
-- [ ] Write skill-local references for the other three frameworks.
+- [x] Write skill-local references for the other three frameworks.
 - **Files:** `skills/usability-audit/references/shneiderman-8.md`,
   `ai-design-heuristics.md`, `npcis.md` (derived from `references/ux-researcher.md`).
 - **Acceptance:** each lists its rules/dimensions with a one-line evaluation lens, citable

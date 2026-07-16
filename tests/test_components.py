@@ -136,14 +136,35 @@ def check_command() -> list[str]:
     return errs
 
 
+def check_references() -> list[str]:
+    """The skill-local framework lenses must exist and carry their defining terms."""
+    errs: list[str] = []
+    refs = ROOT / "skills" / "usability-audit" / "references"
+    expected = {
+        "shneiderman-8.md": ["consistency", "informative feedback", "closure",
+                              "reversal", "locus of control", "memory load"],
+        "ai-design-heuristics.md": ["expectation", "explain", "correct"],
+        "npcis.md": ["navigation", "presentation", "content", "interaction", "strategy"],
+    }
+    for fname, terms in expected.items():
+        path = refs / fname
+        if not path.exists():
+            errs.append(f"missing reference: skills/usability-audit/references/{fname}")
+            continue
+        low = path.read_text(encoding="utf-8").lower()
+        for term in terms:
+            _require(term in low, f"{fname}: must cover {term!r}", errs)
+    return errs
+
+
 def main() -> int:
-    failures = check_persona() + check_skill() + check_command()
+    failures = check_persona() + check_skill() + check_command() + check_references()
     if failures:
         print("FAIL — components:")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — components (persona, skill, command)")
+    print("PASS — components (persona, skill, command, references)")
     return 0
 
 
