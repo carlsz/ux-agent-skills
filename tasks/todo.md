@@ -231,7 +231,7 @@ T7.1–7.3, T7.4, and T7.5 are **three mutually independent tracks**. Each lands
 and can be reviewed as its own PR.
 
 ### T7.1 — CUJ file contract doc
-- [ ] Author the `.ux/cujs` file contract as a reference doc, owned by `spec-cuj`.
+- [x] Author the `.ux/cujs` file contract as a reference doc, owned by `spec-cuj`.
 - **Files:** `skills/spec-cuj/references/cuj-contract.md`; add it to `DOC_FILES` in
   `tests/test_docs.py`.
 - **Acceptance:** specifies every frontmatter key per SPEC §9.2; the `^CUJ-\d{3}$` /
@@ -247,7 +247,7 @@ and can be reviewed as its own PR.
   globs `skills/*/SKILL.md`, so no eval case is owed until T8.2.
 
 ### T7.2 — `validate_cuj.py`
-- [ ] Implement the executable form of the contract + the index generator.
+- [x] Implement the executable form of the contract + the index generator.
 - **Files:** `scripts/validate_cuj.py`.
 - **Acceptance:** mirrors `validate_report.py` conventions (`validate()` → list of
   violations, `[]` = valid; `main()` → 0/1/2). Exposes `validate(path)`,
@@ -263,7 +263,7 @@ and can be reviewed as its own PR.
 - **Deps:** T7.1.
 
 ### T7.3 — CUJ fixtures + `test_cuj_contract.py`
-- [ ] Mirror `test_report_contract.py` beat for beat.
+- [x] Mirror `test_report_contract.py` beat for beat.
 - **Files:** `tests/test_cuj_contract.py`; `tests/fixtures/cujs/valid/{CUJ-001-add-a-task.md,
   CUJ-002-complete-a-task.md}`; `tests/fixtures/cujs/invalid/` — blank `expect`, bad
   `criticality`, empty `steps`, missing `authored`, non-contiguous `n`, filename mismatch,
@@ -276,7 +276,7 @@ and can be reviewed as its own PR.
 - **Deps:** T7.2.
 
 ### T7.4 — Register the `cuj` auditor in the report contract
-- [ ] Add `cuj` to the shared contract's known auditors, **with fixtures** — an unregistered
+- [x] Add `cuj` to the shared contract's known auditors, **with fixtures** — an unregistered
   auditor passes silently (`validate_report.py:93-103`), so registration without a fixture
   is untested.
 - **Files:** `scripts/validate_report.py:30-34` (`"cuj": {"cuj-contract", "task-completion",
@@ -292,7 +292,7 @@ and can be reviewed as its own PR.
 - **Deps:** T0. *(Independent of T7.1–7.3.)*
 
 ### T7.5 — `audit_safety.py` allowlist + profiles
-- [ ] Add opt-in path allowlisting **without weakening the audit invariant**.
+- [x] Add opt-in path allowlisting **without weakening the audit invariant**.
 - **Files:** `scripts/audit_safety.py`; `tests/test_safety.py`.
 - **Acceptance:** `changes_confined_to(repo, prefix=DEFAULT_PREFIX, *, allow=())` — `allow`
   is **keyword-only**, so an allowlist can never be passed where `prefix` was expected.
