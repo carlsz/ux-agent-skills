@@ -174,9 +174,10 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
 ## Definition of Done (SPEC §7)
 - [x] Triad wired per composition rule.
 - [x] Four frameworks + 0–4 rubric applied.
-- [x] Live end-to-end + static fallback both work. *(live mode built + structurally
-      tested; static + four-framework dogfooded against sprout. A true live browser run
-      against a running app is still un-exercised — see note below.)*
+- [x] Live end-to-end + static fallback both work. *(live/hybrid dogfooded against a
+      running sprout at localhost:3117 — drove add/edit/complete/delete, verified 4
+      findings + resolved 1 previously-unverified; static + four-framework also
+      dogfooded.)*
 - [x] Reports validate against the shared contract; `index.md` appends.
 - [x] Post-run `git status` scoped to `.ux/audits/` only.
 - [x] Every finding: framework citation + 0–4 severity + evidence + fix.

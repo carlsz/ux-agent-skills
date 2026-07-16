@@ -8,6 +8,10 @@ touched:
     python3 scripts/audit_safety.py <host-repo-dir>
 
 Exit 0 = confined (safe); 1 = a change escaped `.ux/audits/`; 2 = usage/other error.
+
+Note: this measures the *auditor's* footprint. If live mode required a user-authorized
+setup step (e.g. `npm install`, which can touch a lockfile), commit or revert that before
+checking, or the setup side-effect will show up here — it is not an audit write.
 """
 from __future__ import annotations
 

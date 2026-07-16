@@ -124,6 +124,13 @@ default (see step 1); `--mode` forces one.
   invariant; any other created/modified file is a failure.
 - **Ask first** before starting a dev server, navigating a browser, installing anything,
   or reaching auth-gated screens.
+- **Setup side-effects are not audit writes, but disclose them.** Getting the app running
+  for live mode may require a user-authorized install/build (e.g. `npm install`), which can
+  modify host files like a lockfile. That is separate from the auditor's own output — the
+  safety invariant governs what the *auditor* writes (`.ux/audits/` only). When running the
+  safety check, take the baseline **after** any authorized setup (or revert setup changes
+  first) so it measures the audit's footprint, and note any setup side-effect in the report
+  appendix rather than letting it read as an audit write.
 - **Never fabricate** findings, severities, or evidence.
 
 ## Exit criteria (done when)
