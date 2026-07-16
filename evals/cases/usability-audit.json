@@ -1,0 +1,35 @@
+{
+  "skill_name": "usability-audit",
+  "trigger": {
+    "positive": [
+      { "prompt": "Do a usability audit of my checkout flow", "top_k": 1 },
+      { "prompt": "Run a heuristic evaluation of this screen", "top_k": 3 },
+      { "prompt": "Review my app's UX for usability problems before user testing", "top_k": 3 }
+    ],
+    "negative": [
+      { "prompt": "Improve my Core Web Vitals and fix layout shift", "owner": "web-quality-skills:core-web-vitals" },
+      { "prompt": "Make my site WCAG compliant and usable with a screen reader", "owner": "web-quality-skills:accessibility" }
+    ]
+  },
+  "behavioral_target": {
+    "name": "sprout",
+    "repo": "https://github.com/carlsz/sprout",
+    "run": "npm install && npm run dev"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Clone and run https://github.com/carlsz/sprout, then run a live usability audit of its add / edit / complete / delete task flows.",
+      "expected_output": "A contract-valid usability report under Sprout/.ux/audits/ with severity-scored, Nielsen-cited findings; live-observed runtime findings marked verified.",
+      "expectations": [
+        "Writes a report to Sprout/.ux/audits/usability-<timestamp>.md that validates against the shared report contract",
+        "Every finding cites a specific framework rule (e.g. Nielsen #1, #3, #6, #9) and carries a 0-4 severity, evidence, and a fix",
+        "Runtime-perception findings are stated as verified in live mode, not 'potential — unverified'",
+        "The appendix names in-scope areas that were not inspected (honest coverage)",
+        "Does not edit any of Sprout's application code",
+        "All writes are confined to Sprout/.ux/audits/"
+      ],
+      "trust_level": "provisional"
+    }
+  ]
+}
