@@ -11,7 +11,7 @@ Legend — every task carries **Files**, **Acceptance**, **Verify**, **Deps**.
 ## Phase 1 — Walking skeleton (static, Nielsen-only) ⭐
 
 ### T1.1 — Define the shared report contract
-- [ ] Author the `.ux/audits` report contract as a reference doc in this repo.
+- [x] Author the `.ux/audits` report contract as a reference doc in this repo.
 - **Files:** `skills/usability-audit/references/report-contract.md` (frontmatter schema
   §3.4, report body layout §3.3, `index.md` row format, severity rubric §4).
 - **Acceptance:** doc specifies every frontmatter key, the `usability-<YYYYMMDD-HHMMSS>.md`
