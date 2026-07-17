@@ -563,6 +563,10 @@ font-size:.9rem;box-shadow:var(--shadow)}
 .banner.pass{background:rgba(34,197,94,.10);border-color:rgba(34,197,94,.35);border-left-color:#22c55e}
 .banner.warn{background:rgba(234,179,8,.12);border-color:rgba(234,179,8,.4);border-left-color:#eab308}
 .banner.info{background:rgba(148,163,184,.13);border-color:rgba(148,163,184,.4);border-left-color:#94a3b8}
+.banner.go{background:rgba(34,197,94,.10);border-color:rgba(34,197,94,.4);border-left-color:#22c55e}
+.banner.nogo{background:rgba(239,68,68,.10);border-color:rgba(239,68,68,.4);border-left-color:#ef4444}
+.banner.verdict{font-size:1rem;padding:.9rem 1.1rem}
+.banner.verdict b{font-size:1.15rem;text-transform:uppercase;letter-spacing:.03em}
 /* evidence fallback gallery */
 .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.8rem}
 .tile{margin:0;background:var(--card);border:1px solid var(--line);border-radius:10px;
@@ -604,6 +608,62 @@ def _page(title: str, inner: str) -> str:
     )
 
 
+# A link whose visible text IS the `.md` filename, e.g. `[usability-….md](usability-….md)`:
+# strip `.md` from the text and point the href at `.html`.
+FULL_MD_LINK_RE = re.compile(r"\[([\w./-]+)\.md\]\((?!https?:|#|/)\1\.md([)#])")
+# Any remaining relative `](report.md)` / `](index.md)` — repoint the href only.
+MD_LINK_RE = re.compile(r"\]\((?!https?:|#|/)([\w./-]+)\.md([)#])")
+
+
+def _link_md_to_html(text: str) -> str:
+    """Repoint relative `.md` report/index links to their `.html` companions.
+
+    Where the link text is the filename itself, the trailing `.md` is dropped from the
+    visible text too, so a repointed link never reads `…-204236.md` while linking to `.html`.
+    """
+    text = FULL_MD_LINK_RE.sub(r"[\1](\1.html\2", text)
+    return MD_LINK_RE.sub(r"](\1.html\2", text)
+
+
+def _render_rollup(fm: dict, body: str, report_dir: Path) -> str:
+    """Render a `rollup-*.md` suite report as a verdict dashboard.
+
+    The roll-up has its own frontmatter (`rollup`, `verdict`, `auditors_run`) rather than the
+    per-report `auditor`/`summary`, so it renders through a dedicated path: a prominent
+    go/no-go verdict, then the roll-up's sections (auditor table, per-auditor severity matrix,
+    merged issues) generically — with report links repointed to their `.html` views.
+    """
+    verdict = str(fm.get("verdict", "")).strip()
+    kind = "go" if verdict.lower() == "go" else "nogo"
+    icon = "✅" if verdict.lower() == "go" else "🔴"
+    date, target = fm.get("date", ""), fm.get("target", "")
+    runs = fm.get("auditors_run") or []
+    chip_vals = ([str(date)] if date else []) + ([f"{len(runs)} auditors"] if runs else [])
+    target_html = (f'<div class="target"><code>{html.escape(str(target))}</code></div>'
+                   if target else "")
+    header = (f'<header class="report-head"><div class="eyebrow">UX audit roll-up</div>'
+              f'<h1>{html.escape(str(fm.get("scope", "")))}</h1>{target_html}'
+              f'<div class="chips">{"".join(_chip(v) for v in chip_vals)}</div></header>')
+    verdict_banner = _banner(
+        f"verdict {kind}", icon,
+        f'<b>{html.escape(verdict.upper())}</b> — suite verdict; detail below.')
+
+    body = _link_md_to_html(body)
+    matches = list(SECTION_RE.finditer(body))
+    pre = body[:matches[0].start()] if matches else body
+    pre = re.sub(r"^\s*#\s+.*\n", "", pre, count=1)  # drop the redundant H1 title line
+    parts = [header, verdict_banner]
+    if pre.strip():
+        parts.append(f'<section class="md">{_render_blocks(pre, report_dir)}</section>')
+    for idx, m in enumerate(matches):
+        name = m.group(1).strip()
+        start = m.end()
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(body)
+        parts.append(f'<section class="md"><h2>{_inline(name, report_dir)}</h2>'
+                     f'{_render_blocks(body[start:end], report_dir)}</section>')
+    return "\n".join(parts)
+
+
 def render(md_path: str | Path) -> str:
     """Return the self-contained HTML for the report at `md_path`."""
     md_path = Path(md_path)
@@ -612,6 +672,10 @@ def render(md_path: str | Path) -> str:
     fm, body = _split_frontmatter(text)
     if fm is None:
         raise ValueError(f"{md_path.name}: {body}")
+
+    if fm.get("rollup"):
+        title = f"UX audit roll-up — {fm.get('scope', '')}".strip(" —")
+        return _page(title, _render_rollup(fm, body, report_dir))
 
     matches = list(SECTION_RE.finditer(body))
     sections: list[tuple[str, str]] = []  # (lowercased name, section html)
@@ -662,14 +726,50 @@ def render_to_file(md_path: str | Path) -> Path:
     return out
 
 
+def render_index(md_path: str | Path) -> str:
+    """Render `.ux/audits/index.md` (a run log) into a stable `index.html` landing page."""
+    md_path = Path(md_path)
+    text = _link_md_to_html(md_path.read_text(encoding="utf-8"))
+    title = "Audit index"
+    kept: list[str] = []
+    for line in text.splitlines():
+        if not kept and line.startswith("# "):
+            title = line[2:].strip()
+            continue
+        kept.append(line)
+    head = (f'<header class="report-head"><div class="eyebrow">UX audits</div>'
+            f"<h1>{html.escape(title)}</h1></header>")
+    return _page(title, head + _render_blocks("\n".join(kept), md_path.parent))
+
+
+def render_index_to_file(md_path: str | Path) -> Path:
+    md_path = Path(md_path)
+    out = md_path.with_suffix(".html")
+    out.write_text(render_index(md_path), encoding="utf-8")
+    return out
+
+
 def main(argv: list[str]) -> int:
+    if argv and argv[0] == "--index":
+        rest = argv[1:] or ["index.md"]
+        ok = True
+        for arg in rest:
+            try:
+                print(f"rendered index: {render_index_to_file(arg)}")
+            except Exception as exc:  # noqa: BLE001
+                ok = False
+                print(f"FAILED index: {arg}: {exc}", file=sys.stderr)
+        return 0 if ok else 1
     if not argv:
-        print("usage: render_report_html.py <report.md> [<report.md> ...]", file=sys.stderr)
+        print("usage: render_report_html.py <report.md> [...]  |  --index [<index.md>]",
+              file=sys.stderr)
         return 2
     ok = True
     for arg in argv:
         try:
-            out = render_to_file(arg)
+            # `index.md` has no frontmatter — route it to the index renderer for convenience.
+            out = (render_index_to_file(arg) if Path(arg).name == "index.md"
+                   else render_to_file(arg))
             print(f"rendered: {out}")
         except Exception as exc:  # noqa: BLE001 — report path + reason, keep going
             ok = False
