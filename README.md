@@ -10,8 +10,10 @@ Slash commands that map to the UX design and software development lifecycle. Eac
 
 | What you're doing | Command | Key principle |
 |-------------------|---------|---------------|
+| Define critical journeys | `/ux-spec` | Author CUJs by interview |
 | Audit your UX | `/usability-audit` | Expert usability heuristic evals |
-| End-to-end UX evals | `/ux-audit` | Usability + accessibility + web perf evals |
+| Verify critical journeys | `/cuj-audit` | Replay journeys, report the step that broke |
+| End-to-end UX evals | `/ux-audit` | Usability + accessibility + web perf + CUJs |
 
 **Composing with agent-skills.** The auditor stops at findings by design — which is exactly what
 makes it compose with [agent-skills](https://github.com/addyosmani/agent-skills): hand a report's
@@ -56,18 +58,19 @@ Reports land in the host repo under **`.ux/audits/`**:
 One command runs every available auditor against a single target and merges the results:
 
 ```
-/ux-agent-skills:ux-audit [target] [--scope <area>] [--only usability,accessibility,web-performance]
+/ux-agent-skills:ux-audit [target] [--scope <area>] [--only usability,accessibility,web-performance,cuj]
 ```
 
-It fans out to the **usability** auditor (native) plus **accessibility** and **web
-performance** — the latter two wrapped from
+It fans out to the **usability** and **critical-user-journeys** auditors (both native) plus
+**accessibility** and **web performance** — the latter two wrapped from
 [web-quality-skills](https://github.com/addyosmani/web-quality-skills), the same-author
 companion to `agent-skills`. Every result is **normalized into the shared contract**
 (0–4 severity), so all reports land in one `.ux/audits/` directory, share one `index.md`,
 and are summarized in a `rollup-<timestamp>.md` with a per-auditor table and an overall
 **go/no-go verdict**. Auditors whose wrapping skill isn't installed are skipped and
-disclosed — never silently treated as a pass. See the
-[roll-up skill](skills/ux-audit/SKILL.md).
+disclosed — and the CUJ auditor is **conditional**, running only when you've authored
+journeys under `.ux/cujs/` and otherwise skipped with a reason. A skip is never silently
+treated as a pass. See the [roll-up skill](skills/ux-audit/SKILL.md).
 
 ### Shared reporting contract
 
@@ -79,6 +82,48 @@ so their outputs are comparable and can be rolled up together. Only the `auditor
 framework vocabulary differ. Reports self-validate via
 [`scripts/validate_report.py`](scripts/validate_report.py); the safety invariant (writes
 stay under `.ux/audits/`) is checked by [`scripts/audit_safety.py`](scripts/audit_safety.py).
+
+## Critical User Journeys
+
+Heuristics tell you a button has poor affordance; they can't tell you that the one flow your
+business depends on is broken. **Critical user journeys (CUJs)** capture what your app is
+*for* — as durable, machine-checkable files an auditor can replay.
+
+**Author them by interview** with `/ux-spec`. It asks one question at a time, guessing the
+descriptive parts (who the actor is, where they start, what they do) and pushing back on the
+parts a verifier is graded against — each step's *observable* outcome, the success criteria,
+and how critical the journey really is. Each answer becomes a file under `.ux/cujs/`, and the
+journey index in your `SPEC.md` is regenerated — **ask-first, always with a diff**.
+
+```
+/ux-agent-skills:ux-spec [--cuj <id>]
+```
+
+**Verify them** with `/cuj-audit`. It replays each journey against your running app and
+reports the exact step that broke, as an `auditor: cuj` report under `.ux/audits/` — the same
+shared contract every other auditor emits.
+
+```
+/ux-agent-skills:cuj-audit [target] [--cuj <id|all|critical>] [--mode static|live|hybrid]
+```
+
+A passing run is `total: 0` — unusual for an auditor, so every report leads with
+`P/N journeys passed, S skipped, M of T steps verified` rather than letting an empty report
+read as "found nothing". A journey it couldn't replay stays counted as skipped, never folded
+into a pass; a static run traces source but **cannot** produce a verified pass. Journeys live
+in the host repo beside the audits:
+
+```
+<host-repo>/.ux/cujs/
+├── CUJ-001-add-a-task.md
+└── CUJ-002-complete-a-task.md
+```
+
+> **The interview uses [`interview-me`](https://github.com/addyosmani/agent-skills) when it's
+> installed** — but that dependency is **optional and undeclared**. Unlike the roll-up's
+> `web-quality-skills` (a manifest dependency), `interview-me` is *not* in `plugin.json`: if
+> it's absent, `/ux-spec` falls back to its own question set, tells you it did, and offers to
+> install it rather than auto-installing. The capability degrades; it never fails.
 
 ## Example — auditing a real app (Sprout)
 
@@ -155,15 +200,14 @@ ux-agent-skills/
 ├── .claude-plugin/
 │   ├── plugin.json         # plugin manifest
 │   └── marketplace.json    # marketplace catalog (self-lists this plugin)
-├── agents/                 # personas — the who (usability-auditor)
+├── agents/                 # personas — the who (usability-auditor, cuj-author, cuj-auditor)
 ├── skills/                 # skills — the how
-│   ├── usability-audit/
-│   │   ├── SKILL.md            # the usability audit workflow
-│   │   └── references/         # framework lenses + the shared report contract
-│   └── ux-audit/
-│       └── SKILL.md            # the suite roll-up (fan-out + normalize + verdict)
-├── commands/               # slash commands — the when (/usability-audit, /ux-audit)
-├── scripts/                # validate_report.py, audit_safety.py
+│   ├── usability-audit/        # usability audit workflow + framework lenses & report contract
+│   ├── ux-audit/               # the suite roll-up (fan-out + normalize + verdict)
+│   ├── spec-cuj/               # author critical user journeys by interview (+ cuj-contract)
+│   └── audit-cuj/              # replay journeys, report the step that broke
+├── commands/               # slash commands — the when (/usability-audit, /ux-audit, /ux-spec, /cuj-audit)
+├── scripts/                # validate_report.py, validate_cuj.py, audit_safety.py
 ├── tests/                  # contract / component / safety / docs / evals checks
 └── evals/                  # trigger + behavioral evals (Sprout as the target)
 ```

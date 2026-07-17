@@ -6,6 +6,40 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-17
+
+### Added
+- **Critical User Journeys** — a second capability beside the auditor suite: give a host app a
+  durable, machine-checkable definition of the flows it exists for, and an auditor that replays
+  them and reports the exact step that broke.
+  - **`/ux-spec`** — the `cuj-author` persona (`agents/`) and `spec-cuj` skill (`skills/`)
+    interview the user one question at a time to author journeys, write each to `.ux/cujs/`, and
+    regenerate the journey index in the host's `SPEC.md` (ask-first, always with a diff). The
+    persona's value is **refusal**: it rejects "the user" for a named actor, unobservable
+    outcomes, feature-list goals, and criticality inflation, and never invents a step.
+  - **`/cuj-audit`** — the `cuj-auditor` persona (`agents/`) and `audit-cuj` skill (`skills/`)
+    replay a stored journey and emit an `auditor: cuj` report naming the CUJ id and broken step.
+    A passing journey is `total: 0`, and the report leads with
+    `P/N journeys passed, S skipped, M of T steps verified` so a clean pass is never confused
+    with a run that verified nothing.
+  - **CUJ file contract** (`skills/spec-cuj/references/cuj-contract.md`) and its executable form
+    `scripts/validate_cuj.py` — ten-key schema, `expect` as the load-bearing observable field,
+    idempotent host `SPEC.md` index generation, and **no provenance/PII** (author, date, and
+    revision are answered by git, and are rejected outright if present).
+- **`audit-cuj` joins the `/ux-audit` roll-up** as a fourth, **conditional** auditor — native
+  like usability, run only when `.ux/cujs/` is non-empty, and otherwise skipped with a recorded
+  reason rather than counted as a pass.
+- **`interview-me` as an optional, undeclared dependency** — `/ux-spec` uses
+  [agent-skills](https://github.com/addyosmani/agent-skills)' `interview-me` when installed and
+  falls back to its own question set (`references/interview-fallback.md`) with disclosure when
+  it isn't. Unlike `web-quality-skills`, it is deliberately **not** in `plugin.json` — the
+  capability degrades rather than fails.
+- **`audit_safety.py` allowlist** — a keyword-only `allow` parameter with `audit` (unchanged,
+  `.ux/audits/` only) and `authoring` (`.ux/audits/`, `.ux/cujs/`, `SPEC.md`) profiles, so CUJ
+  authoring can write host docs without weakening the audit safety invariant.
+- Test suites `tests/test_cuj_contract.py` (contract + index idempotency + no-PII) and expanded
+  docs/eval coverage for the CUJ components.
+
 ## [0.2.0] - 2026-07-16
 
 ### Added

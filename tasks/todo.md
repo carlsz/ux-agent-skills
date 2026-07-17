@@ -556,8 +556,8 @@ Two rules carry the weight, and both guard a false PASS:
 
 ## Phase 11 — Docs & release
 
-### T11.1 — README + AGENTS + sub-READMEs
-- [ ] **Files:** `README.md` (`/ux-spec` + `/cuj-audit` rows, a CUJ section, repo layout, and
+### T11.1 — README + AGENTS + sub-READMEs ✅
+- [x] **Files:** `README.md` (`/ux-spec` + `/cuj-audit` rows, a CUJ section, repo layout, and
   a note that `interview-me` is **optional and undeclared**, unlike `web-quality-skills`);
   `AGENTS.md` (repo layout + a CUJ-family note beside the auditor checklist);
   `agents/README.md`, `skills/README.md`, `commands/README.md` catalogs.
@@ -566,9 +566,10 @@ Two rules carry the weight, and both guard a false PASS:
 - **Verify:** `python3 tests/test_docs.py` green; all links resolve.
 - **Deps:** Phases 7–10.
 
-### T11.2 — CHANGELOG + version
-- [ ] **Files:** `CHANGELOG.md` (`[Unreleased]` → `### Added`); `.claude-plugin/plugin.json`
-  `version` 0.2.0 → 0.3.0, keywords `+ "cuj"`, `"journeys"`.
+### T11.2 — CHANGELOG + version ✅
+- [x] **Files:** `CHANGELOG.md` (new dated `## [0.3.0] - 2026-07-17` `### Added`);
+  `.claude-plugin/plugin.json` `version` 0.2.0 → 0.3.0, keywords `+ "cuj"`, `"journeys"`.
+  `marketplace.json` unchanged (no `dependencies` change).
 - **Acceptance:** **no `dependencies` change → no `marketplace.json` change** (it carries no
   version, only dependencies).
 - **Verify:** full suite green.
@@ -581,19 +582,20 @@ Two rules carry the weight, and both guard a false PASS:
 ---
 
 ## Definition of Done (SPEC §9.8)
-- [ ] Both triads exist and are wired per the composition rule.
-- [ ] `cuj-contract.md` and `validate_cuj.py` agree.
-- [ ] `/ux-spec` authors a valid CUJ via interview; degrades with disclosure when
+- [x] Both triads exist and are wired per the composition rule.
+- [x] `cuj-contract.md` and `validate_cuj.py` agree.
+- [x] `/ux-spec` authors a valid CUJ via interview; degrades with disclosure when
       `interview-me` is absent.
-- [ ] Every authored step carries an observable `expect`.
-- [ ] Host `SPEC.md` index regenerates byte-identically, preserves surrounding prose, is
+- [x] Every authored step carries an observable `expect`.
+- [x] Host `SPEC.md` index regenerates byte-identically, preserves surrounding prose, is
       written only after asking, and declining leaves it untouched.
-- [ ] `/cuj-audit` emits a §3.4-valid `auditor: cuj` report naming the CUJ id + broken step;
+- [x] `/cuj-audit` emits a §3.4-valid `auditor: cuj` report naming the CUJ id + broken step;
       a passing journey yields `total: 0` with steps in the Appendix.
-- [ ] Static mode labels findings `potential — unverified`, `frameworks: [cuj-contract]` only.
-- [ ] **A deliberately broken journey produces a sev4 naming the correct step.**
-- [ ] `audit_safety.py` **still flags** `.ux/cujs/` and `SPEC.md` under the default `audit`
+- [x] Static mode labels findings `potential — unverified`, `frameworks: [cuj-contract]` only.
+- [x] **A deliberately broken journey produces a sev4 naming the correct step.** (CHECKPOINT F,
+      passed 2026-07-16.)
+- [x] `audit_safety.py` **still flags** `.ux/cujs/` and `SPEC.md` under the default `audit`
       profile.
-- [ ] `audit-cuj` appears in the `/ux-audit` roll-up; skipped **with a reason** when no CUJs
-      exist.
-- [ ] README / AGENTS / CHANGELOG updated; `plugin.json` at 0.3.0.
+- [x] `audit-cuj` appears in the `/ux-audit` roll-up; skipped **with a reason** when no CUJs
+      exist. (Phase 10, live-verified against Sprout 2026-07-17.)
+- [x] README / AGENTS / CHANGELOG updated; `plugin.json` at 0.3.0.
