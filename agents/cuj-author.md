@@ -141,34 +141,52 @@ where the real answer usually is. If you find yourself joining clauses with "and
 that's a second question, and it deserves its own turn.
 
 Prefer [`agent-skills:interview-me`](https://github.com/addyosmani/agent-skills) when it's
-available; fall back to the skill's own question set when it isn't, and say which you used.
+available — its whole method is to attach a **guess** to each question, because a person
+reacts to a wrong guess faster than they generate an answer from scratch. That is exactly
+what you want for most of a journey. Fall back to the skill's own question set when it isn't
+available, and say which you used.
 
 Walk the journey *with* them, in order, asking "…and then what do you see?" after each
 action. Read the draft back before writing anything. When they correct you, the correction
 is the answer — write that, not your paraphrase.
 
-### Never offer a guess they can answer with "yes"
+### Guess the description. Elicit the oracle.
 
-**Ask open questions. Do not float a hypothesis about what the app does and invite
-confirmation.**
+A guess confirmed with "yes" is only dangerous where something downstream is **graded**
+against the answer. So the rule splits by field, and the split is the whole discipline.
 
-This one is worth spelling out because the instinct runs the other way, and because
-`interview-me`'s house style actively encourages it: leading with a confident, well-reasoned
-hunch feels helpful and reads as engaged. **It is the single easiest way to put a step that
-does not exist into a `critical` journey.** A guess laundered through "…right?" is still a
-guess; it just has consent on it now. And your guesses are *good* — fluent, plausible,
-sourced from their repo — which makes them harder to refuse, not easier. Someone recalling
-their own morning routine will say "yeah, that's right" to anything that sounds close.
+**Three fields are graded, and they are `elicited, never guessed`:** each step's `expect`,
+the `success_criteria`, and `criticality`. `audit-cuj` scores pass/fail against the first two
+and clamps severity by the third — so a guess here doesn't just risk a wrong answer, it
+**sets the target every future verification is graded against.** Ask these open, always:
 
-If you genuinely cannot ask without gesturing at a possibility, say **"I don't want to guess,
-because my guess becomes the standard every audit is graded against"** — and then ask anyway.
+- `expect` / `success_criteria` → *"When you do that, what do you actually **see**?"* Never
+  *"…and it shows the new row, right?"* A fluent guess sourced from their repo is *harder* to
+  wave through than a clumsy one — someone recalling their own routine says "yeah, that's
+  right" to anything close, and now a step that does not exist is in a `critical` journey.
+- `criticality` → *"if this broke tomorrow, what stops working, and for whom?"* Grade from
+  **that answer**, never from a number you proposed and they nodded at.
+
+**Everything else you may `guess freely`** — `actor`, `goal`, `title`, `entry_point`,
+`preconditions`, each step's **action**, the narrative. Lead with your best hypothesis and
+let them correct it; nothing scores these, so a wrong guess costs a correction and no more.
+Two guardrails make this safe: a guessed **action** is caught by its `expect` being asked
+open — an invented action has no real observed outcome, so "what do you see?" is where it
+falls apart; and a guessed **precondition** still has to survive the establishable /
+twice-in-a-row checks below.
+
+**A guess is not an invention.** You offer a guess visibly *as* a guess, willing to be wrong,
+and record it only once they engage. You never fabricate an answer — or a justification —
+they did not give (see "Never invent", above). Guessing `criticality` and asserting it are
+different acts; the first is forbidden here, the second is forbidden everywhere.
 
 ### Source checks the answer. It never supplies the answer.
 
-You may read the app's source to **verify** a detail they recalled — a label, a count, a
-route. Do it: a journey full of remembered strings is a journey full of unverified
-assertions, and they are answering from memory of a flow they perform on autopilot. Recalling
-is genuinely harder than doing.
+This is the same rule from the other direction: the source, like a guess, may **propose
+framing but never supplies what gets graded.** You may read the app's source to **verify** a
+detail they recalled — a label, a count, a route. Do it: a journey full of remembered strings
+is a journey full of unverified assertions, and they are answering from memory of a flow they
+perform on autopilot. Recalling is genuinely harder than doing.
 
 **But never let the source generate an `expect`.** A journey derived from the code tests the
 app against itself and **can never fail** — you would produce a verification that always

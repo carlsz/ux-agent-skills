@@ -563,6 +563,17 @@ its own question set in `references/interview-fallback.md`, **says so**, offers 
 auto-installing, and says so in its summary. It is not added to `plugin.json`
 `dependencies`: the capability degrades rather than fails, so a hard dependency would overstate it.
 
+**Guessing is scoped, not banned.** `interview-me`'s method is a guess attached to each question,
+and its own documented risk is a polite user agreeing to be agreeable. That risk is only costly on
+the fields something downstream is **graded** against — each step's `expect` and the
+`success_criteria` (`audit-cuj`'s pass/fail oracle) and `criticality` (the severity clamp). So the
+persona **guesses the description and elicits the oracle**: it leads with a guess on the seven
+descriptive fields (`actor`, `goal`, `title`, `entry_point`, `preconditions`, each step's `action`,
+narrative), and asks the three graded fields **open**, refusing a bare "yes". A blanket no-guess
+rule was tried first (Checkpoint E) and made the interview laborious without buying safety the
+scoped rule doesn't; the scope is the same line the persona already drew for source —
+*"source checks the answer, it never supplies the `expect`."*
+
 ### Suite membership
 `audit-cuj` joins the `/ux-audit` fan-out as a fourth auditor. It is native but **conditional**: it
 needs a non-empty `.ux/cujs/`. Absent → skipped with the reason recorded ("no CUJs authored; run

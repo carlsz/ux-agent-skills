@@ -281,11 +281,19 @@ def check_cuj_author_persona() -> list[str]:
     _require("manufactur" in low,
              "cuj-author: must never manufacture a justification for the user's answer",
              errs)
-    # Checkpoint E: interview-me's house style leads with a confident hypothesis and
-    # invites confirmation. That laundered a FALSE step (a click on an autofocused input)
-    # into a critical journey — invention with consent on it is still invention.
-    _require("guess" in low,
-             "cuj-author: must refuse to offer leading guesses the user can confirm", errs)
+    # Checkpoint E banned interview-me's guesses outright, because a guessed step (a click
+    # on an autofocused input) got a "yeah, right" and entered a critical journey. That ban
+    # was too broad: it only bites on fields something is GRADED against. The scoped rule —
+    # guess the description, elicit the oracle — is asserted by TWO anchors, because a bare
+    # `"guess" in low` now passes vacuously (the scoped prose is full of the word "guess").
+    #   1. The three graded fields (expect, success_criteria, criticality) are elicited, not
+    #      guessed — this is where both Checkpoint E incidents lived, and the ban stays.
+    _require("elicited, never guessed" in low,
+             "cuj-author: the three graded fields must be elicited, never guessed", errs)
+    #   2. Guessing IS permitted on the descriptive fields — assert it, so a future
+    #      re-blanket-ban fails loudly the way this reversal itself should.
+    _require("guess freely" in low,
+             "cuj-author: must permit guessing the descriptive (non-graded) fields", errs)
     # ...and the fix for that must not overshoot into deriving expects FROM the source,
     # which would make the journey test the app against itself and never fail.
     _require("never supplies" in low or "never generate" in low,
@@ -422,13 +430,14 @@ def check_spec_cuj_skill() -> list[str]:
              "spec-cuj: must disclose when it fell back (never a silent degrade)", errs)
     _require("offer" in low and "install" in low,
              "spec-cuj: must offer to install interview-me, never auto-install", errs)
-    # The index splice — the one place it touches a file the user owns.
     # Checkpoint E: interview-me doesn't know this schema and will finish without ever
     # asking entry_point or criticality — and an unasked field silently becomes an
     # invented one. The skill owns the gap, whichever interview is driving.
-    _require("guess" in low,
-             "spec-cuj: must forbid leading guesses (interview-me's style conflicts "
-             "with never-invent)", errs)
+    # Scoped guessing (post-Checkpoint-E): let interview-me guess the framing, but the three
+    # graded fields are elicited open. A bare `"guess" in low` is vacuous here now, so anchor
+    # on the same distinctive phrase the persona uses.
+    _require("elicited, never guessed" in low,
+             "spec-cuj: the three graded fields must be elicited, never guessed", errs)
     _require("establish" in low,
              "spec-cuj: must self-check that preconditions are establishable", errs)
     _require("twice in a row" in low,

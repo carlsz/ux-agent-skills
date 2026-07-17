@@ -17,6 +17,13 @@ is usually where the real answer is. The questions below are a spine, not a scri
 answer is vague, the [`cuj-author`](../../../agents/cuj-author.md) refusals apply and you ask
 again. Getting one journey right beats getting three written down.
 
+You may **lead with a guess** on the descriptive questions — who the actor is, where they
+start, what the first action is — the way `interview-me` would; a person corrects a wrong
+guess faster than they build an answer from nothing. But questions 7 (`success_criteria`) and
+the per-step *"what do you see?"* (`expect`), and question 8 (`criticality`), are
+**`elicited, never guessed`**: ask them open and refuse a bare "yes". Those three are what
+`audit-cuj` grades against, so a guess there sets a target nobody actually chose.
+
 Read the draft back before writing anything. When they correct you, **the correction is the
 answer** — record that, not your paraphrase of it.
 

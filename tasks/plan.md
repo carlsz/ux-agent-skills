@@ -334,7 +334,7 @@ concept intact. Verify the term is really gone (`grep -c` → 0) before believin
 | Found | Rule it produced |
 |---|---|
 | Folded on criticality, then **invented a supporting fact** to justify it | Never manufacture a justification. Inventing *agreement* is still inventing — and worse, because a fabricated step is visible in the file while a fabricated reason lives only in the chat. |
-| `interview-me`'s `GUESS:` style laundered a **false** step into a journey | Never offer a guess the user can confirm with "yes". Source may **check** a recalled detail, never **supply** an `expect` — a journey derived from the code tests the app against itself and can never fail. |
+| `interview-me`'s `GUESS:` style laundered a **false** step into a journey | ~~Never offer a guess the user can confirm with "yes".~~ **Superseded — see §14b.** Source may **check** a recalled detail, never **supply** an `expect` — a journey derived from the code tests the app against itself and can never fail. (The source rule stands; the blanket guess ban was too broad.) |
 | Narrative colour became an unsatisfiable precondition | Preconditions must be establishable from a fresh install… |
 | "Nothing harvested today" — true on run 1, false forever after | …**and re-establishable on a second run.** This one is the mirror: not a journey a broken app passes, but a journey a **working app fails**. A check that cries wolf gets muted, and a muted check is deleted. |
 | Offered to `cp validate_cuj.py` into the host repo to dodge a permission gate | Never route around a gate; never copy tooling into the host repo. Blocked and honest beats unblocked and littering. |
@@ -355,6 +355,31 @@ concept intact. Verify the term is really gone (`grep -c` → 0) before believin
 - **A directory install resolves the plugin root to the dev tree**, so the harness gates the
   skill's reads of its own references. And the install is a **snapshot**: run
   `claude plugin marketplace update ux-agent-skills` or you test yesterday's code.
+
+## 14b. Scoped guessing — the Checkpoint-E guess ban, refined (2026-07)
+
+Checkpoint E banned `interview-me`'s guesses outright after one guessed step ("click the
+autofocused input → it focuses") got a "yeah, right" and entered a `critical` journey. The
+ban held, but a live authoring run proved its cost: `interview-me`'s whole method is a guess
+per question, so a no-guess interview is ~20 open questions with the engine removed —
+laborious, and no better than the fallback.
+
+**The refinement: guess the description, elicit the oracle.** The sycophancy failure only
+bites on the three fields something downstream is *graded* against — each step's `expect` and
+the `success_criteria` (`audit-cuj`'s pass/fail) and `criticality` (the severity clamp).
+Those stay `elicited, never guessed`. The other seven descriptive fields may be guessed
+freely; nothing scores them, and a guessed **action** is still tripwired by its `expect`
+being asked open. This is the same line the persona already drew for source ("checks, never
+supplies the `expect`"), generalized: a guess — from the model or the source — proposes
+framing but never supplies what gets graded.
+
+Both original incidents stay guarded (the false `expect`; the folded `criticality`). Recorded
+here because it reverses an approved Checkpoint-E rule, the way the `audit_safety` baseline
+and `version` provenance reversals were. Expressed in `agents/cuj-author.md`,
+`skills/spec-cuj/SKILL.md`, `references/interview-fallback.md`, `commands/ux-spec.md`, SPEC
+§9.5; the two `"guess" in low` checks were rewritten to assert the scoped rule (a bare
+`"guess"` now passes vacuously — the §14a disease), anchored on `elicited, never guessed` and
+`guess freely`.
 
 ## 15. Verification spine (applies every phase)
 

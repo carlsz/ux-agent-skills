@@ -64,12 +64,17 @@ works" parses fine and verifies never.
    `criticality`. Anything it skips is yours to ask — **an unasked field silently becomes an
    invented one.**
 
-   **Never offer a guess they can confirm with "yes."** `interview-me`'s house style leads
-   with a confident hypothesis and invites agreement, and that style is **in direct conflict
-   with this skill's one non-negotiable rule**. A guess laundered through "…right?" is still
-   a guess, and a fluent one sourced from their repo is *harder* to refuse than a clumsy one.
-   Ask open. See the persona's "never offer a guess" and "source checks the answer, it never
-   supplies the answer".
+   **Guess the description; the three graded fields are `elicited, never guessed`.**
+   `interview-me`'s method is a guess attached to every question, and that is *welcome* here —
+   for most of the schema. Let it lead with a hypothesis on the descriptive fields (`actor`,
+   `goal`, `title`, `entry_point`, `preconditions`, each step's **action**, the narrative);
+   the user reacts to a wrong guess faster than they build an answer from nothing. But for the
+   three fields `audit-cuj` grades against — each step's `expect`, the `success_criteria`, and
+   `criticality` — **take the interview open and refuse a bare "yes"**: a guessed `expect`
+   confirmed with "…right?" becomes a step that may not exist in a `critical` journey, and a
+   guessed `criticality` becomes a severity clamp nobody earned. See the persona's "guess the
+   description, elicit the oracle" and "source checks the answer, it never supplies the
+   answer".
 
    **Never invent.** If they can't answer something, record the gap and stop. An incomplete
    journey marked incomplete beats a fabricated one that looks finished — a guessed step

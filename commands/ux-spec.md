@@ -35,11 +35,14 @@ There is no `target`: journeys describe your product, not a URL.
 
 ## What to expect from the interview
 
-It will push back. A journey is only worth having if it's falsifiable, so expect to be asked
-again when an answer is vague:
+It moves quickly where it can and slows down where it counts. For the descriptive parts — who
+the actor is, where they start, what they do — it leads with a **guess** you just confirm or
+correct, so most of the interview is fast. It only opens up and pushes back on the parts a
+later verification is graded against:
 
 - **"Users"** isn't an actor. Who specifically, and what do they already have?
-- **"It works"** isn't an expected outcome. What would you *see*?
+- **"It works"** isn't an expected outcome. What would you *see*? — asked open, never as a
+  guess you can wave through with "yes", because this is the line `audit-cuj` scores against.
 - **`critical` has to be earned.** It won't ask how important a journey is, it'll ask what
   breaks if it fails — and grade from that. Two journeys that both kill the product are both
   critical, and it should say so rather than invent a spread.
