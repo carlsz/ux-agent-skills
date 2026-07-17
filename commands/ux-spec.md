@@ -11,8 +11,8 @@ answers into critical user journeys under `.ux/cujs/`, and regenerates the journ
 your `SPEC.md`. Thin entry point — the [`spec-cuj`](../skills/spec-cuj/SKILL.md) skill does
 the work, driving the [`cuj-author`](../agents/cuj-author.md) persona.
 
-The journeys you write here are what `/audit-cuj` later replays against your running app to
-tell you which step broke.
+The journeys you write here are what [`/audit-cuj`](./audit-cuj.md) later replays against your
+running app to tell you which step broke.
 
 ## Arguments
 
