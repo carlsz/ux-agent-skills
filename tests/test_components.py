@@ -686,19 +686,28 @@ def check_references() -> list[str]:
     return errs
 
 
+# Hand-maintained ON PURPOSE, and this is the suite's sharpest edge: nothing globs these.
+# A component whose check isn't listed here is a component nothing verifies, and the suite
+# stays green while it goes unchecked — the quiet failure AGENTS.md calls the silent trap.
+# Adding a component means adding its check HERE, in the same commit.
+CHECKS = (
+    check_persona, check_skill, check_command, check_references,
+    check_rollup_skill, check_rollup_command,
+    check_cuj_author_persona, check_spec_cuj_skill, check_ux_spec_command,
+    check_cuj_references,
+    check_cuj_auditor_persona, check_audit_cuj_skill, check_audit_cuj_command,
+)
+
+
 def main() -> int:
-    failures = (check_persona() + check_skill() + check_command() + check_references()
-                + check_rollup_skill() + check_rollup_command()
-                + check_cuj_author_persona() + check_spec_cuj_skill()
-                + check_ux_spec_command() + check_cuj_references()
-                + check_cuj_auditor_persona() + check_audit_cuj_skill()
-                + check_audit_cuj_command())
+    failures = [err for check in CHECKS for err in check()]
     if failures:
         print("FAIL — components:")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — components (persona, skill, command, references, roll-up)")
+    print(f"PASS — components ({len(CHECKS)} checks: personas, skills, commands, "
+          f"references, roll-up)")
     return 0
 
 
