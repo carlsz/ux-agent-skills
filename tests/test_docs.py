@@ -25,7 +25,7 @@ DOC_FILES = [
     "agents/cuj-auditor.md",
     "commands/usability-audit.md",
     "commands/ux-spec.md",
-    "commands/audit-cuj.md",
+    "commands/cuj-audit.md",
     "skills/usability-audit/SKILL.md",
     "skills/spec-cuj/SKILL.md",
     "skills/audit-cuj/SKILL.md",

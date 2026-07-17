@@ -393,7 +393,7 @@ and can be reviewed as its own PR.
 
 ---
 
-## Phase 9 — Verification path (`/audit-cuj`)
+## Phase 9 — Verification path (`/cuj-audit`)
 
 **T9.2 + T9.3 in one commit.**
 
@@ -452,16 +452,16 @@ and can be reviewed as its own PR.
   must run `/ux-spec` first, chaining spec-cuj → audit-cuj. A spec-cuj regression will surface
   as an audit-cuj failure. The T7.3 fixture CUJs remain the deterministic path.
 
-### T9.4 — `/audit-cuj` command
+### T9.4 — `/cuj-audit` command
 - [x] Thin entry point.
-- **Files:** `commands/audit-cuj.md`; `DOC_FILES`.
+- **Files:** `commands/cuj-audit.md`; `DOC_FILES`.
 - **Acceptance:** documents `target`, `--cuj <id|all|critical>`, `--mode static|live|hybrid`.
-- **Verify:** `check_audit_cuj_command()` green.
+- **Verify:** `check_cuj_audit_command()` green.
 - **Deps:** T9.2.
 
 ### T9.5 — Component checks + doc wiring
 - [x] **Files:** `tests/test_components.py` — `check_cuj_auditor_persona()`,
-  `check_audit_cuj_skill()`, `check_audit_cuj_command()`, wired into `main()`;
+  `check_audit_cuj_skill()`, `check_cuj_audit_command()`, wired into `main()`;
   `tests/test_docs.py` `DOC_FILES`.
 - **Verify:** both suites green; break an asserted string → check fails.
 - **Deps:** T9.1–T9.4.
@@ -492,7 +492,7 @@ Two rules carry the weight, and both guard a false PASS:
   never a skip: grade it from a bare `entry_point`.
 
 > ### ✅ CHECKPOINT F — the detection test
-> Run `/audit-cuj` against unmodified Sprout → journeys pass, `total: 0`, steps in the
+> Run `/cuj-audit` against unmodified Sprout → journeys pass, `total: 0`, steps in the
 > Appendix and **not** as sev0. Then **break a journey deliberately** (e.g. make the add-task
 > input a no-op) → require a **sev4 naming `CUJ-001` step 2**. A verifier that only ever
 > passes is worthless; this is the only check that proves detection over narration.
@@ -522,7 +522,7 @@ Two rules carry the weight, and both guard a false PASS:
 ## Phase 11 — Docs & release
 
 ### T11.1 — README + AGENTS + sub-READMEs
-- [ ] **Files:** `README.md` (`/ux-spec` + `/audit-cuj` rows, a CUJ section, repo layout, and
+- [ ] **Files:** `README.md` (`/ux-spec` + `/cuj-audit` rows, a CUJ section, repo layout, and
   a note that `interview-me` is **optional and undeclared**, unlike `web-quality-skills`);
   `AGENTS.md` (repo layout + a CUJ-family note beside the auditor checklist);
   `agents/README.md`, `skills/README.md`, `commands/README.md` catalogs.
@@ -553,7 +553,7 @@ Two rules carry the weight, and both guard a false PASS:
 - [ ] Every authored step carries an observable `expect`.
 - [ ] Host `SPEC.md` index regenerates byte-identically, preserves surrounding prose, is
       written only after asking, and declining leaves it untouched.
-- [ ] `/audit-cuj` emits a §3.4-valid `auditor: cuj` report naming the CUJ id + broken step;
+- [ ] `/cuj-audit` emits a §3.4-valid `auditor: cuj` report naming the CUJ id + broken step;
       a passing journey yields `total: 0` with steps in the Appendix.
 - [ ] Static mode labels findings `potential — unverified`, `frameworks: [cuj-contract]` only.
 - [ ] **A deliberately broken journey produces a sev4 naming the correct step.**

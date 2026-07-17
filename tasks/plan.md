@@ -159,7 +159,7 @@ sections 1–8 above cover the usability auditor and still hold unchanged.
 
 Two triads plus a new file contract. `/ux-spec` interviews the user and writes canonical
 journeys to `.ux/cujs/` in the host repo, splicing a generated index into the host's
-`SPEC.md`. `/audit-cuj` replays a stored journey against the running app and reports the
+`SPEC.md`. `/cuj-audit` replays a stored journey against the running app and reports the
 exact step that broke, as an `auditor: cuj` report under `.ux/audits/` using the **existing**
 shared contract. `audit-cuj` joins the `/ux-audit` fan-out as a fourth suite member.
 
@@ -232,7 +232,7 @@ shared contract. `audit-cuj` joins the `/ux-audit` fan-out as a fourth suite mem
                        │  ✅ CHECKPOINT E
                        ▼
   ┌─────────────────────────────────────────────┐
-  │ Phase 9 — verification path (/audit-cuj)    │  needs contract + registration
+  │ Phase 9 — verification path (/cuj-audit)    │  needs contract + registration
   └────────────────────┬────────────────────────┘
                        │  ✅ CHECKPOINT F
                        ▼
@@ -264,7 +264,7 @@ ask → splice the host `SPEC.md` index. Includes the `interview-me` fallback wi
   index splice. **Stop here for sign-off** — this is the interview's tone and rigor, and it's
   the part a spec can't fully pin down.
 
-### Phase 9 — Verification path (`/audit-cuj`)
+### Phase 9 — Verification path (`/cuj-audit`)
 Select → validate → replay live → grade (classify, then clamp by `criticality`) → one report
 per run → index row. Static mode traces source only and cannot produce a verified pass.
 

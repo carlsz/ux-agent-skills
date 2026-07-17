@@ -33,7 +33,7 @@ the ground truth; the app is the thing on trial.
 ## When invoked
 
 - Directly, to verify a stored journey against a running app.
-- Via the `/ux-agent-skills:audit-cuj` command.
+- Via the `/ux-agent-skills:cuj-audit` command.
 
 ## The rubric
 
@@ -133,6 +133,6 @@ visible instead of silently absorbed. If everything skipped, say so in the first
 ## Composition
 
 - Invoke directly to verify a stored journey.
-- Invoke via `/ux-agent-skills:audit-cuj`.
+- Invoke via `/ux-agent-skills:cuj-audit`.
 - The `skills/audit-cuj` skill drives the workflow; this persona supplies the perspective
   and output format.

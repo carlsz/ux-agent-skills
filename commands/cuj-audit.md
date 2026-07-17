@@ -1,24 +1,24 @@
 ---
-name: audit-cuj
+name: cuj-audit
 description: Replay your stored critical user journeys against the running app and report the exact step that broke, as a severity-scored cuj report in .ux/audits. Invokes the cuj-auditor persona via the audit-cuj skill.
 argument-hint: "[target] [--cuj <id|all|critical>] [--mode static|live|hybrid]"
 ---
 
-# /audit-cuj
+# /cuj-audit
 
 Check whether your app still does what it's **for**. This replays the journeys in `.ux/cujs/`
 against your running app and tells you the exact step that broke. Thin entry point — the
 [`audit-cuj`](../skills/audit-cuj/SKILL.md) skill does the work, driving the
 [`cuj-auditor`](../agents/cuj-auditor.md) persona.
 
-Journeys come from [`/ux-spec`](./ux-spec.md). Namespaced as `/ux-agent-skills:audit-cuj` to
+Journeys come from [`/ux-spec`](./ux-spec.md). Namespaced as `/ux-agent-skills:cuj-audit` to
 avoid colliding with `agent-skills`.
 
 ## Arguments
 
 `$ARGUMENTS`:
 
-- **`target`** — a URL or repo path, e.g. `/audit-cuj http://localhost:3000`. Omit to use the
+- **`target`** — a URL or repo path, e.g. `/cuj-audit http://localhost:3000`. Omit to use the
   current repo and auto-detect the dev server.
 - **`--cuj <id|all|critical>`** — which journeys to replay. `all` (default), one journey
   (`--cuj CUJ-001`), or `critical` for every journey you rated `critical`.

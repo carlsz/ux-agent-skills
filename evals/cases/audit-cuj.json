@@ -19,7 +19,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "In the Sprout repo, run /ux-agent-skills:audit-cuj against the running app with --cuj all. Sprout's journeys are unmodified and working.",
+      "prompt": "In the Sprout repo, run /ux-agent-skills:cuj-audit against the running app with --cuj all. Sprout's journeys are unmodified and working.",
       "expected_output": "A contract-valid report at Sprout/.ux/audits/cuj-<timestamp>.md with auditor: cuj and total: 0, whose executive summary leads with the journey and step counts, and whose Appendix enumerates every verified step.",
       "expectations": [
         "Writes ONE report per run (not per CUJ) to Sprout/.ux/audits/cuj-<timestamp>.md that validates against the shared report contract, plus an appended index row",
@@ -34,7 +34,7 @@
     },
     {
       "id": 2,
-      "prompt": "Break Sprout's add-task input so submitting does nothing, then run /ux-agent-skills:audit-cuj --cuj all against the running app.",
+      "prompt": "Break Sprout's add-task input so submitting does nothing, then run /ux-agent-skills:cuj-audit --cuj all against the running app.",
       "expected_output": "A report containing a severity-4 finding naming CUJ-001 and the exact step whose expected outcome never occurred — detection, not narration.",
       "expectations": [
         "Emits a [sev4] finding whose Framework Violation names CUJ-001 and the SPECIFIC step that broke, quoting that step's verbatim expect",
@@ -48,7 +48,7 @@
     },
     {
       "id": 3,
-      "prompt": "In the Sprout repo with no dev server running, run /ux-agent-skills:audit-cuj --mode static --cuj all.",
+      "prompt": "In the Sprout repo with no dev server running, run /ux-agent-skills:cuj-audit --mode static --cuj all.",
       "expected_output": "A static report that traces source only, labels every finding 'potential — unverified', emits frameworks: [cuj-contract] alone, and produces no verified pass.",
       "expectations": [
         "Every finding is labelled 'potential — unverified' in its Evidence field, with the reason (no running app)",

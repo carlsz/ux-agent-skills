@@ -608,38 +608,38 @@ def check_ux_spec_command() -> list[str]:
     return errs
 
 
-def check_audit_cuj_command() -> list[str]:
+def check_cuj_audit_command() -> list[str]:
     errs: list[str] = []
-    path = ROOT / "commands" / "audit-cuj.md"
+    path = ROOT / "commands" / "cuj-audit.md"
     if not path.exists():
         return [f"missing {path.relative_to(ROOT)}"]
     fm, body = _frontmatter(path)
     _require(isinstance(fm, dict),
-             "audit-cuj command: frontmatter must parse to a mapping", errs)
+             "cuj-audit command: frontmatter must parse to a mapping", errs)
     if isinstance(fm, dict):
-        _require(fm.get("name") == "audit-cuj",
-                 "audit-cuj command: frontmatter 'name' must be 'audit-cuj'", errs)
+        _require(fm.get("name") == "cuj-audit",
+                 "cuj-audit command: frontmatter 'name' must be 'cuj-audit'", errs)
         _require(bool(str(fm.get("description", "")).strip()),
-                 "audit-cuj command: frontmatter needs a non-empty 'description'", errs)
+                 "cuj-audit command: frontmatter needs a non-empty 'description'", errs)
         _require(bool(str(fm.get("argument-hint", "")).strip()),
-                 "audit-cuj command: frontmatter needs an 'argument-hint'", errs)
+                 "cuj-audit command: frontmatter needs an 'argument-hint'", errs)
     low = body.lower()
-    _require("audit-cuj" in low, "audit-cuj command: must invoke the audit-cuj skill", errs)
+    _require("audit-cuj" in low, "cuj-audit command: must invoke the audit-cuj skill", errs)
     _require("cuj-auditor" in low,
-             "audit-cuj command: must invoke the cuj-auditor persona", errs)
+             "cuj-audit command: must invoke the cuj-auditor persona", errs)
     for arg in ("target", "--cuj", "--mode"):
-        _require(arg in low, f"audit-cuj command: must document the {arg!r} argument", errs)
+        _require(arg in low, f"cuj-audit command: must document the {arg!r} argument", errs)
     for val in ("critical", "static", "live", "hybrid"):
-        _require(val in low, f"audit-cuj command: must document the {val!r} value", errs)
+        _require(val in low, f"cuj-audit command: must document the {val!r} value", errs)
     _require(".ux/cujs" in low,
-             "audit-cuj command: must say where journeys are read from", errs)
+             "cuj-audit command: must say where journeys are read from", errs)
     _require(".ux/audits" in low,
-             "audit-cuj command: must say where the report is written", errs)
+             "cuj-audit command: must say where the report is written", errs)
     # The entry point should state the guarantee that distinguishes this auditor: an empty
     # .ux/cujs stops the run. A user who sees a clean report from a repo with no journeys
     # would reasonably read it as a pass.
     _require("no cujs authored" in low,
-             "audit-cuj command: must state that an empty .ux/cujs stops rather than passes",
+             "cuj-audit command: must state that an empty .ux/cujs stops rather than passes",
              errs)
     return errs
 
@@ -695,7 +695,7 @@ CHECKS = (
     check_rollup_skill, check_rollup_command,
     check_cuj_author_persona, check_spec_cuj_skill, check_ux_spec_command,
     check_cuj_references,
-    check_cuj_auditor_persona, check_audit_cuj_skill, check_audit_cuj_command,
+    check_cuj_auditor_persona, check_audit_cuj_skill, check_cuj_audit_command,
 )
 
 

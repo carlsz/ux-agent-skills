@@ -18,7 +18,7 @@ success_criteria:
 ## Narrative
 
 Invalid fixture: `steps` is empty. A journey with no steps describes no journey, and
-`/audit-cuj` would report a vacuous pass.
+`/cuj-audit` would report a vacuous pass.
 
 ## Out of scope
 

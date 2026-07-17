@@ -316,7 +316,7 @@ and safety invariants:
 
 - **Status:** Draft — awaiting approval
 - **Date:** 2026-07-16
-- **Adds:** `/ux-spec`, `/audit-cuj`; personas `cuj-author`, `cuj-auditor`; skills `spec-cuj`,
+- **Adds:** `/ux-spec`, `/cuj-audit`; personas `cuj-author`, `cuj-auditor`; skills `spec-cuj`,
   `audit-cuj`; the CUJ file contract; `auditor: cuj` reports.
 
 ## 9.1 Objective
@@ -341,9 +341,9 @@ well-designed?"* (heuristics) and *"does the thing users came for still work?"* 
 
 ### Non-goals
 - **Not a test framework.** CUJs are prose journeys verified by an agent, not Playwright specs. They
-  describe what a *person* is trying to do; they do not replace E2E tests, and `/audit-cuj` is not a
+  describe what a *person* is trying to do; they do not replace E2E tests, and `/cuj-audit` is not a
   CI gate.
-- **Not a fixer.** `/audit-cuj` reports broken steps; it never repairs them (§9.7).
+- **Not a fixer.** `/cuj-audit` reports broken steps; it never repairs them (§9.7).
 - **Not user research.** A CUJ records what the team believes is critical. It is not evidence that
   users agree — that still takes talking to users.
 
@@ -352,7 +352,7 @@ well-designed?"* (heuristics) and *"does the thing users came for still work?"* 
    every step carrying an **observable** expected outcome.
 2. The host's `SPEC.md` gains a CUJ index that regenerates byte-identically and never clobbers
    surrounding prose — and is only ever written after asking.
-3. `/audit-cuj` replays a stored journey and emits a report valid against the §3.4 contract with
+3. `/cuj-audit` replays a stored journey and emits a report valid against the §3.4 contract with
    `auditor: cuj`, each finding naming the CUJ id and the step that broke.
 4. Breaking a journey in a real app produces a severity-4 finding that names the right step. Detection,
    not narration.
@@ -418,7 +418,7 @@ breaks) and `## Out of scope` (what this journey deliberately does not cover).
 
 **Why `preconditions` survives** the same cut: if setup folds into step 1, then *failing to
 establish the starting state* becomes indistinguishable from *the journey being broken*, and
-`/audit-cuj` would report a severity-4 catastrophe for what is really "couldn't run this".
+`/cuj-audit` would report a severity-4 catastrophe for what is really "couldn't run this".
 
 **`expect` is the load-bearing field.** It must be *observable*: a visible element, a specific string,
 a URL change, a persisted value. "It works", "the state updates", "it saves" are not expected outcomes
@@ -462,7 +462,7 @@ Rules:
 
 ## 9.4 CUJ verification and the report contract
 
-`/audit-cuj` is an auditor like any other: it reuses the §3.4 contract unchanged, writing
+`/cuj-audit` is an auditor like any other: it reuses the §3.4 contract unchanged, writing
 `.ux/audits/cuj-<YYYYMMDD>-<HHMMSS>.md` — **one report per run, not per CUJ**, so `index.md` rows stay
 1:1 with runs.
 
@@ -529,7 +529,7 @@ did not observe persistence. That is the render-vs-source honesty rule (§6 of t
 expressed in frontmatter.
 
 ### Evaluation modes
-Prefer **live**, as §5.1 specifies. In **static** mode `/audit-cuj` can only trace the route, handler,
+Prefer **live**, as §5.1 specifies. In **static** mode `/cuj-audit` can only trace the route, handler,
 or component behind each step and assess whether `expect` is plausible — every such finding is labeled
 `potential — unverified`. A static run also **cannot produce a verified pass**: steps it could not
 observe go in the Appendix "not observed" list, never as a silent pass.
@@ -543,7 +543,7 @@ observe go in the Appendix "not observed" list, never as a silent pass.
 | Skill | `skills/spec-cuj/SKILL.md` | *The how* — interview → draft → write → validate → ask → splice the index. |
 | Skill | `skills/audit-cuj/SKILL.md` | *The how* — select → validate → replay → grade → report. |
 | Command | `commands/ux-spec.md` | *The when* — `/ux-spec [--cuj <id>]`. |
-| Command | `commands/audit-cuj.md` | *The when* — `/audit-cuj [target] [--cuj <id\|all\|critical>] [--mode static\|live\|hybrid]`. |
+| Command | `commands/cuj-audit.md` | *The when* — `/cuj-audit [target] [--cuj <id\|all\|critical>] [--mode static\|live\|hybrid]`. |
 
 `cuj-author`'s value is **refusal**, and the persona states the refusals explicitly: reject "the user"
 (demand a named actor); reject unobservable outcomes; reject feature-list goals; split bundled steps;
@@ -623,7 +623,7 @@ reconciliation must be stated plainly rather than left implicit:
   `interview-me`: offer, never auto-install).
 
 ### Never
-- **Edit, refactor, or "fix" host application code.** `/audit-cuj` reports the broken step; repairing
+- **Edit, refactor, or "fix" host application code.** `/cuj-audit` reports the broken step; repairing
   it is the user's call.
 - **Record a CUJ's own provenance — author, date, revision, or capture method.** There is no
   `authored` block, and `author` / `authored` / `by` / `email` are rejected outright. No `git config`
@@ -639,14 +639,14 @@ reconciliation must be stated plainly rather than left implicit:
 ## 9.8 Acceptance criteria (Definition of Done)
 
 - [ ] `agents/cuj-author.md`, `agents/cuj-auditor.md`, `skills/spec-cuj/`, `skills/audit-cuj/`,
-      `commands/ux-spec.md`, and `commands/audit-cuj.md` exist and are wired per the composition rule.
+      `commands/ux-spec.md`, and `commands/cuj-audit.md` exist and are wired per the composition rule.
 - [ ] `skills/spec-cuj/references/cuj-contract.md` and `scripts/validate_cuj.py` agree.
 - [ ] `/ux-spec` authors a valid CUJ end-to-end via interview, degrading to the fallback question set
       with disclosure when `interview-me` is absent.
 - [ ] Every authored step carries an observable `expect`.
 - [ ] The host's `SPEC.md` index regenerates byte-identically and preserves surrounding prose; it is
       written only after asking, and declining leaves it untouched.
-- [ ] `/audit-cuj` emits a §3.4-valid report with `auditor: cuj`, each finding naming the CUJ id and
+- [ ] `/cuj-audit` emits a §3.4-valid report with `auditor: cuj`, each finding naming the CUJ id and
       broken step; a passing journey yields `total: 0` with steps listed in the Appendix.
 - [ ] Static mode labels findings `potential — unverified` and emits `frameworks: [cuj-contract]` only.
 - [ ] A deliberately broken journey produces a sev4 naming the correct step.
