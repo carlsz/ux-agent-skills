@@ -241,6 +241,99 @@ def _render_findings(body: str, report_dir: Path) -> str:
     return "\n".join(cards)
 
 
+# --- walkthrough flipbook ----------------------------------------------------------------
+
+FRAME_RE = re.compile(r"^###\s+(.*)$", re.MULTILINE)
+CUJ_PREFIX_RE = re.compile(r"^(CUJ-\d+)\s*[·:—\-]*\s*", re.IGNORECASE)
+
+
+def _embed_img_tag(alt: str, path: str, report_dir: Path) -> str:
+    uri = _embed_asset(report_dir, path)
+    if uri is not None:
+        return f'<img alt="{html.escape(alt)}" src="{uri}">'
+    return f'<div class="missing">🖼 {html.escape(alt or path)} — not embedded</div>'
+
+
+def _parse_walkthrough(content: str) -> tuple[str, list[dict]]:
+    """Split a `## Walkthrough` body into an intro + ordered frames.
+
+    Each `### <heading>` is a frame: its heading (the caption title), the first inline
+    image, and any `>` blockquote (the expected-vs-observed line). A `CUJ-00x` prefix on the
+    heading groups the frame under that journey; headings without one form a single group.
+    """
+    matches = list(FRAME_RE.finditer(content))
+    intro = (content[:matches[0].start()] if matches else content).strip()
+    frames: list[dict] = []
+    for i, m in enumerate(matches):
+        title = m.group(1).strip()
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(content)
+        block = content[start:end]
+        img = IMG_RE.search(block)
+        alt, path = (img.group(1), img.group(2).strip()) if img else ("", "")
+        caption = " ".join(
+            ln.strip().lstrip(">").strip()
+            for ln in block.splitlines() if ln.strip().startswith(">")
+        )
+        gm = CUJ_PREFIX_RE.match(title)
+        gkey = gm.group(1).upper() if gm else None
+        ftitle = CUJ_PREFIX_RE.sub("", title).strip() if gm else title
+        frames.append({"gkey": gkey, "title": ftitle, "alt": alt, "path": path,
+                       "caption": caption})
+    return intro, frames
+
+
+def _render_flipbook(label: str | None, frames: list[dict], report_dir: Path) -> str:
+    slides = []
+    for idx, f in enumerate(frames):
+        active = " is-active" if idx == 0 else ""
+        cap_title = f"<b>{html.escape(f['title'])}</b>" if f["title"] else ""
+        cap_body = f" {_inline(f['caption'], report_dir)}" if f["caption"] else ""
+        slides.append(
+            f'<figure class="frame{active}">{_embed_img_tag(f["alt"], f["path"], report_dir)}'
+            f"<figcaption>{cap_title}{cap_body}</figcaption></figure>"
+        )
+    label_html = (
+        f'<div class="flip-label">{html.escape(label)}</div>' if label else ""
+    )
+    controls = ""
+    if len(frames) > 1:
+        dots = "".join(
+            f'<button class="dot{" is-active" if i == 0 else ""}" data-i="{i}" '
+            f'aria-label="Go to frame {i + 1}"></button>'
+            for i in range(len(frames))
+        )
+        controls = (
+            '<div class="flip-nav">'
+            '<button class="prev" aria-label="Previous frame">&lsaquo;</button>'
+            f'<span class="counter">1 / {len(frames)}</span>'
+            '<button class="next" aria-label="Next frame">&rsaquo;</button></div>'
+            f'<div class="dots">{dots}</div>'
+        )
+    return (
+        f'<div class="flip" tabindex="0">{label_html}'
+        f'<div class="frames">{"".join(slides)}</div>{controls}</div>'
+    )
+
+
+def _render_walkthrough(content: str, report_dir: Path) -> str:
+    intro, frames = _parse_walkthrough(content)
+    if not frames:
+        return _render_blocks(content, report_dir)
+    groups: list[tuple[str | None, list[dict]]] = []
+    for f in frames:
+        if groups and groups[-1][0] == f["gkey"]:
+            groups[-1][1].append(f)
+        else:
+            groups.append((f["gkey"], [f]))
+    parts: list[str] = []
+    if intro:
+        parts.append(_render_blocks(intro, report_dir))
+    for label, gframes in groups:
+        parts.append(_render_flipbook(label, gframes, report_dir))
+    return "\n".join(parts)
+
+
 # --- header + severity bar ---------------------------------------------------------------
 
 def _chip(text: str) -> str:
@@ -356,6 +449,46 @@ border-radius:10px;box-shadow:var(--shadow);display:inline-block}
 .missing{display:inline-block;font-size:.78rem;color:var(--mut);background:var(--card);
 border:1px dashed var(--line);border-radius:6px;padding:.15rem .5rem}
 .none{color:var(--mut)}
+/* walkthrough flipbook */
+.flip{background:var(--card);border:1px solid var(--line);border-radius:14px;
+box-shadow:var(--shadow);padding:.85rem;margin:1.1rem 0}
+.flip:focus-visible{outline:2px solid var(--link);outline-offset:2px}
+.flip-label{font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+color:var(--mut);margin:.15rem .2rem .65rem}
+.frames{position:relative}
+.frame{display:none;margin:0}.frame.is-active{display:block}
+.frame img{width:100%;max-height:560px;height:auto;object-fit:contain;background:var(--bg);
+border:1px solid var(--line);border-radius:10px;display:block}
+.frame figcaption{font-size:.84rem;color:var(--fg);margin-top:.65rem;line-height:1.5}
+.frame figcaption b{font-weight:700}
+.flip-nav{display:flex;align-items:center;justify-content:center;gap:1rem;margin-top:.7rem}
+.flip-nav button{background:var(--card);border:1px solid var(--line);border-radius:9px;
+width:2.1rem;height:2.1rem;font-size:1.2rem;line-height:1;cursor:pointer;color:var(--fg)}
+.flip-nav button:hover{border-color:var(--link);color:var(--link)}
+.counter{font-size:.8rem;color:var(--mut);font-variant-numeric:tabular-nums;
+min-width:3.6rem;text-align:center}
+.dots{display:flex;flex-wrap:wrap;gap:.4rem;justify-content:center;margin-top:.55rem}
+.dot{width:.5rem;height:.5rem;border-radius:50%;border:0;padding:0;cursor:pointer;
+background:var(--line)}.dot.is-active{background:var(--fg)}
+"""
+
+SCRIPT = """
+document.querySelectorAll('.flip').forEach(function(flip){
+  var frames=flip.querySelectorAll('.frame'),dots=flip.querySelectorAll('.dot'),
+      counter=flip.querySelector('.counter'),n=frames.length,cur=0;
+  if(n<2)return;
+  function show(i){cur=(i%n+n)%n;
+    frames.forEach(function(f,j){f.classList.toggle('is-active',j===cur);});
+    dots.forEach(function(d,j){d.classList.toggle('is-active',j===cur);});
+    if(counter)counter.textContent=(cur+1)+' / '+n;}
+  var p=flip.querySelector('.prev'),x=flip.querySelector('.next');
+  if(p)p.addEventListener('click',function(){show(cur-1);});
+  if(x)x.addEventListener('click',function(){show(cur+1);});
+  dots.forEach(function(d){d.addEventListener('click',function(){show(+d.dataset.i);});});
+  flip.addEventListener('keydown',function(e){
+    if(e.key==='ArrowLeft'){show(cur-1);e.preventDefault();}
+    else if(e.key==='ArrowRight'){show(cur+1);e.preventDefault();}});
+});
 """
 
 
@@ -366,7 +499,8 @@ def _page(title: str, inner: str) -> str:
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         f"<title>{html.escape(title)}</title>"
         f"<style>{STYLE}</style></head><body>"
-        f'<main class="wrap">{inner}</main></body></html>\n'
+        f'<main class="wrap">{inner}</main>'
+        f"<script>{SCRIPT}</script></body></html>\n"
     )
 
 
@@ -390,6 +524,8 @@ def render(md_path: str | Path) -> str:
         parts.append(f"<section class=\"md\"><h2>{_inline(name, report_dir)}</h2>")
         if name.lower() == "findings":
             parts.append(_render_findings(content, report_dir))
+        elif name.lower() == "walkthrough":
+            parts.append(_render_walkthrough(content, report_dir))
         else:
             parts.append(_render_blocks(content, report_dir))
         parts.append("</section>")
