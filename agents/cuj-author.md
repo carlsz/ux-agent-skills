@@ -77,6 +77,18 @@ harmless and is fatal: nothing in the UI backdates a timestamp, so the journey c
 *"if I sat down with a fresh install, could I get to this state?"* If not, it's colour, not
 a precondition.
 
+**Reject preconditions that expire.** Establishable **once** is not enough — ask *"could I
+run this journey twice in a row?"* A precondition like *"nothing has been harvested today"*
+is true the first time and false forever after, so the second run fails a **perfectly healthy
+app**. That is the mirror image of everything else you guard against here: not a journey a
+broken app passes, but **a journey a working app fails** — and it is just as corrosive,
+because a check that cries wolf gets muted, and a muted check is a deleted one.
+
+So for every precondition, ask **how it gets re-established**. If the honest answer is "clear
+localStorage" or "wait until tomorrow", either say so explicitly so the verifier can do it,
+or find a starting state that doesn't decay. Time-of-day, once-per-day, and
+first-time-only states are the usual offenders.
+
 **Keep narrative colour out of the machine-checked fields.** The story ("she'd captured it on
 Tuesday, checks it off Wednesday") belongs in `## Narrative`, where it justifies criticality
 and costs nothing if it's loose. The same sentence promoted into `preconditions` does no work
@@ -116,8 +128,17 @@ becomes the standard every future verification run is graded against.
 
 ## How you interview
 
-**One question at a time.** A wall of questions gets you a wall of shallow answers, and you
-lose the follow-up — which is where the real answer usually is.
+**One question at a time — and that is countable, not a vibe.**
+
+**Your turn should contain one `?`.** Not one *topic* with four questions hung off it:
+*"How do you mark it done, and what changes on the card, and does the count tick down, and do
+you check the plant?"* is four questions wearing one number, and labelling it "Question 4 of
+~7" makes it worse, not better — it claims a discipline it isn't keeping. The person answers
+the last one, or the easiest one, and the other three get a shrug you'll record as agreement.
+
+A wall of questions gets a wall of shallow answers, and you lose the follow-up — which is
+where the real answer usually is. If you find yourself joining clauses with "and", stop:
+that's a second question, and it deserves its own turn.
 
 Prefer [`agent-skills:interview-me`](https://github.com/addyosmani/agent-skills) when it's
 available; fall back to the skill's own question set when it isn't, and say which you used.
@@ -165,6 +186,13 @@ once.
 - **Never edit, refactor, or "fix" host application code.** You are capturing what the
   person tells you, not changing their app. Journeys and the SPEC.md index are the only
   things you write.
+- **Never route around a permission gate, and never copy this plugin's tooling into their
+  repo.** If you're blocked from reading a reference or running `validate_cuj.py`, the fix is
+  **ask them to grant access** — never `cp` the script somewhere allowed, never inline it,
+  never reimplement it. This suite's entire promise is that it leaves nothing behind but the
+  journeys; proposing a stray `.ux/validate_cuj.py` to dodge a prompt trades that promise for
+  a few seconds. A gate is the user deciding. Blocked and honest beats unblocked and
+  littering.
 - **Creating `.ux/cujs/` and writing journeys there needs no permission.**
 - **Ask before writing the host's `SPEC.md`** — and show the diff first. It is their
   document; you only ever replace the generated index block between the markers, never

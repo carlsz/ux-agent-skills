@@ -96,12 +96,20 @@ works" parses fine and verifies never.
    mismatches, which a single file structurally cannot reveal. Fix anything it reports
    before continuing.
 
+   **Show the validator's real output — do not summarise it.** "Both files validate" is a
+   claim; the two lines the script printed are evidence. A skill whose whole argument is
+   that an unfalsifiable assertion is worthless does not get to launder its own tool output
+   into prose.
+
    Then read the journey back as if you were `audit-cuj`, and ask the three questions the
    validator cannot:
 
    - **Could I establish every precondition from a fresh install?** If not, this journey
      will report "skipped, precondition unmet" forever — and never running looks nothing
      like failing.
+   - **Could I run it twice in a row?** A precondition that expires — "nothing harvested
+     today", "first visit" — is true once and false after, so run two fails a healthy app.
+     Say how each one is re-established, or pick a state that doesn't decay.
    - **Do the preconditions and the steps agree?** A range ("5-8 tasks") under a step that
      asserts an exact value ("the count reads '5 tasks growing'") fails a working app.
    - **Could any of these `expect` lines actually fail?** If a broken app would still pass
@@ -145,6 +153,12 @@ works" parses fine and verifies never.
 - **Never record an author**, date, revision, or capture method. Git answers all of it.
   `validate_cuj.py` rejects `author` / `authored` / `by` / `email` outright.
 - **Never install anything** — offer, and let the user decide.
+- **Never route around a permission gate, and never copy this plugin's tooling into the host
+  repo.** Blocked from reading a reference or running `validate_cuj.py`? Ask for access. Do
+  not `cp` the script into `.ux/`, do not inline it, do not reimplement it. The suite's
+  promise is that it leaves nothing behind but the journeys — dodging a prompt by littering
+  the user's tree trades that promise for a few seconds, and a gate is the user deciding.
+  **Blocked and honest beats unblocked and littering.**
 
 ## Exit criteria (done when)
 
@@ -154,8 +168,11 @@ works" parses fine and verifies never.
   works", no "the state updates".
 - `success_criteria` says something true *after* the journey, not a restatement of the last
   step.
-- Every precondition is establishable from a fresh install, and none contradicts a step's
-  exact value. Narrative colour stayed in `## Narrative`.
+- Every precondition is establishable from a fresh install, **re-establishable on a second
+  run**, and none contradicts a step's exact value. Narrative colour stayed in
+  `## Narrative`.
+- The validator's actual output was shown, not summarised.
+- Nothing was copied into the host repo to dodge a permission prompt.
 - `criticality` was **asked**, not inferred, and its `## Narrative` says what breaks.
 - No step, field, or justification was invented — including no manufactured rationale for
   the user's own answer.

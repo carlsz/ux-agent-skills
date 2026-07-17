@@ -49,6 +49,12 @@ Fills `preconditions` — things that are **true**, not things they **do**. This
 if setup hides inside step 1, then *failing to set up* looks identical to *the journey being
 broken*, and a verification run reports a catastrophe for what was really "couldn't run this".
 
+**Then ask the follow-up: "how do I get back to that state to run this again?"** A
+precondition that expires — "nothing harvested today", "first visit", "the list is empty" —
+is true once and false forever after, so the second run fails a **healthy** app. That is the
+mirror of the failure everything else here guards against, and just as bad: a check that
+cries wolf gets muted, and a muted check is a deleted one.
+
 ### 5. Walk me through it. What's the first thing they do?
 > "…and what do they **see** happen?"
 

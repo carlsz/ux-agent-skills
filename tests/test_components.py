@@ -295,6 +295,23 @@ def check_cuj_author_persona() -> list[str]:
     # journey reports 'skipped' forever — and never running looks nothing like failing.
     _require("establish" in low,
              "cuj-author: must reject preconditions nobody can establish", errs)
+    # Checkpoint E re-run: establishable ONCE isn't enough. "Nothing harvested today" is
+    # true on run 1 and false forever after, so run 2 fails a HEALTHY app — the mirror of
+    # every other failure guarded against here, and just as corrosive: a check that cries
+    # wolf gets muted, and a muted check is a deleted one.
+    _require("twice in a row" in low or "re-establish" in low,
+             "cuj-author: must reject preconditions that expire between runs", errs)
+    # Checkpoint E re-run, the worst moment: it offered to `cp` validate_cuj.py into the
+    # user's .ux/ to dodge a permission prompt, and recommended it as the cleaner path —
+    # the suite's own no-litter promise arguing against itself.
+    _require("route around" in low,
+             "cuj-author: must never route around a permission gate or copy tooling into "
+             "the host repo", errs)
+    # Checkpoint E re-run: it labelled a turn "Question 4 of ~7" and then asked four
+    # things. "One question at a time" has to be countable or it is decoration.
+    _require("one `?`" in low,
+             "cuj-author: 'one question at a time' must be stated countably (one '?')",
+             errs)
     # Boundary: the host's SPEC.md is ask-first, and host code is off limits entirely.
     _require(_asks_first(low) and "spec.md" in low,
              "cuj-author: must ask before writing the host's SPEC.md", errs)
@@ -339,6 +356,11 @@ def check_spec_cuj_skill() -> list[str]:
              "with never-invent)", errs)
     _require("establish" in low,
              "spec-cuj: must self-check that preconditions are establishable", errs)
+    _require("twice in a row" in low,
+             "spec-cuj: must self-check that preconditions survive a second run", errs)
+    _require("route around" in low,
+             "spec-cuj: must never route around a permission gate or copy tooling into "
+             "the host repo", errs)
     _require("validate_cuj" in low,
              "spec-cuj: must self-check its output with validate_cuj.py", errs)
     _require("--index" in low,
