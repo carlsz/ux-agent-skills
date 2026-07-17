@@ -122,6 +122,11 @@ visible instead of silently absorbed. If everything skipped, say so in the first
   verified, backed by a screenshot or an exercised interaction. In **static** mode, label
   every finding **`potential — unverified`** in the Evidence field, with the reason, and
   emit `frameworks: [cuj-contract]` only.
+- **Capture the walk-through (live/hybrid).** Screenshot **every** step you replay — pass or
+  fail — with the stable name `cuj-<id>-step-<n>.png` under `.ux/audits/assets/`, **embed
+  each inline** (`![CUJ-<id> step <n>](./assets/…)`), and assemble them into a
+  `## Walkthrough` section: a per-step visual record of the journey (report contract §1, §5).
+  Static mode captures nothing, so it emits no walk-through.
 - **Never fabricate.** A step you did not observe is not a step that passed. If you could not
   check it, record it as skipped with the reason — a false pass is worse than an honest gap.
 - **A skip is not a finding**, and never a sev4. Failing to establish the starting state is

@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-17
+
+### Added
+- **Visual walk-through in reports** — the usability and CUJ auditors now turn the screenshots
+  they already capture in live mode into a rendered, ordered `## Walkthrough` section: a per-step
+  visual record of a CUJ, or a key-states gallery (initial / mid-flow / success / error / empty)
+  for a usability flow. Images are embedded inline (`![]()`) so they render in Markdown viewers,
+  and referenced with the render-vs-source honesty rule (live/hybrid only; static mode captures
+  nothing and emits no walk-through). See SPEC.md §10.
+  - **Stable asset naming, prune-to-latest** — screenshots save under `.ux/audits/assets/` with
+    deterministic names (`cuj-<id>-step-<n>.png`, `usability-<scope-slug>-<state>.png`) so a
+    re-run overwrites rather than accumulates, bounding the committed binary footprint.
+
+### Changed
+- **Report contract `schema` 1 → 2** (`skills/usability-audit/references/report-contract.md`).
+  Schema 2 adds the optional `## Walkthrough` body section (after `## Findings`, before
+  `## Appendix`) and the `assets/` naming convention. `scripts/validate_report.py` now requires
+  `schema == 2` and lightly checks that any walkthrough image path is relative and under
+  `./assets/` — it never requires the section to exist nor that a file is on disk. Report
+  fixtures move to `schema: 2`; the CUJ *journey* file contract is unaffected (still schema 1).
+
 ## [0.3.0] - 2026-07-17
 
 ### Added

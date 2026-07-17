@@ -84,6 +84,12 @@ def main() -> int:
     # the registration would be untested and a typo in it would pass silently.
     failures += _expect_invalid(FIXTURES / "invalid" / "cuj-bad-framework.md",
                                 "unknown to auditor")
+    # Schema 2's `## Walkthrough` section (§10): the cuj and usability valid fixtures above
+    # carry a walkthrough of inline `./assets/` embeds and must still validate. A walkthrough
+    # whose image is an external URL (or any non-`./assets/` path) is rejected — the light
+    # check that keeps the walk-through inside the auditor's write boundary.
+    failures += _expect_invalid(FIXTURES / "invalid" / "walkthrough-bad-path.md",
+                                "walkthrough image path")
 
     # index.md: a conforming index passes; a malformed one is rejected.
     failures += _expect_valid_index(FIXTURES / "valid" / "index.md")
@@ -94,7 +100,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (11 checks)")
+    print("PASS — report contract (12 checks)")
     return 0
 
 
