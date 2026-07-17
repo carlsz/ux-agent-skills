@@ -568,6 +568,13 @@ def check_audit_cuj_skill() -> list[str]:
     # --- Boundaries. ---
     _require("audit_safety" in low,
              "audit-cuj: must confirm its footprint with the default audit profile", errs)
+    # Checkpoint F: audit_safety diffs against HEAD, so with no baseline it blames the
+    # user's own uncommitted work on the agent — and this auditor's whole use case ("did
+    # my refactor break a journey?") guarantees a dirty tree. The snapshot is what makes
+    # the check survive contact with reality instead of being muted.
+    _require("--snapshot" in low,
+             "audit-cuj: must snapshot the repo at run start, or its footprint check "
+             "reports the user's own changes as its own", errs)
     _require("never" in low and ("edit" in low or "modif" in low) and "host" in low,
              "audit-cuj: must state the never-edit-host-code boundary", errs)
     _require("route around" in low,

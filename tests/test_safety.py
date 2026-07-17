@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from audit_safety import EXTRA_BY_PROFILE, changes_confined_to  # noqa: E402
+from audit_safety import EXTRA_BY_PROFILE, changes_confined_to, snapshot  # noqa: E402
 
 # Bind to the PROFILES, not to the function's defaults. The profiles are what the CLI
 # resolves and therefore what every auditor actually runs under; asserting against a
@@ -133,6 +133,58 @@ def main() -> int:
             failures.append(f"'SPEC.md' must be an exact match, not a prefix: {v}")
         if not any("cujs-evil" in x for x in v):
             failures.append(f"'.ux/cujs/' must be a directory prefix, not a substring: {v}")
+        (repo / "SPEC.md.bak").unlink()
+        (repo / ".ux" / "cujs-evil" / "x.md").unlink()
+        (repo / ".ux" / "cujs-evil").rmdir()
+        (repo / "SPEC.md").unlink()
+        (repo / ".ux" / "cujs" / "CUJ-001-add-a-task.md").unlink()
+
+        # --- The baseline (found by Checkpoint F) ---------------------------------
+        # With no baseline this script diffs the working tree against HEAD, so it cannot
+        # tell "the agent edited host code" from "the repo was already dirty". That is
+        # fatal for the regression-check use case that /cuj-audit exists to serve: "did
+        # my refactor break a journey?" means the tree is dirty with the refactor BY
+        # DEFINITION, so the check fires on the user's own work every single run. A check
+        # that cries wolf gets muted, and a muted check is a deleted one.
+        (repo / "app.tsx").write_text("// the user's own uncommitted refactor\n")
+        base = snapshot(repo)
+
+        # 5. Pre-existing dirt belongs to the USER, not to the agent.
+        _write_report(repo, "cuj-20260716-120000.md")
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT, baseline=base)
+        if v:
+            failures.append(f"a pre-existing dirty file must not be blamed on the agent: {v}")
+
+        # 6. THE ONE THAT MATTERS, and the reason the baseline is content-addressed
+        #    rather than a set of paths. In the primary use case the dirty files ARE the
+        #    app files under audit — so "ignore paths that were already dirty" would blind
+        #    the check precisely where it must see, letting an agent edit any of them
+        #    undetected. That would weaken the invariant SPEC §9.6 calls critical, in
+        #    exchange for fixing a false positive. Digests keep both.
+        (repo / "app.tsx").write_text("// the user's refactor, SILENTLY EDITED by the agent\n")
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT, baseline=base)
+        if not any("app.tsx" in x for x in v):
+            failures.append(
+                f"an agent edit to an ALREADY-DIRTY file must still be flagged: {v}")
+
+        # 7. Restoring the baseline content clears it again (no false positive on churn).
+        (repo / "app.tsx").write_text("// the user's own uncommitted refactor\n")
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT, baseline=base)
+        if v:
+            failures.append(f"restoring baseline content should clear the violation: {v}")
+
+        # 8. No baseline => exactly the old behavior. Like `allow`, the baseline is
+        #    keyword-only and opt-in: the invariant must never weaken by default, and a
+        #    caller that passes nothing gets the strict check it had before.
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT)
+        if not any("app.tsx" in x for x in v):
+            failures.append(f"without a baseline, any dirty file is still a violation: {v}")
+
+        # 9. A file the agent CREATES is never in the baseline, so it is always caught.
+        (repo / "sneaky.ts").write_text("// created by the agent mid-audit\n")
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT, baseline=base)
+        if not any("sneaky.ts" in x for x in v):
+            failures.append(f"a file created after the baseline must be flagged: {v}")
 
     if failures:
         print("FAIL — safety:")

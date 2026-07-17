@@ -40,10 +40,22 @@ one requested.
 
 ## Workflow
 
-### 1. Select the journeys — and stop if there are none
+### 1. Snapshot the repo, then select the journeys — and stop if there are none
 
-Read `.ux/cujs/` in the host repo and apply `--cuj`. Record the **selected set** now: it is
-the denominator for every count you report later, and it never shrinks.
+**Before you write anything**, record what was already dirty:
+
+```
+python3 scripts/audit_safety.py <host-repo> --snapshot > /tmp/ux-baseline.json
+```
+
+Git can tell you the tree differs from HEAD; it cannot tell you *who* made it differ. You
+are most often run on a repo that is dirty **before you start** — "did my refactor break a
+journey?" means the refactor is uncommitted, by definition. Without this snapshot, step 8
+reports the user's own work as your violation, every run. A check that cries wolf gets muted,
+and a muted check is a deleted one.
+
+Then read `.ux/cujs/` in the host repo and apply `--cuj`. Record the **selected set** now: it
+is the denominator for every count you report later, and it never shrinks.
 
 **If `.ux/cujs/` is absent or empty, stop and say so** — *"no CUJs authored; run `/ux-spec`"*
 — and write no report. This is not pedantry. *"Every journey passed"* is **vacuously true**
@@ -236,7 +248,7 @@ python3 scripts/validate_report.py .ux/audits/cuj-<timestamp>.md
 ### 8. Confirm your footprint
 
 ```
-python3 scripts/audit_safety.py <host-repo>
+python3 scripts/audit_safety.py <host-repo> --baseline /tmp/ux-baseline.json
 ```
 
 The **default `audit` profile**, deliberately. You are an auditor: `.ux/audits/` is the only
@@ -244,7 +256,15 @@ place you write. `.ux/cujs/` and `SPEC.md` are **violations** for this skill eve
 `/ux-spec` may write them — that asymmetry is the mechanical form of "never repair the journey
 you are grading". Show the real output.
 
-**Exit criteria:** all changes confined to `.ux/audits/`.
+Pass step 1's baseline so this measures **your** footprint rather than the state of the repo
+you walked into. The baseline forgives pre-existing dirt only while its bytes are unchanged —
+so if you touched a file that was already modified, this still catches you, which is the point.
+
+If you never took the snapshot, say so and report the check as **run without a baseline**,
+naming the pre-existing changes it flagged. Do not quietly present the user's own uncommitted
+work as your violation, and do not quietly dismiss a real one as "probably theirs".
+
+**Exit criteria:** all changes since the baseline confined to `.ux/audits/`.
 
 ## Boundaries
 
