@@ -308,7 +308,25 @@ def _report(label: str, errors: list[str]) -> bool:
     return True
 
 
+USAGE = """usage:
+  validate_cuj.py <cuj.md> [...]     validate one or more journeys
+  validate_cuj.py --dir <dir>        validate a directory, incl. cross-file checks
+                                     (duplicate ids, filename/id mismatches)
+  validate_cuj.py --index <dir>      print the SPEC.md index block to stdout
+
+Checks the CUJ file contract documented in
+skills/spec-cuj/references/cuj-contract.md. Exit 0 = valid, 1 = violations, 2 = usage."""
+
+
 def main(argv: list[str]) -> int:
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        # Without this, `--help` is treated as a filename and reports the delightful
+        # "INVALID: --help / file not found: --help".
+        # Explicit --help is a successful request for help (0); a bare
+        # invocation is a usage error (2). They are not the same thing.
+        print(USAGE, file=sys.stdout if argv else sys.stderr)
+        return 0 if argv else 2
+
     if argv and argv[0] == "--index":
         if len(argv) < 2:
             print("usage: validate_cuj.py --index <dir>", file=sys.stderr)
@@ -321,11 +339,6 @@ def main(argv: list[str]) -> int:
             print("usage: validate_cuj.py --dir <dir>", file=sys.stderr)
             return 2
         return 0 if _report(argv[1], validate_dir(argv[1])) else 1
-
-    if not argv:
-        print("usage: validate_cuj.py <cuj.md> [...]  |  --dir <dir>  |  --index <dir>",
-              file=sys.stderr)
-        return 2
 
     ok = True
     for arg in argv:

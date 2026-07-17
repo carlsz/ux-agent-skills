@@ -90,21 +90,47 @@ def changes_confined_to(repo: str | Path, prefix: str = DEFAULT_PREFIX, *,
     return violations
 
 
+USAGE = """usage:
+  audit_safety.py <host-repo-dir> [--profile audit|authoring]
+
+Profiles — paths the agent is permitted to have touched:
+  audit      .ux/audits/                       every auditor (default)
+  authoring  .ux/audits/, .ux/cujs/, SPEC.md   /ux-spec only
+
+Exit 0 = confined (safe), 1 = a change escaped the profile, 2 = usage."""
+
+
 def main(argv: list[str]) -> int:
     args = list(argv)
+    if not args or args[0] in ("-h", "--help", "help"):
+        # Without this, `--help` is passed to `git -C --help status` and the user gets a
+        # raw CalledProcessError traceback from a script whose whole job is reassurance.
+        # Explicit --help is a successful request for help (0); a bare
+        # invocation is a usage error (2). They are not the same thing.
+        print(USAGE, file=sys.stdout if args else sys.stderr)
+        return 0 if args else 2
+
     profile = "audit"
     if "--profile" in args:
         i = args.index("--profile")
         if i + 1 >= len(args):
-            print("usage: audit_safety.py <host-repo-dir> [--profile audit|authoring]",
-                  file=sys.stderr)
+            print(USAGE, file=sys.stderr)
             return 2
         profile = args[i + 1]
         del args[i:i + 2]
 
     if len(args) != 1 or profile not in EXTRA_BY_PROFILE:
-        print("usage: audit_safety.py <host-repo-dir> [--profile audit|authoring]",
-              file=sys.stderr)
+        if profile not in EXTRA_BY_PROFILE:
+            print(f"unknown profile {profile!r} — expected one of "
+                  f"{sorted(EXTRA_BY_PROFILE)}\n", file=sys.stderr)
+        print(USAGE, file=sys.stderr)
+        return 2
+
+    repo = Path(args[0])
+    if not (repo / ".git").exists():
+        # Better than letting `git -C` fail with a raw traceback three frames deep.
+        print(f"not a git repository: {repo}\n", file=sys.stderr)
+        print(USAGE, file=sys.stderr)
         return 2
 
     allow = EXTRA_BY_PROFILE[profile]

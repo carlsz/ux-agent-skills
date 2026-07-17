@@ -259,10 +259,42 @@ def check_cuj_author_persona() -> list[str]:
              "cuj-author: must demand an observable expected outcome per step", errs)
     _require("the user" in low and "actor" in low,
              "cuj-author: must reject \"the user\" and demand a specific actor", errs)
-    _require("criticality" in low,
-             "cuj-author: must resist criticality inflation", errs)
+    # Checkpoint E: `"criticality" in low` was the original check here. It passed green
+    # while the persona folded completely on criticality — the word was present, the rule
+    # was not. Assert the mechanism instead: the rating is EARNED from what breaks.
+    _require("criticality" in low and "earn" in low,
+             "cuj-author: criticality must be earned from what breaks, not asserted", errs)
     _require("never invent" in low or "fabricat" in low,
              "cuj-author: must never invent a step the user didn't state", errs)
+    # Checkpoint E, the serious one: asked to defend a rule that was wrong, it invented a
+    # supporting fact (a journey that did not exist), credited it to the user, and called
+    # the matter settled. Inventing *agreement* is the never-invent rule breaking in the
+    # one direction nothing else catches — a fabricated step is at least visible in the
+    # file; a fabricated reason lives only in the conversation.
+    # NOTE the single term. This was `"manufactur" in low or "invent" in low and
+    # "agreement" in low`, which is vacuous twice over: `and` binds tighter than `or`, so
+    # it degrades to ("invent" and "agreement") — and both words appear all over this
+    # persona for unrelated reasons. Excising the rule left the check green. Every
+    # vacuous check in this build came from the same instinct: a broad fallback term in a
+    # disjunction. If a rewrite renames this rule, fail loudly and update the check on
+    # purpose.
+    _require("manufactur" in low,
+             "cuj-author: must never manufacture a justification for the user's answer",
+             errs)
+    # Checkpoint E: interview-me's house style leads with a confident hypothesis and
+    # invites confirmation. That laundered a FALSE step (a click on an autofocused input)
+    # into a critical journey — invention with consent on it is still invention.
+    _require("guess" in low,
+             "cuj-author: must refuse to offer leading guesses the user can confirm", errs)
+    # ...and the fix for that must not overshoot into deriving expects FROM the source,
+    # which would make the journey test the app against itself and never fail.
+    _require("never supplies" in low or "never generate" in low,
+             "cuj-author: source may CHECK a recalled detail but never supply the expect",
+             errs)
+    # Checkpoint E: "captured on a previous day" is unsatisfiable through the UI, so the
+    # journey reports 'skipped' forever — and never running looks nothing like failing.
+    _require("establish" in low,
+             "cuj-author: must reject preconditions nobody can establish", errs)
     # Boundary: the host's SPEC.md is ask-first, and host code is off limits entirely.
     _require(_asks_first(low) and "spec.md" in low,
              "cuj-author: must ask before writing the host's SPEC.md", errs)
@@ -299,6 +331,14 @@ def check_spec_cuj_skill() -> list[str]:
     _require("offer" in low and "install" in low,
              "spec-cuj: must offer to install interview-me, never auto-install", errs)
     # The index splice — the one place it touches a file the user owns.
+    # Checkpoint E: interview-me doesn't know this schema and will finish without ever
+    # asking entry_point or criticality — and an unasked field silently becomes an
+    # invented one. The skill owns the gap, whichever interview is driving.
+    _require("guess" in low,
+             "spec-cuj: must forbid leading guesses (interview-me's style conflicts "
+             "with never-invent)", errs)
+    _require("establish" in low,
+             "spec-cuj: must self-check that preconditions are establishable", errs)
     _require("validate_cuj" in low,
              "spec-cuj: must self-check its output with validate_cuj.py", errs)
     _require("--index" in low,

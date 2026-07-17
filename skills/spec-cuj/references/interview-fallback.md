@@ -39,7 +39,8 @@ not "the form has a title field and a save button".
 ### 3. Where do they start?
 > "What screen or URL are they on when this begins?"
 
-Fills `entry_point`.
+Fills `entry_point`. Ask it even when the answer looks obvious — an unasked field silently
+becomes an invented one, and "/" is a guess until they say it.
 
 ### 4. What has to be true before they begin?
 > "What state is the app in already? Logged in? Existing data? Anything they had to do first?"
@@ -78,9 +79,16 @@ is invisible.
 ### 8. If this broke tomorrow, what breaks for the business?
 > "Not 'would it be bad' — what specifically stops working, and for whom?"
 
-Fills `criticality`. Then **rank it against the journeys already in `.ux/cujs/`**. It's a
-forced ranking, not a mood: if everything is `critical`, nothing is, and the severity cap
-that reads this field stops meaning anything.
+Fills `criticality` — grade from **their answer**, not their enthusiasm, and make that same
+answer the `## Narrative` so the rating is auditable.
+
+**Do not force a spread.** If two journeys both genuinely kill the product, both are
+`critical` and that is the correct answer — capture and completion in a to-do app are two
+halves of one contract, and ranking one below the other to make a table look varied would be
+a lie. Push back on **evidence**, not headcount: a journey whose honest answer is "users
+would be mildly annoyed" marked `critical`, or a rating with no "what breaks" behind it. And
+if they push back and they're right, say so — never manufacture a rationale for why their
+rating is fine.
 
 ### 9. What is this journey deliberately *not* about?
 > "What related things should I leave out — separate journeys, edge cases, other paths?"

@@ -40,8 +40,9 @@ again when an answer is vague:
 
 - **"Users"** isn't an actor. Who specifically, and what do they already have?
 - **"It works"** isn't an expected outcome. What would you *see*?
-- **Everything `critical`** means nothing is — it's a forced ranking against your other
-  journeys.
+- **`critical` has to be earned.** It won't ask how important a journey is, it'll ask what
+  breaks if it fails — and grade from that. Two journeys that both kill the product are both
+  critical, and it should say so rather than invent a spread.
 
 If you don't know something, say so: it records the gap rather than inventing an answer.
 
