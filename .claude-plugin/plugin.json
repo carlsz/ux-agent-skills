@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "ux-agent-skills",
   "displayName": "UX Agent Skills",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Audit, spec, design, and ship production-grade experiences for humans and agents alike.",
   "author": { "name": "Carl Sziebert", "email": "carlsz@gmail.com" },
   "homepage": "https://github.com/carlsz/ux-agent-skills",

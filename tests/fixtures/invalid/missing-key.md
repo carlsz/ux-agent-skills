@@ -1,5 +1,5 @@
 ---
-schema: 1
+schema: 2
 version: 0.1.0
 date: 2026-07-15T14:30:00Z
 target: /repo/src

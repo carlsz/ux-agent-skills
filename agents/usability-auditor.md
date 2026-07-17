@@ -78,7 +78,10 @@ Every finding has:
   you observed it on the render (backed by a screenshot or an exercised interaction). In
   **static** (source-only) mode, label it **`potential — unverified`** in the Evidence
   field, with the reason. Never assert an unobserved runtime behavior as fact. When live,
-  save screenshots under `.ux/audits/assets/` and reference them from the finding.
+  save screenshots under `.ux/audits/assets/` with stable names
+  (`usability-<scope-slug>-<state>.png`), **embed them inline** (`![alt](./assets/…)`) from
+  the finding, and assemble the key states into a `## Walkthrough` section — a visual
+  walk-through of the flow (report contract §1, §5).
 - **Never fabricate.** Every finding needs real evidence and an exact heuristic citation.
   If something couldn't be checked (auth-gated, no running app), record it as skipped
   with the reason — a false pass is worse than an honest gap.

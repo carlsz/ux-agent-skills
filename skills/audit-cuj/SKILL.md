@@ -165,6 +165,13 @@ Walk `steps` in `n` order against the app. For each, record the **verbatim** `ex
 you actually observed, and evidence — a screenshot under `.ux/audits/assets/`, a `file:line`,
 or repro steps. A step marked pass with no evidence is an assertion, not a verification.
 
+In **live/hybrid** mode, screenshot **every** step you replay — pass or fail — not only the
+one that broke: the passing steps are what turn the captures into a visual walk-through
+(step 7). Save each with the stable name `cuj-<id>-step-<n>.png` under `.ux/audits/assets/`
+(and criteria/other evidence as `cuj-<id>-<slug>.png`, e.g. `cuj-001-after-reload.png`).
+Stable names mean a re-run overwrites rather than accumulates — see the report contract's
+asset-naming rule.
+
 Run **setup journeys before the journeys that depend on them**. A finding discovered while
 running a setup journey outside the selection is still reported — never discard a real
 finding for scope reasons — but it does not enter the pass denominator.
@@ -239,6 +246,13 @@ attempted with results, the cause, and its `Repair:` line; per passed journey th
 and which rung established it; setup journeys run outside the selection; and
 **Coverage / not inspected**. Silent gaps are prohibited.
 
+**In live/hybrid mode, assemble the step captures into a `## Walkthrough` section** (report
+contract §5), after `## Findings` and before `## Appendix`. One `### Step <n> — <action>` per
+step in `n` order, each embedding its screenshot inline —
+`![CUJ-<id> step <n>](./assets/cuj-<id>-step-<n>.png)` — with a one-line expected-vs-observed.
+This is the visual walk-through of the journey; a bare path is not enough, the embed must
+render. Omit the section entirely in static mode (nothing was captured).
+
 **Exit criteria:** the report validates —
 
 ```
@@ -291,6 +305,8 @@ work as your violation, and do not quietly dismiss a real one as "probably their
 - Every finding names its journey and step, and its justification names both severity stages.
 - One report per run under `.ux/audits/`, validating against the report contract, with an
   index row appended.
+- In live/hybrid mode, each replayed step was screenshot with its stable name and the
+  captures were assembled into a `## Walkthrough` section (omitted in static mode).
 - The executive summary leads with `P/N journeys passed, S skipped, M of T steps verified`,
   where `N` is the journeys selected.
 - `frameworks` claims only what the run proved.

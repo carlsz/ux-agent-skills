@@ -49,7 +49,7 @@ Reports land in the host repo under **`.ux/audits/`**:
 ```
 <host-repo>/.ux/audits/
 ├── index.md                       # rolling index of every run (all auditors)
-├── assets/                        # captured screenshots
+├── assets/                        # captured screenshots (embedded as a visual walk-through)
 └── usability-20260715-143000.md   # one report per run
 ```
 

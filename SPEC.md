@@ -128,9 +128,12 @@ Each run writes `.ux/audits/usability-<YYYYMMDD-HHMMSS>.md`:
    - **Issue Description** — what is broken or confusing.
    - **Framework Violation** — the specific heuristic / rule / NPCIS dimension.
    - **Severity (0–4)** — per the rubric in §4.
-   - **Evidence** — screenshot path (`./.ux/audits/assets/…`), `file:line`, or repro steps.
+   - **Evidence** — an inline screenshot embed (`![alt](./assets/…)`), `file:line`, or repro
+     steps.
    - **Recommended Fix** — actionable design guidance.
-5. **Appendix** — mode, target, scope, frameworks applied, coverage notes / what was NOT
+5. **Walkthrough** *(optional; live/hybrid only)* — the captured key states assembled into a
+   visual sequence. See §10.
+6. **Appendix** — mode, target, scope, frameworks applied, coverage notes / what was NOT
    inspected (no silent gaps).
 
 ### 3.4 Shared report contract (inherited by every future auditor)
@@ -140,7 +143,7 @@ frontmatter schema. Only `auditor` and `frameworks` differ between auditors.
 ```yaml
 ---
 auditor: usability          # usability | accessibility | web-performance | …
-schema: 1                    # report-contract version
+schema: 2                    # report-contract version (2 added the Walkthrough section — §10)
 version: 0.1.0               # emitting auditor version
 date: 2026-07-15T14:30:00Z   # ISO-8601, from runtime clock
 target: https://localhost:3000/checkout   # URL or repo path
@@ -298,10 +301,12 @@ and safety invariants:
   regressions/fixes? (Deferred; `index.md` enables this later.)
 - **Suite orchestration** — a future `/ux-agent-skills:audit` meta-command that fans out
   usability + a11y + perf auditors and merges results. (Out of scope here; contract enables it.)
-- **Screenshot assets** — confirm `.ux/audits/assets/` as the standard location for
-  captured evidence images.
+- **Screenshot assets** — *resolved (§10, schema 2)*: `.ux/audits/assets/` is the standard
+  location; images use stable names so re-runs overwrite (prune-to-latest), and are embedded
+  inline as a `## Walkthrough` visual sequence.
 - **VCS treatment** — leave `.ux/` committed vs. ignored to the host team; auditor only
-  recommends.
+  recommends. (Committing keeps the walk-through images rendering on GitHub; stable naming
+  bounds the binary footprint.)
 
 ---
 
@@ -665,3 +670,86 @@ reconciliation must be stated plainly rather than left implicit:
 - [ ] `audit-cuj` appears in the `/ux-audit` roll-up, and is skipped **with a reason** when no CUJs
       exist.
 - [ ] README / AGENTS / CHANGELOG updated; `plugin.json` at 0.3.0.
+
+---
+
+# 10. Visual walk-through (report contract schema 2)
+
+> An additive extension to the shared report contract (§3.4). Turns the screenshots the
+> usability and CUJ auditors already capture in live mode into a rendered, ordered
+> walk-through embedded in the report. Bumps the contract `schema` from `1` to `2`.
+
+- **Status:** Approved
+- **Date:** 2026-07-17
+- **Adds:** the optional `## Walkthrough` report section; the `.ux/audits/assets/` naming
+  convention; inline-embed evidence. No new frontmatter keys, no new components.
+
+## 10.1 Objective
+
+**Problem.** Auditors screenshot key states (usability) and journey steps (CUJ) during live
+runs, but the images are used only as failure *evidence* — a bare path in a finding — and
+passing steps capture nothing. There is no visual record of a journey that *worked*, and the
+images do not render (bare path, not an embed).
+
+**Goal.** Give the usability and CUJ reports a `## Walkthrough`: an ordered, rendered
+sequence of the captured screenshots — a per-step visual record of a CUJ, or a key-states
+gallery for a usability flow — that a human can scan to *see* what the auditor saw.
+
+**Non-goals.** Not a format change: Markdown stays the canonical, validated, indexed report.
+Not for accessibility / web-performance / the roll-up (this change is usability + cuj only).
+A richer interactive HTML companion (flipbook/lightbox) is a **separate, later change** that
+*derives* from the Markdown and leaves this contract untouched.
+
+## 10.2 The `## Walkthrough` section
+
+Optional; **live/hybrid only** — static mode has no running app to capture, so the section's
+absence there is correct, not a coverage gap (it reinforces the render-vs-source honesty rule
+in §3.4 / the contract §6). Placed after `## Findings` and before `## Appendix`. It carries no
+`[sevN]` headings, so it never perturbs the finding counts.
+
+- **cuj shape** — one `### Step <n> — <action>` per journey step, in `n` order, each step
+  captured whether it passed or failed, each embedding its screenshot inline with a one-line
+  expected-vs-observed.
+- **usability shape** — one `### <state>` per captured key state (Initial / Mid-flow /
+  Success / Error / Empty).
+
+## 10.3 Asset naming — stable, prune-to-latest
+
+Screenshots live under `.ux/audits/assets/` (already permitted by the `audit_safety.py`
+allowlist — no change) with **stable, deterministic names**, so a re-run overwrites rather
+than accumulates: the directory is bounded by (journeys × steps) or a flow's key states, not
+by run count.
+
+| Auditor | What | Name |
+|---------|------|------|
+| cuj | a journey step | `cuj-<id>-step-<n>.png` |
+| cuj | criteria / other evidence | `cuj-<id>-<slug>.png` |
+| usability | a key state | `usability-<scope-slug>-<state>.png` |
+
+Reports are append-only but their images are prune-to-latest: an older report references the
+same stable path and so renders with the most recent capture. The report *text* is the record
+of truth; the image is a best-effort current view. Every reference is an inline embed
+(`![alt](./assets/…)`), always relative and under `./assets/`.
+
+## 10.4 Enforcement — instruct + light validation
+
+The skills mandate the capture and assembly; `validate_report.py` adds only light checks
+(`schema == 2`, and — *if* a `## Walkthrough` section exists — every image path is relative
+and under `./assets/`). It does **not** require the section to exist, nor that a file is on
+disk: a missing PNG never fails a run. This matches the suite's "no silent gaps" ethic without
+being brittle against the fixtures, which carry no real images.
+
+## 10.5 Acceptance criteria (Definition of Done)
+
+- [ ] The report contract (§3.4 / `report-contract.md`) is at `schema: 2` with the
+      `## Walkthrough` section and asset-naming rule documented; `validate_report.py` requires
+      `schema == 2` and light-checks walkthrough image paths.
+- [ ] `audit-cuj` captures every replayed step in live/hybrid mode with the stable name and
+      assembles a `## Walkthrough`; static runs emit none.
+- [ ] `usability-audit` names its key-state captures by the convention, embeds them inline,
+      and assembles a `## Walkthrough` in live/hybrid mode.
+- [ ] Both personas describe inline-embed + walk-through assembly.
+- [ ] Fixtures validate at `schema: 2`; at least one cuj and one usability fixture carry a
+      `## Walkthrough`; a walkthrough with a non-`./assets/` image path is rejected.
+- [ ] `audit_safety.py` is unchanged and still confines writes to `.ux/audits/`.
+- [ ] README / AGENTS / CHANGELOG updated; `plugin.json` at 0.4.0.

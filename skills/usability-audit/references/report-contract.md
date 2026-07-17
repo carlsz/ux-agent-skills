@@ -8,9 +8,14 @@ one index, and consumable by a future fan-out meta-command.
 Only two things differ between auditors: the `auditor` frontmatter value and the
 `frameworks` list. Everything else here is fixed.
 
-- **Schema version:** `1`
+- **Schema version:** `2`
 - **Machine-checked by:** [`scripts/validate_report.py`](../../../scripts/validate_report.py)
   (the executable form of this document — if the two ever disagree, reconcile them).
+
+> **Schema history.** `2` added the optional `## Walkthrough` section (§5) and the
+> `assets/` naming convention (§1). A report written by an older auditor at `schema: 1` is
+> not rewritten to `2` — `schema` records the contract the report was born under. Only
+> freshly emitted reports carry `2`.
 
 ---
 
@@ -32,6 +37,26 @@ plugin repo:
 - Create `.ux/`, `.ux/audits/`, and `.ux/audits/assets/` if absent.
 - **Never** write outside `.ux/audits/`. This is the auditor's safety invariant.
 
+### Asset naming (screenshots)
+
+Screenshots captured in **live/hybrid** mode are saved under `.ux/audits/assets/` with
+**stable, deterministic names** — one canonical name per thing captured, so a re-run
+**overwrites** rather than accumulates. This bounds the directory by what a run captures
+(journeys × steps, or the key states of a flow), not by the number of runs. Reports are
+append-only, but their images are prune-to-latest: an older report references the same
+stable path and therefore renders with the most recent run's capture of that thing — the
+report *text* is the record of truth; the image is a best-effort current view.
+
+| Auditor | What | Name |
+|---------|------|------|
+| cuj | a journey step | `cuj-<id>-step-<n>.png` (e.g. `cuj-001-step-2.png`) |
+| cuj | criteria / other evidence | `cuj-<id>-<slug>.png` (e.g. `cuj-001-after-reload.png`) |
+| usability (and other flow auditors) | a key state | `<auditor>-<scope-slug>-<state>.png` (state ∈ `initial`, `mid-flow`, `success`, `error`, `empty`) |
+
+Reference every image from the body with an **inline embed** — `![alt](./assets/<name>.png)`
+— never a bare path, so it renders in Markdown viewers. Paths are always relative and under
+`./assets/`.
+
 ## 2. File naming
 
 ```
@@ -46,7 +71,7 @@ creates a new file — it never overwrites or deletes a prior report.
 ```yaml
 ---
 auditor: usability          # usability | accessibility | web-performance | …
-schema: 1                    # report-contract version — must be 1
+schema: 2                    # report-contract version — must be 2
 version: 0.1.0               # the EMITTING PLUGIN's version — read it at run time from
                              # .claude-plugin/plugin.json. Never copy this number.
 date: 2026-07-15T14:30:00Z   # ISO-8601, UTC, from the runtime clock
@@ -67,7 +92,7 @@ summary:                     # counts MUST reconcile (see §5)
 
 **Rules**
 - All nine keys are required.
-- `schema` must equal `1`.
+- `schema` must equal `2`.
 - **`version` is read from `.claude-plugin/plugin.json` at run time, never copied from this
   document or from a fixture.** It records *what emitted this report*, which is why no
   validator checks it: a report written by 0.1.0 says `0.1.0` forever, and rewriting that
@@ -122,9 +147,51 @@ After the frontmatter, in order:
      steps. See the honesty rule in §6.
    - **Recommended Fix:** specific, actionable guidance.
 
-5. **`## Appendix`** — `mode`, `frameworks applied`, and **`Coverage / not inspected`**:
+5. **`## Walkthrough`** *(optional; live/hybrid only)* — a rendered visual sequence of the
+   captured screenshots. See below.
+6. **`## Appendix`** — `mode`, `frameworks applied`, and **`Coverage / not inspected`**:
    everything in scope that was NOT audited (auth-gated screens, unreachable routes),
    named explicitly. Silent gaps are prohibited.
+
+### The `## Walkthrough` section
+
+A visual walk-through of the run, built from the screenshots captured in **live/hybrid**
+mode. It is **optional and omitted in static mode** — with no running app there is nothing
+to capture, so its absence there is correct, not a coverage gap. Each image is an inline
+embed under `./assets/` (see §1 naming). The section carries no severity headings, so it
+does not affect finding counts (§ Count reconciliation).
+
+Two shapes, by auditor:
+
+- **cuj** — one `### Step <n> — <action>` per journey step, in `n` order (a step captured
+  whether it passed or failed), each with its screenshot and a one-line
+  expected-vs-observed:
+
+  ```markdown
+  ## Walkthrough
+
+  ### Step 1 — Click the new-task input
+  ![CUJ-001 step 1](./assets/cuj-001-step-1.png)
+  > Expected: input takes focus, placeholder "What needs doing?". Observed: match.
+
+  ### Step 2 — Type 'Buy milk', press Enter
+  ![CUJ-001 step 2](./assets/cuj-001-step-2.png)
+  > Expected: row appears at top, input clears. Observed: match.
+  ```
+
+- **usability (and other flow auditors)** — one `### <state>` per captured key state
+  (`Initial`, `Mid-flow`, `Success`, `Error`, `Empty`):
+
+  ```markdown
+  ## Walkthrough
+
+  ### Initial
+  ![checkout initial](./assets/usability-checkout-initial.png)
+  ```
+
+Every image path in this section must be relative and under `./assets/` — the validator
+rejects `http(s)://`, absolute, or `../`-escaping paths. It does **not** require the section
+to exist, nor that the file is present on disk.
 
 ### Count reconciliation
 The number of `[sevN]` findings in the body must exactly equal `summary.total`, and the
@@ -135,7 +202,9 @@ per-severity body counts must match `summary.sev1..4`. The validator enforces th
 A usability claim about what a user *perceives at runtime* — system-status feedback,
 error recovery, interaction latency, transitions — cannot be proven by reading source.
 
-- In **live**/**hybrid** mode, such findings observed on the render are stated normally.
+- In **live**/**hybrid** mode, such findings observed on the render are stated normally; a
+  captured screenshot — the same image the `## Walkthrough` (§5) embeds — is the preferred
+  backing, referenced inline from the Evidence field.
 - In **static** mode, they must be labelled **`potential — unverified`** inside the
   Evidence field, with the reason (no running app), never asserted as observed fact.
 - Never fabricate evidence. If something could not be checked, say so; a `skipped, with

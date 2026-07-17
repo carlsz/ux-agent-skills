@@ -17,6 +17,10 @@ ROOT = Path(__file__).resolve().parent.parent
 LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 # Fenced code blocks hold illustrative examples, not real links — strip before scanning.
 FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
+# Inline code spans (`like this`) are literal text, not links — a `[x](y)` inside backticks
+# renders verbatim, so it is not a link to resolve. Strip them too, after the fences. This is
+# what lets prose carry placeholder examples like `![alt](./assets/…)` without false breakage.
+INLINE_CODE_RE = re.compile(r"`[^`]*`")
 # Files whose relative links we resolve.
 DOC_FILES = [
     "README.md", "AGENTS.md", "CONTRIBUTING.md", "SPEC.md", "CHANGELOG.md",
@@ -63,6 +67,7 @@ def check_links() -> list[str]:
         if not path.exists():
             continue
         content = FENCE_RE.sub("", path.read_text(encoding="utf-8"))
+        content = INLINE_CODE_RE.sub("", content)
         for m in LINK_RE.finditer(content):
             href = m.group(1).split()[0]  # drop any title after the URL
             if href.startswith(("http://", "https://", "#", "mailto:")):

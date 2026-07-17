@@ -42,6 +42,9 @@ SEVERITY_KEYS = ["sev4", "sev3", "sev2", "sev1"]  # sev0 is intentionally absent
 
 # A finding is a level-3 heading tagged with its severity, e.g. "### [sev3] Foo".
 FINDING_RE = re.compile(r"^###\s+\[sev([0-4])\]", re.MULTILINE)
+# The optional `## Walkthrough` section (§5) and the markdown images inside it.
+WALKTHROUGH_RE = re.compile(r"^##\s+Walkthrough\s*$", re.MULTILINE | re.IGNORECASE)
+IMAGE_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 # The five labelled fields every finding block must contain.
 FINDING_FIELDS = ["Issue Description", "Framework Violation", "Severity",
                   "Evidence", "Recommended Fix"]
@@ -70,8 +73,8 @@ def _check_frontmatter(fm: dict) -> list[str]:
         if key not in fm:
             errors.append(f"frontmatter missing required key: {key!r}")
 
-    if fm.get("schema") != 1:
-        errors.append("frontmatter 'schema' must equal 1")
+    if fm.get("schema") != 2:
+        errors.append("frontmatter 'schema' must equal 2")
 
     mode = fm.get("mode")
     if mode not in KNOWN_MODES:
@@ -185,6 +188,31 @@ def _check_coverage(body: str) -> list[str]:
     return errors
 
 
+def _check_walkthrough(body: str) -> list[str]:
+    """Light validation of the optional `## Walkthrough` section (§5).
+
+    The section is optional (live/hybrid only) — its absence is never an error. When
+    present, every embedded image path must be relative and under `./assets/`, so the
+    walk-through stays inside the auditor's write boundary and renders from the report's
+    own directory. This checks the reference shape, not that the file exists on disk.
+    """
+    m = WALKTHROUGH_RE.search(body)
+    if m is None:
+        return []
+    # Section runs from its heading to the next `## ` heading (or end of body).
+    start = m.end()
+    nxt = re.search(r"^##\s", body[start:], re.MULTILINE)
+    section = body[start:start + nxt.start()] if nxt else body[start:]
+
+    errors: list[str] = []
+    for path in (p.strip() for p in IMAGE_RE.findall(section)):
+        under_assets = path.startswith("./assets/") or path.startswith("assets/")
+        if not under_assets or ".." in path:
+            errors.append(
+                f"walkthrough image path must be relative and under './assets/': {path!r}")
+    return errors
+
+
 def validate(path: str | Path) -> list[str]:
     """Return a list of contract violations for the report at `path` ([] = valid)."""
     path = Path(path)
@@ -200,6 +228,7 @@ def validate(path: str | Path) -> list[str]:
     errors += _check_summary(fm, body)
     errors += _check_finding_fields(body)
     errors += _check_coverage(body)
+    errors += _check_walkthrough(body)
     return errors
 
 

@@ -71,7 +71,10 @@ default (see step 1); `--mode` forces one.
    not launch a server or navigate unprompted.
    - **Navigate** to the target URL and walk the in-scope flow step by step.
    - **Screenshot** each key state (initial, mid-flow, success, error, empty) and save the
-     images under `.ux/audits/assets/`; reference them by relative path in findings.
+     images under `.ux/audits/assets/` with the stable name
+     `usability-<scope-slug>-<state>.png` (per the report contract's asset-naming rule, so a
+     re-run overwrites rather than accumulates). Embed them inline (`![alt](./assets/…)`) —
+     in findings for evidence, and assembled into the `## Walkthrough` section (step 6).
    - **Exercise** real interactions — submit forms, trigger errors, click destructive
      actions — and observe the actual response and timing.
    - **Read the accessibility / DOM tree** to confirm labels, roles, and focus order.
@@ -102,7 +105,10 @@ default (see step 1); `--mode` forces one.
    host repo if absent. Write `.ux/audits/usability-<YYYYMMDD>-<HHMMSS>.md` (UTC clock)
    with the frontmatter schema, executive summary, prioritized fixes, findings, and an
    appendix. The appendix records the `mode` used, the frameworks applied, and — honestly
-   — everything in scope you did **not** inspect.
+   — everything in scope you did **not** inspect. In **live/hybrid** mode, add a
+   `## Walkthrough` section (report contract §5) after `## Findings` and before
+   `## Appendix`: one `### <state>` per captured key state, each embedding its screenshot
+   inline. Omit the section in static mode (nothing was captured).
 
 7. **Append to the index.** Add one row for this run to `.ux/audits/index.md` — create the
    file with the contract's header if it doesn't exist. The index is **append-only**: add
@@ -142,6 +148,8 @@ default (see step 1); `--mode` forces one.
   severity, evidence, and a fix, with no issue filed under more than one finding.
 - Runtime-perception findings are `verified` (live) or `potential — unverified` (static),
   matching the mode actually used.
-- Live-mode screenshots are saved under `.ux/audits/assets/` and referenced by findings.
+- Live-mode screenshots are saved under `.ux/audits/assets/` with their stable names,
+  embedded inline in findings, and assembled into a `## Walkthrough` section (omitted in
+  static mode).
 - The appendix names all in-scope areas that were not inspected.
 - `git status` in the host repo shows changes only under `.ux/audits/`.
