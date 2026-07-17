@@ -345,7 +345,8 @@ and can be reviewed as its own PR.
   for confirmation → write → self-check with `validate_cuj.py` → **regenerate the index via
   `validate_cuj.py --index` and ASK, showing the diff, before splicing** → confirm footprint
   with `audit_safety.py --profile authoring`. Fallback set ≈9 questions per SPEC §9.5.
-  Description is the **exact string** in plan.md §7 of the approved implementation plan.
+  Description: the string already shipped in `skills/spec-cuj/SKILL.md` frontmatter —
+  measured against the real corpus; re-run `evals/run_evals.py` if reworded.
 - **Verify:** `python3 tests/test_evals.py` green (requires T8.3 in the same commit);
   `python3 evals/run_evals.py` → **all four skills**, no collision ≥0.50, no regression to
   `usability-audit`/`ux-audit`'s existing `top_k: 1` positives.
@@ -419,7 +420,17 @@ and can be reviewed as its own PR.
   pass**. **One report per run, not per CUJ** (keeps `index.md` rows 1:1 with runs).
   Executive summary **leads with "N/N journeys passed, M steps verified"** (SPEC §9.4).
   Self-check under the **default `audit` profile** — `audit-cuj` writes only to `.ux/audits/`.
-  Description is the **exact string** in plan.md §7 of the approved implementation plan.
+- **Frontmatter `description` — use this string verbatim.** It was measured against the real
+  TF-IDF corpus (worst pair spec-cuj↔audit-cuj = 0.373, well under the 0.50 warn line). Any
+  reword re-rolls IDF for all four skills, so re-run `python3 evals/run_evals.py` if you
+  touch it:
+  > Verify a stored critical user journey by replaying it step by step against the running
+  > app, and report the exact step that broke as a cuj report in .ux/audits. Use for "verify
+  > my CUJs", "do the journeys still work", "journey regression check", "which step broke".
+
+  Note it leads with *"Verify"* though the skill is named `audit-cuj` — deliberate. Only
+  `description` text enters the routing corpus, never the skill name, and "verify my CUJs" is
+  what users type. Keeping "audit" out also keeps it clear of `usability-audit`/`ux-audit`.
 - **Verify:** `python3 tests/test_evals.py` + `python3 evals/run_evals.py` green (four skills).
 - **Deps:** T7.1–T7.4, T9.1.
 
@@ -429,6 +440,12 @@ and can be reviewed as its own PR.
 - **Acceptance:** as T8.3. Negatives: one owned by `spec-cuj`, one ("write Playwright E2E
   tests") resolving against the **existing** `agent-skills:test-driven-development` entry —
   that's the real-world confusion worth guarding.
+- **ALSO restore spec-cuj's deferred negative.** `evals/cases/spec-cuj.json` carries a
+  `_note` explaining that its `{"prompt": "Verify my CUJs still pass against the running
+  app", "owner": "audit-cuj"}` negative had to be dropped: routing is corpus-relative, and
+  until `audit-cuj` has a description it has no vector to outrank spec-cuj with. **The moment
+  T9.2 lands, add it back and delete the `_note`.** Then `run_evals.py` must still be green
+  for all four skills.
 - **Verify:** `python3 tests/test_evals.py` green.
 - **Deps:** T9.2.
 - **Known:** this behavioral eval is **non-hermetic** — Sprout has no `.ux/cujs/`, so Tier 3

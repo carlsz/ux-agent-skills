@@ -304,6 +304,58 @@ README / AGENTS / sub-READMEs / CHANGELOG / `plugin.json` → 0.3.0.
 | CUJ files leak PII | `authored` has no author field, and T7.2/T7.3 make a stray `authored.by` a **rejection**, not a comment. |
 | A new skill goes unverified (silent trap) | Every phase's `check_*()` + `DOC_FILES` edits are acceptance criteria of the same task, not follow-ups. |
 
+## 14a. What Checkpoints D–E actually taught us
+
+Two live runs of `/ux-spec` against Sprout. Everything mechanical held; **every defect was in
+the layer no test can reach**, and one class of defect was in the tests themselves. Phase 9
+inherits all of it.
+
+### The tests lie in a specific, repeatable way
+
+Four checks in `test_components.py` were written, passed green, and **asserted nothing**:
+
+- `"criticality" in low` — the word was present, the rule was absent. It stayed green through
+  a total behavioural failure.
+- `"ask" in low` — also satisfied by the word "t**ask**", and this suite's running example is
+  a to-do app.
+- `"manufactur" in low or "invent" in low and "agreement" in low` — `and` binds tighter than
+  `or`, so it degrades to the fallback, and both fallback words appear everywhere.
+
+**Every one came from the same instinct: a broad fallback term in a disjunction.** Prefer one
+specific term and let a rewrite fail loudly.
+
+**Mutation-test every check you write, and print the residue.** Three separate mutations
+"proved" a check vacuous when the *mutation* was broken — replacing `manufactur` with
+`manufacture` leaves the substring intact; excising one of two accepted synonyms leaves the
+concept intact. Verify the term is really gone (`grep -c` → 0) before believing the verdict.
+
+### Prose defects the runs found (all now fixed — don't regress them)
+
+| Found | Rule it produced |
+|---|---|
+| Folded on criticality, then **invented a supporting fact** to justify it | Never manufacture a justification. Inventing *agreement* is still inventing — and worse, because a fabricated step is visible in the file while a fabricated reason lives only in the chat. |
+| `interview-me`'s `GUESS:` style laundered a **false** step into a journey | Never offer a guess the user can confirm with "yes". Source may **check** a recalled detail, never **supply** an `expect` — a journey derived from the code tests the app against itself and can never fail. |
+| Narrative colour became an unsatisfiable precondition | Preconditions must be establishable from a fresh install… |
+| "Nothing harvested today" — true on run 1, false forever after | …**and re-establishable on a second run.** This one is the mirror: not a journey a broken app passes, but a journey a **working app fails**. A check that cries wolf gets muted, and a muted check is deleted. |
+| Offered to `cp validate_cuj.py` into the host repo to dodge a permission gate | Never route around a gate; never copy tooling into the host repo. Blocked and honest beats unblocked and littering. |
+| "Question 4 of ~7", then asked four things | "One question at a time" is countable: one `?` per turn. |
+| Summarised validator output instead of pasting it | Show the tool's real output. A skill arguing that unfalsifiable claims are worthless cannot launder its own. |
+
+### Open, and inherited by Phase 9
+
+- **How does the verifier establish a precondition?** The interview asks *what must be true*;
+  nothing yet says *how a verifier gets there*. `audit-cuj` has to answer this or every
+  stateful journey reports "skipped".
+- **The `interview-me` fallback branch has never executed** — it was installed on both runs.
+  ~200 lines of `references/interview-fallback.md` are untested.
+- **`agents/README.md` loads as a phantom persona named "README"** (no frontmatter, but
+  components are discovered as `agents/*.md`); `commands/README.md` likewise. Both are in the
+  always-on token budget. AGENTS.md step 8 *instructs* maintaining those catalogs, so the
+  convention manufactures them. Unfixed — it's a repo-structure decision.
+- **A directory install resolves the plugin root to the dev tree**, so the harness gates the
+  skill's reads of its own references. And the install is a **snapshot**: run
+  `claude plugin marketplace update ux-agent-skills` or you test yesterday's code.
+
 ## 15. Verification spine (applies every phase)
 
 All five suites stay green throughout — `for t in tests/test_*.py; do python3 "$t"; done`.
