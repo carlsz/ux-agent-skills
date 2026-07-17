@@ -47,7 +47,8 @@ creates a new file — it never overwrites or deletes a prior report.
 ---
 auditor: usability          # usability | accessibility | web-performance | …
 schema: 1                    # report-contract version — must be 1
-version: 0.1.0               # version of the emitting auditor
+version: 0.1.0               # the EMITTING PLUGIN's version — read it at run time from
+                             # .claude-plugin/plugin.json. Never copy this number.
 date: 2026-07-15T14:30:00Z   # ISO-8601, UTC, from the runtime clock
 target: https://localhost:3000/checkout   # URL (live) or repo path (static)
 mode: hybrid                 # live | static | hybrid — the mode ACTUALLY used
@@ -67,6 +68,15 @@ summary:                     # counts MUST reconcile (see §5)
 **Rules**
 - All nine keys are required.
 - `schema` must equal `1`.
+- **`version` is read from `.claude-plugin/plugin.json` at run time, never copied from this
+  document or from a fixture.** It records *what emitted this report*, which is why no
+  validator checks it: a report written by 0.1.0 says `0.1.0` forever, and rewriting that
+  later would be falsifying a historical fact. The example above and the fixtures under
+  `tests/fixtures/valid/` therefore carry the version that emitted *them* — those numbers are
+  history, not a template. A live run in 2026-07 caught this the hard way: given only
+  `# version of the emitting auditor` and a `0.1.0` sitting beside it, the auditor copied the
+  literal while the plugin was at 0.2.0. It did exactly what it was told; the instruction was
+  the bug. Fixtures teach, so an example number needs to say where the real one comes from.
 - `mode` ∈ {`live`, `static`, `hybrid`} and must reflect what actually ran, not what was
   requested.
 - `date` must be ISO-8601 (a trailing `Z` is accepted).

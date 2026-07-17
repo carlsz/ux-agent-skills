@@ -491,6 +491,40 @@ Two rules carry the weight, and both guard a false PASS:
   deliberate break into a *skip* and the sev4 vanishes. A **self-referential** precondition is
   never a skip: grade it from a bare `entry_point`.
 
+> ### ✅ CHECKPOINT F — the detection test — **PASSED 2026-07-16**
+> Live against Sprout, three runs + safety, all pass. The tool detects: given a silently
+> broken add-task it produced an unprompted sev4 naming the exact step and quoting the
+> journey's verbatim `expect`, from a fresh agent never told anything was wrong. It
+> reproduced the failure twice (programmatic fill, then real keystrokes) to rule out its own
+> harness before calling it a finding, and pinned `AddTodo.tsx:15` while clearing two other
+> candidates. Run 1's L0 baseline found the app not in its precondition state and recorded
+> that verbatim rather than assuming; run 3 traced a code path, found no defect, and refused
+> to count it — "this is not a pass — it is an unverified trace of a journey that never ran."
+>
+> **Two acceptance criteria were NOT exercised. Both remain unproven:**
+> - **The no-alibi rule never fired.** The interview produced a first-time-evaluator actor, so
+>   the real CUJ-001's precondition is "empty list" — not self-referential. Both auditors
+>   reasoned about the rule and correctly concluded it didn't apply. It is still the tool's
+>   most likely silent failure. Note `tests/fixtures/cujs/valid/CUJ-001-add-a-task.md` DOES
+>   carry a self-referential precondition ("at least one existing task" on the add-task
+>   journey) and that fixture is **not** a defect — its actor is a returning user, and
+>   cuj-author's bar (reachable from a fresh install, re-establishable on a second run) is
+>   met by simply adding a task. Returning-user journeys are a legitimate, common shape, and
+>   they are exactly what no-alibi guards. The rule wants a targeted eval; it has a fixture
+>   demonstrating the shape but nothing that runs it.
+> - **The vacuous-pass guard never fired.** Sprout's success criteria are all presence-shaped,
+>   so no absence criterion exists to be vacuously true. Run 3 said so explicitly.
+>
+> The journeys were deliberately NOT reshaped to fire either — bending the actor to fit the
+> test would have made the checker the author of its own rubric.
+>
+> Deferred, found here: run 1 wrote `version: 0.1.0` while runs 2-3 wrote `0.2.0`. Run 1 was
+> following the report contract, which showed a literal `0.1.0`. Fixed in the contract.
+> Recorded: the installed plugin cache pinned at d7106b5 contained no audit-cuj skill at all;
+> `claude plugin marketplace update` refreshed metadata WITHOUT reinstalling. `claude plugin
+> details` confirmed the live directory-source load. **Verify what is actually loaded before
+> trusting any live run** — the update command is not sufficient.
+
 > ### ✅ CHECKPOINT F — the detection test
 > Run `/cuj-audit` against unmodified Sprout → journeys pass, `total: 0`, steps in the
 > Appendix and **not** as sev0. Then **break a journey deliberately** (e.g. make the add-task
