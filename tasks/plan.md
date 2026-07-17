@@ -165,6 +165,37 @@ shared contract. `audit-cuj` joins the `/ux-audit` fan-out as a fourth suite mem
 
 ## 10. What shapes this plan
 
+> ### ⚠️ v1 already has a CUJ system. This is a deliberate reboot, not greenfield.
+>
+> The sibling repo [`../ux-agent-skills`](../../ux-agent-skills) (v1, actively developed —
+> 0.7.0) **already ships a mature CUJ implementation**: `.ux/cujs/<name>.md`, a `spec-cuj`
+> skill, a `verify-cuj` skill, `/ux-spec`, `/ux-review`, and `references/cuj-template.md`.
+> Same paths, same skill names, same command names. **v1 and v2 cannot be installed
+> together** — they collide on marketplace name, plugin name, `/ux-spec`, `spec-cuj`, and the
+> `.ux/cujs/` directory itself, in incompatible formats.
+>
+> This was missed during planning: exploration grepped only this repo, found one README line,
+> and concluded "greenfield". §2 above cites v1 as prior art for *auditor personas* and did
+> not mention that it owns the CUJ concept outright. It does.
+>
+> **The decision (2026-07-16): v2 is a deliberate reboot.** Where the two differ:
+>
+> | | v1 | v2 (this plan) |
+> |---|----|----|
+> | Journey shape | intent + 4–6 touchpoints + measurable criteria | 10-key frontmatter, per-step observable `expect` |
+> | Criteria | numeric thresholds (`< 60s p95`), tied to `DESIGN.md` §7/§8 | observable outcomes, plus post-journey `success_criteria` |
+> | Validation | LLM lint via `ux-auditor` | `scripts/validate_cuj.py` + fixtures + CI |
+> | Verification | `verify-cuj` — renders, screenshots, diffs `.ux/goldens/` | `audit-cuj` (Phase 9, unbuilt) |
+> | Reporting | own audit trail | the shared `.ux/audits` report contract (`auditor: cuj`) |
+>
+> **Before building Phase 9, read v1's `skills/verify-cuj/SKILL.md`.** It solves the same
+> problem and is hardened against three real false-pass incidents we would otherwise
+> rediscover: the **empty-set trap** (a "X appears 0 times" criterion is vacuously true
+> against zero files — "zero files found is a FAIL, never a pass"), the **contract-vs-render
+> doctrine** (a green lint is not evidence about the render), and the **maker/checker guard**
+> (a fresh context must grade work it did not make). Rebooting the format is a choice;
+> rediscovering those bugs is not.
+
 - **The report contract is reused, not extended.** `auditor: cuj` needs one entry in
   `FRAMEWORKS_BY_AUDITOR` and nothing else. Any pressure to add frontmatter keys is
   pressure to erode comparability — it goes in the Appendix instead (SPEC §9.4).
