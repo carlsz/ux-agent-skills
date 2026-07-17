@@ -23,3 +23,7 @@ heuristics it applies) and `report-contract.md` (the shared `.ux/audits` contrac
   [`cuj-contract.md`](spec-cuj/references/cuj-contract.md).
 - [`audit-cuj/`](audit-cuj/SKILL.md) — replay a stored journey against the running app and
   report the exact step that broke (`auditor: cuj`).
+- [`render-report/`](render-report/SKILL.md) — render existing `.ux/audits` reports into
+  self-contained, offline HTML (findings as cards, screenshots as a walk-through flipbook, the
+  roll-up as a go/no-go dashboard) via [`render_report_html.py`](../scripts/render_report_html.py).
+  A derived view — the Markdown stays the source of truth.

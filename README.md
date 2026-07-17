@@ -10,10 +10,11 @@ Slash commands that map to the UX design and software development lifecycle. Eac
 
 | What you're doing | Command | Key principle |
 |-------------------|---------|---------------|
-| Define critical journeys | `/ux-spec` | Author CUJs by interview |
+| Define critical user journeys | `/ux-spec` | Author CUJs by interview |
 | Audit your UX | `/usability-audit` | Expert usability heuristic evals |
-| Verify critical journeys | `/cuj-audit` | Replay journeys, report the step that broke |
+| Verify critical user journeys | `/cuj-audit` | Replay journeys using live browser sessions, report the step that broke |
 | End-to-end UX evals | `/ux-audit` | Usability + accessibility + web perf + CUJs |
+| View reports in a browser | `/ux-review` | Self-contained HTML — findings + screenshot walk-through flipbook |
 
 **Composing with agent-skills.** The auditor stops at findings by design — which is exactly what
 makes it compose with [agent-skills](https://github.com/addyosmani/agent-skills): hand a report's
@@ -22,7 +23,7 @@ carries a `file:line` and a concrete Recommended Fix. Then re-run
 `/ux-agent-skills:usability-audit` to confirm the severity actually dropped — audit here, make
 there, verify here.
 
-## Usability Auditor
+## Usability Audits
 
 Senior UX auditor that runs an expert **heuristic evaluation** of a host app
 and writes a severity-scored report into that app's repo — findings only, it never edits
@@ -49,39 +50,16 @@ Reports land in the host repo under **`.ux/audits/`**:
 ```
 <host-repo>/.ux/audits/
 ├── index.md                       # rolling index of every run (all auditors)
+├── index.html                     # the same index, as a browsable landing page
 ├── assets/                        # captured screenshots (embedded as a visual walk-through)
-└── usability-20260715-143000.md   # one report per run
+├── usability-20260715-143000.md   # one report per run
+└── usability-20260715-143000.html # its self-contained HTML companion (open in a browser)
 ```
 
-## End-to-end usability, accessibility, and web performance roll-up
-
-One command runs every available auditor against a single target and merges the results:
-
-```
-/ux-agent-skills:ux-audit [target] [--scope <area>] [--only usability,accessibility,web-performance,cuj]
-```
-
-It fans out to the **usability** and **critical-user-journeys** auditors (both native) plus
-**accessibility** and **web performance** — the latter two wrapped from
-[web-quality-skills](https://github.com/addyosmani/web-quality-skills), the same-author
-companion to `agent-skills`. Every result is **normalized into the shared contract**
-(0–4 severity), so all reports land in one `.ux/audits/` directory, share one `index.md`,
-and are summarized in a `rollup-<timestamp>.md` with a per-auditor table and an overall
-**go/no-go verdict**. Auditors whose wrapping skill isn't installed are skipped and
-disclosed — and the CUJ auditor is **conditional**, running only when you've authored
-journeys under `.ux/cujs/` and otherwise skipped with a reason. A skip is never silently
-treated as a pass. See the [roll-up skill](skills/ux-audit/SKILL.md).
-
-### Shared reporting contract
-
-Every auditor in this suite — usability (native), plus accessibility and web-performance
-(wrapped, see the roll-up below) — emits the same
-[report contract](skills/usability-audit/references/report-contract.md) — one
-`.ux/audits/` directory, one frontmatter schema, one severity scale, one rolling index —
-so their outputs are comparable and can be rolled up together. Only the `auditor` value and
-framework vocabulary differ. Reports self-validate via
-[`scripts/validate_report.py`](scripts/validate_report.py); the safety invariant (writes
-stay under `.ux/audits/`) is checked by [`scripts/audit_safety.py`](scripts/audit_safety.py).
+In **live/hybrid** mode the auditor screenshots each key state (and every CUJ step) and
+assembles them into a `## Walkthrough` in the report — a visual record of the flow, not just
+failure evidence. Every report also renders to a **self-contained HTML page** beside it (see
+[Visual walk-throughs](#visual-walk-throughs-and-shareable-html-reports) below).
 
 ## Critical User Journeys
 
@@ -125,6 +103,36 @@ in the host repo beside the audits:
 > it's absent, `/ux-spec` falls back to its own question set, tells you it did, and offers to
 > install it rather than auto-installing. The capability degrades; it never fails.
 
+## End-to-end CUJ, usability, accessibility, and web performance roll-up
+
+One command runs every available auditor against a single target and merges the results:
+
+```
+/ux-agent-skills:ux-audit [target] [--scope <area>] [--only usability,accessibility,web-performance,cuj]
+```
+
+It fans out to the **usability** and **critical-user-journeys** auditors (both native) plus
+**accessibility** and **web performance** — the latter two wrapped from
+[web-quality-skills](https://github.com/addyosmani/web-quality-skills), the same-author
+companion to `agent-skills`. Every result is **normalized into the shared contract**
+(0–4 severity), so all reports land in one `.ux/audits/` directory, share one `index.md`,
+and are summarized in a `rollup-<timestamp>.md` with a per-auditor table and an overall
+**go/no-go verdict**. Auditors whose wrapping skill isn't installed are skipped and
+disclosed — and the CUJ auditor is **conditional**, running only when you've authored
+journeys under `.ux/cujs/` and otherwise skipped with a reason. A skip is never silently
+treated as a pass. See the [roll-up skill](skills/ux-audit/SKILL.md).
+
+### Shared reporting contract
+
+Every auditor in this suite — usability (native), plus accessibility and web-performance
+(wrapped, see the roll-up below) — emits the same
+[report contract](skills/usability-audit/references/report-contract.md) — one
+`.ux/audits/` directory, one frontmatter schema, one severity scale, one rolling index —
+so their outputs are comparable and can be rolled up together. Only the `auditor` value and
+framework vocabulary differ. Reports self-validate via
+[`scripts/validate_report.py`](scripts/validate_report.py); the safety invariant (writes
+stay under `.ux/audits/`) is checked by [`scripts/audit_safety.py`](scripts/audit_safety.py).
+
 ## Example — auditing a real app (Sprout)
 
 [Sprout](https://github.com/carlsz/sprout) is a small Next.js todo app. From inside its
@@ -163,6 +171,30 @@ To run the **whole suite** (usability + accessibility + web performance) before 
 That writes one normalized report per auditor plus a `rollup-<timestamp>.md` with a
 per-auditor severity table and a go/no-go verdict — all under `Sprout/.ux/audits/`, and
 nothing else in the repo is touched.
+
+## Visual walk-throughs and shareable HTML reports
+
+Every audit is also a **self-contained HTML page** you can open in a browser or hand to a
+teammate — no server, no build, no network. Alongside each `report.md`, the auditor writes a
+`report.html` (and refreshes `index.html`) with:
+
+- **Findings as severity-badged cards** and a per-severity summary.
+- **An interactive walk-through flipbook** — the screenshots the auditor captured while
+  driving your app, in order: every CUJ step, or a usability flow's key states (initial /
+  mid-flow / success / error / empty). Click through or use the arrow keys.
+- **A go/no-go dashboard** for the roll-up, with a per-auditor severity matrix linking to each
+  report, and an `index.html` landing page tying every run together.
+
+The HTML is a **derived view** — the Markdown report stays the source of truth, so nothing you
+rely on changes. Images are inlined, so the page renders offline and on GitHub alike.
+
+The audit commands emit this HTML automatically. To (re)render reports that already exist —
+after pulling a branch, or to view an older run — use `/ux-review`:
+
+```
+> /ux-agent-skills:ux-review          # render every report in .ux/audits to HTML
+> /ux-agent-skills:ux-review .ux/audits/cuj-20260715-143000.md
+```
 
 ## Installation
 
@@ -205,14 +237,15 @@ ux-agent-skills/
 │   ├── usability-audit/        # usability audit workflow + framework lenses & report contract
 │   ├── ux-audit/               # the suite roll-up (fan-out + normalize + verdict)
 │   ├── spec-cuj/               # author critical user journeys by interview (+ cuj-contract)
-│   └── audit-cuj/              # replay journeys, report the step that broke
-├── commands/               # slash commands — the when (/usability-audit, /ux-audit, /ux-spec, /cuj-audit)
-├── scripts/                # validate_report.py, validate_cuj.py, audit_safety.py
-├── tests/                  # contract / component / safety / docs / evals checks
+│   ├── audit-cuj/              # replay journeys, report the step that broke
+│   └── render-report/          # render reports to self-contained HTML (findings + flipbook)
+├── commands/               # slash commands — the when (/usability-audit, /ux-audit, /ux-spec, /cuj-audit, /ux-review)
+├── scripts/                # validate_report.py, validate_cuj.py, audit_safety.py, render_report_html.py
+├── tests/                  # contract / component / safety / docs / evals / render-html checks
 └── evals/                  # trigger + behavioral evals (Sprout as the target)
 ```
 
 Run the checks with `python3 tests/test_report_contract.py` (and the siblings
-`test_components.py`, `test_safety.py`, `test_docs.py`, `test_evals.py`). The
-[evals system](evals/README.md) verifies trigger routing (Tier 2, in CI) and behavioral
-audits against Sprout (Tier 3, on demand).
+`test_components.py`, `test_safety.py`, `test_docs.py`, `test_evals.py`,
+`test_render_html.py`). The [evals system](evals/README.md) verifies trigger routing
+(Tier 2, in CI) and behavioral audits against Sprout (Tier 3, on demand).

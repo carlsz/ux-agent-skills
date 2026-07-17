@@ -33,12 +33,13 @@ ux-agent-skills/
 │   ├── usability-audit/        # usability audit workflow + framework lenses & report contract
 │   ├── ux-audit/               # the suite roll-up (fan-out + normalize + verdict)
 │   ├── spec-cuj/               # author critical user journeys by interview (+ cuj-contract)
-│   └── audit-cuj/              # replay journeys, report the step that broke
+│   ├── audit-cuj/              # replay journeys, report the step that broke
+│   └── render-report/          # render reports to self-contained HTML (the one non-auditor skill)
 ├── commands/               # slash commands — the when
-├── scripts/                # validate_report.py, validate_cuj.py, audit_safety.py
-├── tests/                  # contract / component / cuj-contract / safety / docs / evals checks
+├── scripts/                # validate_report.py, validate_cuj.py, audit_safety.py, render_report_html.py
+├── tests/                  # contract / component / cuj-contract / safety / docs / evals / render-html checks
 ├── evals/                  # trigger + behavioral evals (Sprout as the target)
-└── SPEC.md                 # this repo's design spec (§1–8 usability auditor, §9 CUJs) — what/why
+└── SPEC.md                 # this repo's design spec (§1–8 usability auditor, §9 CUJs, §10 walk-through + HTML) — what/why
 ```
 
 **Components are auto-discovered by convention** from `agents/`, `skills/*/SKILL.md`, and
@@ -116,6 +117,34 @@ reusing the report contract with `auditor: cuj`. Two things to keep straight whe
   entry in `check_rollup_skill()` uses the literal `"audit-cuj"`, not `"cuj"` (which the
   CUJ-heavy body would match anywhere).
 
+## Visual walk-throughs and the HTML companion
+
+Two capabilities were layered onto the report contract without changing the findings-only
+shape. Know both before you touch reporting.
+
+- **The `## Walkthrough` section (report contract schema 2).** Live/hybrid auditors capture
+  screenshots — per journey step (cuj), per key state (usability) — into `.ux/audits/assets/`
+  with **stable names** (`cuj-<id>-step-<n>.png`, `usability-<scope>-<state>.png`), so a re-run
+  overwrites rather than accumulates (prune-to-latest). They're embedded inline and assembled
+  into an optional `## Walkthrough` section (after `## Findings`, before `## Appendix`, **live/
+  hybrid only**). `validate_report.py` requires `schema == 2` and light-checks that walkthrough
+  image paths are relative and under `./assets/`. Full spec: [SPEC.md](SPEC.md) §10.1–10.5.
+
+- **The HTML companion (`scripts/render_report_html.py`).** A **deterministic, derived** view:
+  it renders any report `.md` into a self-contained `.html` beside it (findings as cards, the
+  walkthrough as an interactive flipbook, a `rollup-*.md` as a go/no-go dashboard, `index.md` as
+  a landing page) — everything inlined, opens offline. The audit skills call it as their final
+  step; `/ux-review` → the `render-report` skill render on demand. **The Markdown stays the
+  source of truth**; the `.html` is never validated against or in place of it. Full spec: §10.6.
+
+**`render-report` is the suite's one non-auditor skill** — so the "adding an auditor" recipe
+above does *not* apply to it: no persona (a mechanical transform holds no point of view), no
+`references/`, no frameworks, no findings. Its `check_render_report_skill()` asserts the
+*derived-view* invariants (Markdown is canonical, output self-contained, writes confined to
+`.ux/audits/`), not auditor conformance. It still trips **both test traps** like any skill: it
+needs `evals/cases/render-report.json` (the loud glob) and a hand-wired `check_*` in
+`test_components.py` (the silent one).
+
 ## The two test traps
 
 The authoring rules aren't written down anywhere except the tests — and the two most important ones
@@ -154,6 +183,7 @@ python3 tests/test_components.py         # persona / skill / command / reference
 python3 tests/test_safety.py             # writes stay under .ux/audits/
 python3 tests/test_docs.py               # README literals + relative links resolve
 python3 tests/test_evals.py              # every skill has a case; Tier 2 routing passes
+python3 tests/test_render_html.py        # HTML companion: self-contained, deterministic, flipbook
 ```
 
 CI loops over `tests/test_*.py` on Python 3.12 with `pyyaml` as the only dependency — **any new

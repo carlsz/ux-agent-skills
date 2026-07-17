@@ -1,0 +1,46 @@
+{
+  "skill_name": "render-report",
+  "trigger": {
+    "positive": [
+      { "prompt": "Render my .ux/audits reports to HTML so I can open them in a browser", "top_k": 1 },
+      { "prompt": "Make a shareable HTML page of the audit with the screenshot walkthrough as a flipbook", "top_k": 3 },
+      { "prompt": "Turn the latest audit report into a self-contained HTML view", "top_k": 3 }
+    ],
+    "negative": [
+      { "prompt": "Run a usability audit of the checkout flow", "owner": "usability-audit" },
+      { "prompt": "Verify my critical user journeys still pass against the running app", "owner": "audit-cuj" }
+    ]
+  },
+  "behavioral_target": {
+    "name": "sprout",
+    "repo": "https://github.com/carlsz/sprout",
+    "run": "npm install && npm run dev"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "In the Sprout repo, whose .ux/audits already holds usability, accessibility, web-performance, cuj, and rollup reports from a prior run, run /ux-agent-skills:ux-review to render them all to HTML.",
+      "expected_output": "A self-contained <report>.html beside every <report>.md under Sprout/.ux/audits, the roll-up rendered as a go/no-go dashboard, and an index.html landing page — each opening offline with images inlined, and no report Markdown modified.",
+      "expectations": [
+        "Writes one <report>.html beside each existing <report>.md under Sprout/.ux/audits, plus index.html — and does NOT create, edit, or delete any .md report or the report contract",
+        "Every generated .html is self-contained: images are inlined as data: URIs and there are no external (http/https/protocol-relative) src or href references, so it opens offline from disk",
+        "The cuj report with total: 0 renders a 'verified pass' banner (never an empty 'no findings'), and its walkthrough renders as an interactive flipbook grouped by journey",
+        "The rollup-*.md renders as a dashboard with the go/no-go verdict and a per-auditor severity table whose report links point at the .html views",
+        "Re-running /ux-review on an unchanged report produces a byte-identical .html (deterministic — no diff churn)",
+        "All writes are confined to Sprout/.ux/audits/ — no host application code is touched, and audit_safety.py <sprout> reports no violation"
+      ],
+      "trust_level": "provisional"
+    },
+    {
+      "id": 2,
+      "prompt": "In a repo that has no .ux/audits directory yet, run /ux-agent-skills:ux-review.",
+      "expected_output": "It stops and says there are no reports to render, pointing at /usability-audit, /cuj-audit, or /ux-audit — and creates no files.",
+      "expectations": [
+        "Does not fabricate a report or an empty HTML page; it stops because there is nothing to render",
+        "Names how to produce a report first (/usability-audit, /cuj-audit, or /ux-audit)",
+        "Writes nothing to the repo"
+      ],
+      "trust_level": "provisional"
+    }
+  ]
+}
