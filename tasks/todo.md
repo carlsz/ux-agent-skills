@@ -398,7 +398,7 @@ and can be reviewed as its own PR.
 **T9.2 + T9.3 in one commit.**
 
 ### T9.1 — `cuj-auditor` persona
-- [ ] The inverse of `usability-auditor`: **holds no heuristics, offers no opinions.**
+- [x] The inverse of `usability-auditor`: **holds no heuristics, offers no opinions.**
 - **Files:** `agents/cuj-auditor.md`; `DOC_FILES`.
 - **Acceptance:** `name: cuj-auditor`. Body states: *you execute the contract, you do not
   evaluate the design*; the **two-stage** 0–4 mapping (classify, then clamp by
@@ -409,7 +409,7 @@ and can be reviewed as its own PR.
 - **Deps:** CHECKPOINT E.
 
 ### T9.2 — `audit-cuj` skill
-- [ ] Select → validate → replay → grade → report.
+- [x] Select → validate → replay → grade → report.
 - **Files:** `skills/audit-cuj/SKILL.md`; `DOC_FILES`.
 - **Acceptance:** `name` matches the directory. **Empty/absent `.ux/cujs/` → stop and say so**
   ("no CUJs authored; run `/ux-spec`"), never an empty pass. Malformed CUJ → skip + disclose,
@@ -435,7 +435,7 @@ and can be reviewed as its own PR.
 - **Deps:** T7.1–T7.4, T9.1.
 
 ### T9.3 — `audit-cuj` eval case
-- [ ] **Same commit as T9.2.**
+- [x] **Same commit as T9.2.**
 - **Files:** `evals/cases/audit-cuj.json`.
 - **Acceptance:** as T8.3. Negatives: one owned by `spec-cuj`, one ("write Playwright E2E
   tests") resolving against the **existing** `agent-skills:test-driven-development` entry —
@@ -453,18 +453,43 @@ and can be reviewed as its own PR.
   as an audit-cuj failure. The T7.3 fixture CUJs remain the deterministic path.
 
 ### T9.4 — `/audit-cuj` command
-- [ ] Thin entry point.
+- [x] Thin entry point.
 - **Files:** `commands/audit-cuj.md`; `DOC_FILES`.
 - **Acceptance:** documents `target`, `--cuj <id|all|critical>`, `--mode static|live|hybrid`.
 - **Verify:** `check_audit_cuj_command()` green.
 - **Deps:** T9.2.
 
 ### T9.5 — Component checks + doc wiring
-- [ ] **Files:** `tests/test_components.py` — `check_cuj_auditor_persona()`,
+- [x] **Files:** `tests/test_components.py` — `check_cuj_auditor_persona()`,
   `check_audit_cuj_skill()`, `check_audit_cuj_command()`, wired into `main()`;
   `tests/test_docs.py` `DOC_FILES`.
 - **Verify:** both suites green; break an asserted string → check fails.
 - **Deps:** T9.1–T9.4.
+
+### T9.0 — SPEC reconciliation (added during Phase 9)
+- [x] SPEC §9.4's mandated lead line could not express a skip: a run that verified CUJ-001 and
+  skipped CUJ-002 read "1/1 journeys passed". Amended to
+  `P/N journeys passed, S skipped, M of T steps verified`, with **N = journeys selected, never
+  journeys run**. SPEC §6 gained the journey-named state reset as an ask-first item (ladder
+  rung L2.5).
+- **Files:** `SPEC.md` §9.4 + §6; `tests/fixtures/valid/cuj-20260716-130000.md` (lead line).
+
+### The inherited open question — ANSWERED
+**"How does a verifier establish a precondition?"** A five-rung **precondition ladder**: L0
+observe (records the baseline), L1 replay a setup journey, L2 improvise via the UI, L2.5 a
+journey-named reset (ask first), L3 ask the user. Hard stop below L3 — no `evaluate_script`
+injection, because injected state is state no user can reach, so a journey verified against it
+proves nothing.
+
+Two rules carry the weight, and both guard a false PASS:
+- **L1 establishes a precondition only if the setup journey "passed its own
+  `success_criteria`"** — not merely its steps. Otherwise CUJ-001's silent-data-loss bug
+  establishes CUJ-002's precondition and CUJ-002 passes *because* the app is broken (its
+  criterion is an *absence*). The app may not supply the evidence for its own verification.
+- **The no-alibi rule.** CUJ-001's precondition ("at least one existing task") is reachable
+  only through the add-task flow CUJ-001 exists to test. A naive ladder turns Checkpoint F's
+  deliberate break into a *skip* and the sev4 vanishes. A **self-referential** precondition is
+  never a skip: grade it from a bare `entry_point`.
 
 > ### ✅ CHECKPOINT F — the detection test
 > Run `/audit-cuj` against unmodified Sprout → journeys pass, `total: 0`, steps in the
