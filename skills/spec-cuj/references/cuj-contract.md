@@ -4,8 +4,8 @@ The file contract for a **critical user journey** — one journey per file, stor
 repository and treated as the single source of truth about what that app is *for*.
 
 Two skills share this contract. [`spec-cuj`](../SKILL.md) **produces** journeys through an
-interview; `audit-cuj` **consumes** them, replaying each against the running app and reporting
-the step that broke. A journey is therefore written once by a human and read many times by a
+interview; [`audit-cuj`](../../audit-cuj/SKILL.md) **consumes** them, replaying each against
+the running app and reporting the step that broke. A journey is therefore written once by a human and read many times by a
 machine — it has to be precise enough to execute and honest enough to argue with.
 
 - **Schema version:** `1`

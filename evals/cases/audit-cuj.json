@@ -1,0 +1,62 @@
+{
+  "skill_name": "audit-cuj",
+  "trigger": {
+    "positive": [
+      { "prompt": "Verify my CUJs still pass against the running app", "top_k": 1 },
+      { "prompt": "Do the journeys still work after this refactor?", "top_k": 3 },
+      { "prompt": "Which step of the checkout journey broke?", "top_k": 3 }
+    ],
+    "negative": [
+      { "prompt": "Interview me and write down our critical user journeys", "owner": "spec-cuj" },
+      { "prompt": "Write Playwright end-to-end tests for the checkout flow", "owner": "agent-skills:test-driven-development" }
+    ]
+  },
+  "behavioral_target": {
+    "name": "sprout",
+    "repo": "https://github.com/carlsz/sprout",
+    "run": "npm install && npm run dev"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "In the Sprout repo, run /ux-agent-skills:audit-cuj against the running app with --cuj all. Sprout's journeys are unmodified and working.",
+      "expected_output": "A contract-valid report at Sprout/.ux/audits/cuj-<timestamp>.md with auditor: cuj and total: 0, whose executive summary leads with the journey and step counts, and whose Appendix enumerates every verified step.",
+      "expectations": [
+        "Writes ONE report per run (not per CUJ) to Sprout/.ux/audits/cuj-<timestamp>.md that validates against the shared report contract, plus an appended index row",
+        "A passing journey yields total: 0 with every passing step enumerated in the Appendix and NEVER emitted as a [sev0] finding",
+        "The executive summary leads with 'P/N journeys passed, S skipped, M of T steps verified', where N counts the journeys SELECTED rather than the journeys run",
+        "frameworks claims only what the run proved: task-completion appears only because the run actually completed the journeys live",
+        "Each journey's preconditions were established via a recorded ladder rung, and the Appendix names which rung established each one",
+        "Does not edit any of Sprout's application code",
+        "All writes are confined to Sprout/.ux/audits/ — .ux/cujs/ is untouched, and `audit_safety.py <sprout>` under the DEFAULT audit profile reports no violation"
+      ],
+      "trust_level": "provisional"
+    },
+    {
+      "id": 2,
+      "prompt": "Break Sprout's add-task input so submitting does nothing, then run /ux-agent-skills:audit-cuj --cuj all against the running app.",
+      "expected_output": "A report containing a severity-4 finding naming CUJ-001 and the exact step whose expected outcome never occurred — detection, not narration.",
+      "expectations": [
+        "Emits a [sev4] finding whose Framework Violation names CUJ-001 and the SPECIFIC step that broke, quoting that step's verbatim expect",
+        "Does NOT report CUJ-001 as skipped: its precondition ('at least one existing task') is only reachable through the add-task flow it exists to test, so it is self-referential and must be graded from a bare entry_point rather than alibied into a skip",
+        "The severity justification names both stages — the failure class, then the clamp against the journey's own criticality",
+        "A journey skipped because CUJ-001 broke does NOT open a second finding for the same bug; the blocker's finding carries an 'Also blocks:' line instead",
+        "total: 0 does not appear — a verifier that only ever passes is the failure this eval exists to catch",
+        "Does not edit or repair Sprout's application code, and does not soften .ux/cujs/ to make the journey pass"
+      ],
+      "trust_level": "provisional"
+    },
+    {
+      "id": 3,
+      "prompt": "In the Sprout repo with no dev server running, run /ux-agent-skills:audit-cuj --mode static --cuj all.",
+      "expected_output": "A static report that traces source only, labels every finding 'potential — unverified', emits frameworks: [cuj-contract] alone, and produces no verified pass.",
+      "expectations": [
+        "Every finding is labelled 'potential — unverified' in its Evidence field, with the reason (no running app)",
+        "frameworks is [cuj-contract] alone — task-completion is NOT claimed, because the run never completed the journey, and success-criteria is not claimed because persistence was never observed",
+        "No journey is reported as a verified pass; steps that could not be observed are listed in the Appendix 'not observed' rather than counted as passes",
+        "The mode recorded in frontmatter is the mode that actually ran"
+      ],
+      "trust_level": "provisional"
+    }
+  ]
+}

@@ -64,6 +64,14 @@ def main() -> int:
     # For `cuj`, an empty report is the SUCCESS state (every journey passed), not the
     # "found nothing" state. total: 0 with no findings must validate.
     failures += _expect_valid(FIXTURES / "valid" / "cuj-20260716-130000.md")
+    # ...and its evil twin: an all-skipped run, which verified NOTHING, is byte-identical
+    # to that clean pass as far as this schema is concerned — same total: 0, same zero
+    # findings, equally valid. This fixture asserts that validity, because the honest
+    # position is that the validator CANNOT catch this and must not pretend to. Only two
+    # things discriminate, and both are prose the auditor writes: the counts
+    # ("0/2 journeys passed, 2 skipped") and `frameworks: [cuj-contract]` alone. Phase 10's
+    # roll-up reads the latter to avoid scoring a skipped run as a passed one.
+    failures += _expect_valid(FIXTURES / "valid" / "cuj-20260716-140000.md")
 
     # Each malformed report must be rejected for the right reason.
     failures += _expect_invalid(FIXTURES / "invalid" / "sev0-present.md", "sev0")

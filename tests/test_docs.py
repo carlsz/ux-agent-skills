@@ -27,6 +27,7 @@ DOC_FILES = [
     "commands/ux-spec.md",
     "skills/usability-audit/SKILL.md",
     "skills/spec-cuj/SKILL.md",
+    "skills/audit-cuj/SKILL.md",
     "skills/spec-cuj/references/interview-fallback.md",
     "skills/ux-audit/SKILL.md",
     "skills/usability-audit/references/report-contract.md",

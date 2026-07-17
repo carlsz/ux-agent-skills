@@ -460,6 +460,124 @@ def check_spec_cuj_skill() -> list[str]:
     return errs
 
 
+def check_audit_cuj_skill() -> list[str]:
+    """The verification workflow: select -> validate -> establish -> replay -> grade.
+
+    Most of these guard ONE failure mode with many faces: a verifier that reports success
+    without having verified anything. `total: 0` is this auditor's success state, so an
+    all-skipped run is byte-identical to a clean pass and valid against the shared report
+    contract — no validator can catch it, which leaves this prose as the only guard.
+    """
+    errs: list[str] = []
+    path = ROOT / "skills" / "audit-cuj" / "SKILL.md"
+    if not path.exists():
+        return [f"missing {path.relative_to(ROOT)}"]
+    fm, body = _frontmatter(path)
+    _require(isinstance(fm, dict), "audit-cuj: frontmatter must parse to a mapping", errs)
+    if isinstance(fm, dict):
+        _require(fm.get("name") == "audit-cuj",
+                 "audit-cuj: frontmatter 'name' must match the directory ('audit-cuj')",
+                 errs)
+        _require(bool(str(fm.get("description", "")).strip()),
+                 "audit-cuj: frontmatter needs a non-empty 'description'", errs)
+    low = body.lower()
+    _require(".ux/cujs" in low, "audit-cuj: must read journeys from .ux/cujs", errs)
+    _require(".ux/audits" in low, "audit-cuj: must write its report to .ux/audits", errs)
+    _require("cuj-contract" in low, "audit-cuj: must reference the CUJ file contract", errs)
+    _require("cuj-auditor" in low, "audit-cuj: must invoke the cuj-auditor persona", errs)
+    _require("validate_cuj" in low,
+             "audit-cuj: must validate a journey before walking it", errs)
+
+    # --- The empty sets. All three are vacuous-pass routes; v1 shipped the first one. ---
+    # Zero journeys: "all journeys passed" is trivially true against no journeys.
+    _require("no cujs authored" in low,
+             "audit-cuj: absent/empty .ux/cujs must stop and say so, never an empty pass",
+             errs)
+    # Zero steps observed: total: 0 + everything skipped == a clean pass, structurally.
+    _require("denominator" in low,
+             "audit-cuj: N must count journeys selected, not journeys run", errs)
+    _require("total: 0" in low,
+             "audit-cuj: must state that total: 0 is the SUCCESS state for this auditor",
+             errs)
+    # The vacuous absence criterion — v1's empty-set trap wearing v2's clothes. A criterion
+    # like "'Buy milk' is absent after reload" passes when the app is broken, unless the
+    # baseline proved 'Buy milk' was there to begin with.
+    _require("vacuously true" in low,
+             "audit-cuj: an absence criterion needs a non-empty baseline to be falsifiable",
+             errs)
+
+    # --- The precondition ladder (the question Phase 9 inherited). ---
+    _require("precondition ladder" in low,
+             "audit-cuj: must define the ordered precondition ladder", errs)
+    _require("observe before establishing" in low,
+             "audit-cuj: L0 — must observe the baseline before establishing state", errs)
+    _require("setup journey" in low,
+             "audit-cuj: L1 — must allow replaying another CUJ to establish state", errs)
+    # The anti-laundering gate, and the highest-value check in this file. A setup journey
+    # whose STEPS passed but whose success_criteria failed has not established anything —
+    # it has proved the app is broken. Without this clause, CUJ-001's silent-data-loss bug
+    # establishes CUJ-002's precondition and CUJ-002 passes BECAUSE the app is broken.
+    _require("passed its own success_criteria" in low,
+             "audit-cuj: a setup journey establishes a precondition ONLY if it passed its "
+             "own success_criteria", errs)
+    _require("rung" in low,
+             "audit-cuj: the Appendix must record which ladder rungs were attempted", errs)
+    # The hard stop. Injected state is state no user can reach, so a journey verified
+    # against it proves nothing — this is a correctness rule, not only a safety one.
+    _require("evaluate_script" in low,
+             "audit-cuj: must forbid injecting state the UI cannot reach", errs)
+    # The no-alibi rule — this is what saves Checkpoint F. CUJ-001's precondition ("at
+    # least one existing task") is reachable only via the add-task flow CUJ-001 exists to
+    # test. Naive ladder => breaking add-task makes CUJ-001 SKIP and the sev4 vanishes,
+    # failing SPEC §9.8's detection criterion exactly when it matters most.
+    _require("no-alibi" in low,
+             "audit-cuj: a precondition failure must never alibi the journey it belongs to",
+             errs)
+    _require("self-referential" in low,
+             "audit-cuj: a self-referential precondition must be graded from a bare "
+             "entry_point, not skipped", errs)
+
+    # --- Skips: honest, counted, and never a finding. ---
+    _require("precondition unmet" in low,
+             "audit-cuj: must report an unestablishable precondition as skipped", errs)
+    _require("a skip is not a finding" in low,
+             "audit-cuj: a skip carries no severity — it is not a sev4", errs)
+    _require("do not open a second finding" in low,
+             "audit-cuj: a cascade must not double-count one bug as two findings", errs)
+    _require("also blocks" in low,
+             "audit-cuj: the blocker's finding must carry the cascade's blast radius", errs)
+
+    # --- Grading and report shape. ---
+    _require("clamp" in low,
+             "audit-cuj: severity must be clamped by the journey's criticality", errs)
+    _require("verbatim" in low,
+             "audit-cuj: must grade against the verbatim expect, never a paraphrase", errs)
+    _require("one report per run" in low,
+             "audit-cuj: one report per run keeps index.md rows 1:1 with runs", errs)
+    _require("success_criteria" in low,
+             "audit-cuj: must evaluate success_criteria after the steps complete", errs)
+    # Static mode cannot produce a verified pass — the render-vs-source rule in frontmatter.
+    _require("potential — unverified" in low,
+             "audit-cuj: static findings must be labelled 'potential — unverified'", errs)
+    _require("task-completion" in low,
+             "audit-cuj: must state when task-completion is claimable (live/hybrid only)",
+             errs)
+    for mode in ("static", "live", "hybrid"):
+        _require(mode in low, f"audit-cuj: must handle {mode} mode", errs)
+
+    # --- Boundaries. ---
+    _require("audit_safety" in low,
+             "audit-cuj: must confirm its footprint with the default audit profile", errs)
+    _require("never" in low and ("edit" in low or "modif" in low) and "host" in low,
+             "audit-cuj: must state the never-edit-host-code boundary", errs)
+    _require("route around" in low,
+             "audit-cuj: must never route around a permission gate or copy tooling into "
+             "the host repo", errs)
+    _require("exit" in low or "done when" in low or "acceptance" in low,
+             "audit-cuj: must state explicit exit criteria", errs)
+    return errs
+
+
 def check_ux_spec_command() -> list[str]:
     errs: list[str] = []
     path = ROOT / "commands" / "ux-spec.md"
@@ -537,7 +655,7 @@ def main() -> int:
                 + check_rollup_skill() + check_rollup_command()
                 + check_cuj_author_persona() + check_spec_cuj_skill()
                 + check_ux_spec_command() + check_cuj_references()
-                + check_cuj_auditor_persona())
+                + check_cuj_auditor_persona() + check_audit_cuj_skill())
     if failures:
         print("FAIL — components:")
         for f in failures:

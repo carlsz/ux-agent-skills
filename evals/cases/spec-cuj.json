@@ -8,9 +8,9 @@
     ],
     "negative": [
       { "prompt": "Do a heuristic usability audit of this screen", "owner": "usability-audit" },
-      { "prompt": "Write Playwright end-to-end tests for the checkout flow", "owner": "agent-skills:test-driven-development" }
-    ],
-    "_note": "The 'verify my CUJs against the running app' negative (owner: audit-cuj) belongs here too, but cannot pass until Phase 9 creates that skill: routing is corpus-relative, so an owner with no description has no vector to outrank spec-cuj with. Until then spec-cuj really IS the best CUJ match on offer, and asserting otherwise would be asserting a discrimination the plugin cannot yet make. Added in T9.3."
+      { "prompt": "Write Playwright end-to-end tests for the checkout flow", "owner": "agent-skills:test-driven-development" },
+      { "prompt": "Verify my CUJs still pass against the running app", "owner": "audit-cuj" }
+    ]
   },
   "behavioral_target": {
     "name": "sprout",
