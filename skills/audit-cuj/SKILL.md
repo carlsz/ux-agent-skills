@@ -259,6 +259,18 @@ render. Omit the section entirely in static mode (nothing was captured).
 python3 scripts/validate_report.py .ux/audits/cuj-<timestamp>.md
 ```
 
+Then render its self-contained HTML companion — the per-step captures become an interactive
+walk-through flipbook, and a `total: 0` verified pass renders as a green pass banner (never an
+empty "no findings"):
+
+```
+python3 scripts/render_report_html.py .ux/audits/cuj-<timestamp>.md
+python3 scripts/render_report_html.py --index .ux/audits/index.md
+```
+
+The `.html` is a derived view of the Markdown, written under `.ux/audits/` — the footprint
+check below is unaffected. (Also available on demand via `/ux-review`.)
+
 ### 8. Confirm your footprint
 
 ```

@@ -92,6 +92,18 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
    [`scripts/validate_report.py`](../../scripts/validate_report.py), and confirm the safety
    invariant with [`scripts/audit_safety.py`](../../scripts/audit_safety.py) `<host-repo>`.
 
+7. **Render the HTML companions.** Generate a self-contained HTML view for every member
+   report, the roll-up dashboard (with its go/no-go verdict and per-auditor matrix linking to
+   each member's `.html`), and the index landing page:
+
+   ```
+   python3 scripts/render_report_html.py .ux/audits/*.md
+   python3 scripts/render_report_html.py --index .ux/audits/index.md
+   ```
+
+   Each `.html` is a derived view of its Markdown, written under `.ux/audits/` — the safety
+   invariant holds. (Also available on demand via `/ux-review`.)
+
 ## Boundaries
 
 - **Findings only.** No auditor in the roll-up edits host application code.

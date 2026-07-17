@@ -123,6 +123,19 @@ default (see step 1); `--mode` forces one.
    invariant with [`scripts/audit_safety.py`](../../scripts/audit_safety.py)
    `<host-repo>` — it must report all changes confined to `.ux/audits/`.
 
+9. **Render the HTML companion.** After the report validates, generate its self-contained
+   HTML view (findings as cards, the live screenshots as a walk-through gallery) beside the
+   Markdown:
+
+   ```
+   python3 scripts/render_report_html.py .ux/audits/usability-<timestamp>.md
+   python3 scripts/render_report_html.py --index .ux/audits/index.md
+   ```
+
+   The `.html` is a derived view — the Markdown stays the source of truth. Both files are
+   written under `.ux/audits/`, so the safety invariant is unaffected. (The same view is
+   available on demand via `/ux-review`.)
+
 ## Boundaries
 
 - **Findings only.** Never edit, refactor, or "fix" host application code.
