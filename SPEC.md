@@ -257,6 +257,10 @@ and safety invariants:
 ### Ask first
 - Starting or restarting the host dev server, or navigating a browser to any URL.
 - Reaching auth-gated screens (the user must supply access; the auditor won't authenticate).
+- **Resetting host app state** to establish a CUJ precondition — clearing localStorage, logging out,
+  starting a fresh session — and **only when the journey file names the reset** (§9.4). This destroys
+  state the user may care about, so it is gated like a server start rather than treated as ordinary
+  navigation. A reset the journey does not name is not available at any price.
 - Installing anything, or running host build/test scripts.
 - Adding `.ux/` to the host's `.gitignore` (recommend, don't do silently).
 - Writing outside `.ux/audits/` for any reason (e.g. saving screenshots elsewhere).
@@ -487,8 +491,22 @@ their ranking is why `criticality` is mandatory. Each finding's justification na
 
 Severity 0 stays a non-finding, exactly as §4 requires. **A passing journey is `total: 0`** — unique
 in the suite, where empty normally means "found nothing". The executive summary must therefore lead
-with "N/N journeys passed, M steps verified", because the schema has no way to distinguish a clean
-pass from a run that checked nothing.
+with the counts, because the schema has no way to distinguish a clean pass from a run that checked
+nothing:
+
+```
+P/N journeys passed, S skipped, M of T steps verified.
+```
+
+**`N` is the number of journeys *selected*, never the number run.** A journey that could not be
+replayed stays in the denominator, so `1/2 journeys passed, 1 skipped` is the honest report of a run
+that verified one journey and skipped another. Were `N` to count only what ran, the same run would
+read `1/1 journeys passed` — a lie by omission, and precisely the failure this lead line exists to
+prevent. A skipped journey never leaves the denominator, which is what keeps muting visible.
+
+When `S == N`, say so plainly: *"0/N journeys passed — every journey was skipped; nothing was
+verified."* That run also emits `frameworks: [cuj-contract]` alone (see below), so a reader and the
+roll-up both have a signal that `total: 0` is **not** a pass here.
 
 ### `frameworks` vocabulary
 
