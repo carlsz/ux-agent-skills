@@ -36,6 +36,10 @@ plugin repo:
 
 - Create `.ux/`, `.ux/audits/`, and `.ux/audits/assets/` if absent.
 - **Never** write outside `.ux/audits/`. This is the auditor's safety invariant.
+- A derived, self-contained `<report>.html` companion may sit beside each `<report>.md`
+  (rendered by [`render_report_html.py`](../../../scripts/render_report_html.py); see SPEC §10.6).
+  The Markdown remains the source of truth — this contract governs the `.md`, and the `.html` is
+  a view of it, never validated against or in place of it.
 
 ### Asset naming (screenshots)
 

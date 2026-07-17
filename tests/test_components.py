@@ -661,6 +661,73 @@ def check_cuj_audit_command() -> list[str]:
     return errs
 
 
+def check_render_report_skill() -> list[str]:
+    """The on-demand HTML-render workflow — a derived VIEW, not an auditor.
+
+    It holds no frameworks and writes no findings, so the checks assert the opposite of an
+    auditor: the Markdown stays the source of truth, the `.html` is derived, and — like every
+    other component — it writes nowhere but `.ux/audits/`.
+    """
+    errs: list[str] = []
+    path = ROOT / "skills" / "render-report" / "SKILL.md"
+    if not path.exists():
+        return [f"missing {path.relative_to(ROOT)}"]
+    fm, body = _frontmatter(path)
+    _require(isinstance(fm, dict), "render-report: frontmatter must parse to a mapping", errs)
+    if isinstance(fm, dict):
+        _require(fm.get("name") == "render-report",
+                 "render-report: frontmatter 'name' must match the directory "
+                 "('render-report')", errs)
+        _require(bool(str(fm.get("description", "")).strip()),
+                 "render-report: frontmatter needs a non-empty 'description'", errs)
+    low = body.lower()
+    _require("render_report_html" in low,
+             "render-report: must invoke scripts/render_report_html.py", errs)
+    _require(".ux/audits" in low, "render-report: must render reports under .ux/audits", errs)
+    _require("--index" in low, "render-report: must (re)generate the index landing page", errs)
+    # The load-bearing invariant: the .html is a DERIVED view; the Markdown is canonical.
+    _require("source of truth" in low,
+             "render-report: must state the Markdown report is the source of truth", errs)
+    _require("derived" in low,
+             "render-report: must state the .html is a derived view", errs)
+    _require("self-contained" in low or "offline" in low,
+             "render-report: must produce self-contained/offline HTML", errs)
+    # Safety boundary, restated: writes only under .ux/audits, never host code.
+    _require("never" in low and "outside" in low,
+             "render-report: must forbid writing outside .ux/audits", errs)
+    _require("never" in low and ("edit" in low or "modif" in low)
+             and ("host" in low or "markdown" in low or "report" in low),
+             "render-report: must state it never edits the report Markdown / host code", errs)
+    _require("exit" in low or "done when" in low or "acceptance" in low,
+             "render-report: must state explicit exit criteria", errs)
+    return errs
+
+
+def check_ux_review_command() -> list[str]:
+    errs: list[str] = []
+    path = ROOT / "commands" / "ux-review.md"
+    if not path.exists():
+        return [f"missing {path.relative_to(ROOT)}"]
+    fm, body = _frontmatter(path)
+    _require(isinstance(fm, dict),
+             "ux-review command: frontmatter must parse to a mapping", errs)
+    if isinstance(fm, dict):
+        _require(fm.get("name") == "ux-review",
+                 "ux-review command: frontmatter 'name' must be 'ux-review'", errs)
+        _require(bool(str(fm.get("description", "")).strip()),
+                 "ux-review command: frontmatter needs a non-empty 'description'", errs)
+        _require(bool(str(fm.get("argument-hint", "")).strip()),
+                 "ux-review command: frontmatter needs an 'argument-hint'", errs)
+    low = body.lower()
+    _require("render-report" in low,
+             "ux-review command: must invoke the render-report skill", errs)
+    for arg in ("target", "--index"):
+        _require(arg in low, f"ux-review command: must document the {arg!r} argument", errs)
+    _require(".ux/audits" in low,
+             "ux-review command: must say where reports are read from / written", errs)
+    return errs
+
+
 def check_cuj_references() -> list[str]:
     """spec-cuj's skill-local references must exist and carry their defining terms."""
     errs: list[str] = []
@@ -713,6 +780,7 @@ CHECKS = (
     check_cuj_author_persona, check_spec_cuj_skill, check_ux_spec_command,
     check_cuj_references,
     check_cuj_auditor_persona, check_audit_cuj_skill, check_cuj_audit_command,
+    check_render_report_skill, check_ux_review_command,
 )
 
 

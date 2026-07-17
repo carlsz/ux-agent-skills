@@ -697,7 +697,7 @@ gallery for a usability flow — that a human can scan to *see* what the auditor
 
 **Non-goals.** Not a format change: Markdown stays the canonical, validated, indexed report.
 Not for accessibility / web-performance / the roll-up (this change is usability + cuj only).
-A richer interactive HTML companion (flipbook/lightbox) is a **separate, later change** that
+A richer interactive HTML companion (flipbook/lightbox) — **delivered in 0.5.0, see §10.6** —
 *derives* from the Markdown and leaves this contract untouched.
 
 ## 10.2 The `## Walkthrough` section
@@ -753,3 +753,42 @@ being brittle against the fixtures, which carry no real images.
       `## Walkthrough`; a walkthrough with a non-`./assets/` image path is rejected.
 - [ ] `audit_safety.py` is unchanged and still confines writes to `.ux/audits/`.
 - [ ] README / AGENTS / CHANGELOG updated; `plugin.json` at 0.4.0.
+
+## 10.6 The HTML companion (delivered, 0.5.0)
+
+> The richer view deferred in §10.1. A **derived** HTML rendering of the Markdown reports —
+> the contract, `validate_report.py`, `index.md`, and the roll-up are unchanged; **no schema
+> bump.** The engine is a script (`scripts/render_report_html.py`); the on-demand UX is a thin
+> command + skill.
+
+**What it produces.** For each `.ux/audits/*.md`, a self-contained `<stem>.html` beside it:
+a frontmatter header, a severity-cell summary, findings as severity-badged cards, and — for a
+report with a `## Walkthrough` — an **interactive flipbook** (prev/next, keyboard, dots),
+grouped per CUJ journey. A `rollup-*.md` renders as a **go/no-go dashboard** (verdict banner +
+per-auditor severity matrix, links repointed to the `.html` views); `index.md` renders as a
+stable `index.html` landing page. Special cases: a cuj `total: 0` renders a verified-pass (or
+"nothing verified") banner; dev-lab/static runs get a provenance banner; a report with no
+walkthrough surfaces its Evidence screenshots (embeds **and** bare `(./assets/…)` paths) as a
+gallery.
+
+**Invariants.** *Self-contained* — inline CSS + images as `data:` URIs, no external references,
+opens offline (a test asserts it). *Deterministic* — identical input ⇒ byte-identical output,
+so re-rendering never churns a diff. *Derived* — the Markdown is the source of truth; the
+renderer never edits a report, the contract, or host code. *Confined* — the `.html` is written
+under `.ux/audits/`, so `audit_safety.py` is untouched.
+
+**Components.** The engine `scripts/render_report_html.py` (auto path: the audit skills call it
+as their final step). The on-demand path: `/ux-review` command → `render-report` skill (no
+persona — a mechanical transform holds no point of view), with `evals/cases/render-report.json`
+and hand-wired `check_render_report_skill` / `check_ux_review_command` in `tests/test_components.py`.
+
+### 10.6 Acceptance criteria (Definition of Done)
+
+- [ ] `scripts/render_report_html.py` renders each report/roll-up/index to a self-contained,
+      deterministic `.html`; `tests/test_render_html.py` asserts self-contained + deterministic +
+      flipbook/findings tracking + the cuj pass-vs-nothing banners.
+- [ ] The `usability-audit`, `audit-cuj`, and `ux-audit` skills render the companion as their
+      final step; writes stay under `.ux/audits/` (safety unaffected).
+- [ ] `/ux-review` + the `render-report` skill render existing reports on demand; both are
+      covered by an eval case (routing green) and a hand-wired component check.
+- [ ] README / CHANGELOG updated; `plugin.json` at **0.5.0**.

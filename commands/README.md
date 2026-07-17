@@ -16,3 +16,6 @@ that does the work.
   critical user journeys under `.ux/cujs/` and regenerate the host `SPEC.md` index.
 - [`cuj-audit.md`](cuj-audit.md) — `/ux-agent-skills:cuj-audit`: replay the stored journeys
   and report the step that broke.
+- [`ux-review.md`](ux-review.md) — `/ux-agent-skills:ux-review`: render existing `.ux/audits`
+  reports into self-contained HTML (findings as cards, screenshots as a walk-through flipbook,
+  the roll-up as a dashboard).

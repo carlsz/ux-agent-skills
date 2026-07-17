@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-17
+
+### Added
+- **Self-contained HTML report companion** — `scripts/render_report_html.py` renders any
+  `.ux/audits` report into a single offline-openable `.html` beside its Markdown: findings as
+  severity-badged cards, the captured screenshots as an **interactive walk-through flipbook**
+  (grouped by CUJ journey), the roll-up as a **go/no-go dashboard**, and an `index.html` landing
+  page. Everything is inlined (CSS + images as `data:` URIs), so it opens from disk with no
+  network access; output is deterministic (no diff churn on re-render).
+  - A cuj `total: 0` renders a green **verified-pass** banner (or an amber "nothing verified"
+    when frameworks are `cuj-contract` only); web-performance dev-lab and static runs get a
+    provenance banner; reports with no walkthrough surface their Evidence screenshots as a
+    gallery (harvesting both `![](…)` embeds and the bare `(./assets/…)` paths older reports use).
+- **`/ux-review` command** (+ the `render-report` skill) renders existing `.ux/audits` reports
+  to HTML on demand — for refreshing the view after pulling a branch or rendering an older run.
+
+### Changed
+- The `usability-audit`, `audit-cuj`, and `ux-audit` skills now render the HTML companion as
+  their final step (after validation). The Markdown report stays the source of truth; the
+  `.html` is a derived view, written under `.ux/audits/`, so the safety invariant is unchanged.
+
 ## [0.4.0] - 2026-07-17
 
 ### Added
