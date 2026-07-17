@@ -1,5 +1,11 @@
 # TODO — HTML report companion (with image-based CUJ walk-throughs)
 
+> **STATUS: delivered in 0.5.0** (branch `feat/report-walkthrough`, Phases 0–5 committed). All
+> phases below are complete: the engine `scripts/render_report_html.py`, the flipbook,
+> cuj-pass/provenance banners + evidence gallery, the roll-up dashboard + `index.html`,
+> `tests/test_render_html.py`, skill wiring, and the `/ux-review` command + `render-report`
+> skill. The full test suite (7 files) is green. Left unchecked below as the historical plan.
+
 Task list for [`plan-html-report.md`](./plan-html-report.md). Grouped by vertical slice; each
 delivers an openable HTML path. `[ ]` = todo, `[~]` = in progress, `[x]` = done.
 
