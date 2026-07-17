@@ -320,6 +320,81 @@ def check_cuj_author_persona() -> list[str]:
     return errs
 
 
+def check_cuj_auditor_persona() -> list[str]:
+    """The verifier persona — the INVERSE of usability-auditor.
+
+    usability-auditor holds four frameworks and an opinion about good design. This one
+    holds neither: the host's journey file is the entire rubric, and the only question is
+    whether the app did what the file says. So the checks here assert the absence of
+    judgement as much as the presence of process — an auditor that starts editorialising
+    about the design has stopped verifying and started auditing, which is a different
+    persona's job.
+    """
+    errs: list[str] = []
+    path = ROOT / "agents" / "cuj-auditor.md"
+    if not path.exists():
+        return [f"missing {path.relative_to(ROOT)}"]
+    fm, body = _frontmatter(path)
+    _require(isinstance(fm, dict), "cuj-auditor: frontmatter must parse to a mapping", errs)
+    if isinstance(fm, dict):
+        _require(fm.get("name") == "cuj-auditor",
+                 "cuj-auditor: frontmatter 'name' must be 'cuj-auditor'", errs)
+        desc = str(fm.get("description", "")).lower()
+        _require(bool(desc.strip()),
+                 "cuj-auditor: frontmatter needs a non-empty 'description'", errs)
+        _require("journey" in desc or "cuj" in desc,
+                 "cuj-auditor: description should carry a trigger phrase (journey / CUJ)",
+                 errs)
+    low = body.lower()
+    _require(".ux/audits" in low, "cuj-auditor: must state where reports are written", errs)
+    _require("cuj-contract" in low, "cuj-auditor: must point at the CUJ file contract", errs)
+    # The point of view, stated as a negative. This is the whole persona: the journey is
+    # the rubric, so an opinion about the design is out of scope by construction.
+    _require("no heuristics" in low,
+             "cuj-auditor: must state that it holds no heuristics", errs)
+    _require("do not evaluate the design" in low,
+             "cuj-auditor: must state that it executes the contract, not judges the design",
+             errs)
+    # The two-stage severity mapping (SPEC §9.4). `"criticality" in low` is the exact
+    # check that went green through a total behavioural failure in Checkpoint E — the word
+    # proves nothing. Assert the MECHANISM: classify first, then clamp by the journey's
+    # own rating.
+    _require("clamp" in low,
+             "cuj-auditor: severity must be clamped by the journey's criticality", errs)
+    _require("severity" in low and "0" in body and "4" in body,
+             "cuj-auditor: must state the 0-4 severity scale", errs)
+    # A passing step is severity 0, and severity 0 is a non-finding. If passing steps ever
+    # leak into the findings list, `total: 0` stops meaning "passed" and the whole
+    # report-shape contract for this auditor collapses.
+    _require("appendix" in low,
+             "cuj-auditor: passing steps must go in the Appendix", errs)
+    _require("never as a finding" in low,
+             "cuj-auditor: a passing step is sev0 and must never be emitted as a finding",
+             errs)
+    # `total: 0` is this auditor's SUCCESS state — unique in the suite. The counts are the
+    # only thing distinguishing it from a run that checked nothing.
+    _require("total: 0" in low,
+             "cuj-auditor: must state that a passing journey is total: 0", errs)
+    _require("denominator" in low,
+             "cuj-auditor: must state that N counts journeys selected, not journeys run",
+             errs)
+    # The violation citation format: reports are useless if they don't name the step.
+    _require("step" in low and "cuj-001" in low,
+             "cuj-auditor: must show the '<CUJ-id> ... step <n>' violation format", errs)
+    # Render-vs-source honesty, inherited from the suite (report contract §6).
+    _require("potential — unverified" in low,
+             "cuj-auditor: must label static-mode findings 'potential — unverified'", errs)
+    # Findings-only. For THIS auditor the tempting edit isn't host code — it's the journey
+    # file that just failed. Softening a journey to match what the app does is grading your
+    # own homework, and it is the one maker/checker collision v2 can actually suffer.
+    _require("never" in low and ("edit" in low or "modif" in low) and "host" in low,
+             "cuj-auditor: must state the never-edit-host-code boundary", errs)
+    _require(".ux/cujs" in low,
+             "cuj-auditor: must state that it never repairs the journey it is grading",
+             errs)
+    return errs
+
+
 def check_spec_cuj_skill() -> list[str]:
     """The authoring workflow: interview -> write -> validate -> ask -> splice."""
     errs: list[str] = []
@@ -461,7 +536,8 @@ def main() -> int:
     failures = (check_persona() + check_skill() + check_command() + check_references()
                 + check_rollup_skill() + check_rollup_command()
                 + check_cuj_author_persona() + check_spec_cuj_skill()
-                + check_ux_spec_command() + check_cuj_references())
+                + check_ux_spec_command() + check_cuj_references()
+                + check_cuj_auditor_persona())
     if failures:
         print("FAIL — components:")
         for f in failures:

@@ -22,6 +22,7 @@ DOC_FILES = [
     "README.md", "AGENTS.md", "CONTRIBUTING.md", "SPEC.md", "CHANGELOG.md",
     "agents/usability-auditor.md",
     "agents/cuj-author.md",
+    "agents/cuj-auditor.md",
     "commands/usability-audit.md",
     "commands/ux-spec.md",
     "skills/usability-audit/SKILL.md",
