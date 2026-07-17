@@ -10,7 +10,7 @@ fan-out the [report contract](../usability-audit/references/report-contract.md) 
 for: every auditor writes the same schema into `.ux/audits/`, so their reports are
 comparable and can be rolled up into a single verdict.
 
-One native auditor plus two wrapped from **[web-quality-skills](https://github.com/addyosmani/web-quality-skills)**
+Two native auditors plus two wrapped from **[web-quality-skills](https://github.com/addyosmani/web-quality-skills)**
 (the same-author companion to `agent-skills`, a coherent suite of web-quality checks):
 
 | Auditor | Source | Frameworks | Report `auditor` |
@@ -18,6 +18,7 @@ One native auditor plus two wrapped from **[web-quality-skills](https://github.c
 | Usability | native `skills/usability-audit` | Nielsen / Shneiderman / AI / NPCIS | `usability` |
 | Accessibility | wrap `web-quality-skills:accessibility` | WCAG 2.2 | `accessibility` |
 | Web performance | wrap `web-quality-skills:performance` (+ `core-web-vitals`) | Core Web Vitals | `web-performance` |
+| Critical user journeys | native `skills/audit-cuj` **(conditional — needs `.ux/cujs/`)** | the host's own CUJ files | `cuj` |
 
 > Extensible: `web-quality-skills` also ships `seo` and `best-practices`; add them as
 > future suite members the same way (register their frameworks in
@@ -39,9 +40,12 @@ One native auditor plus two wrapped from **[web-quality-skills](https://github.c
 1. **Discover available auditors.** Usability is always available (native). For
    accessibility and web performance, check whether the wrapping skills
    (`web-quality-skills:accessibility`, `web-quality-skills:performance`) are installed.
-   **Skip any auditor whose skill is not installed / unavailable, and record it as
-   skipped with a note giving the reason** in the roll-up — a missing auditor must never
-   read as a clean pass. Honor `--only`.
+   The CUJ auditor (`audit-cuj`) is native but **conditional**: it runs only when the host
+   has authored journeys — `.ux/cujs/` exists and is non-empty. **Skip any auditor that is
+   unavailable — a wrapped skill not installed, or `.ux/cujs/` absent/empty — and record it
+   as skipped with a note giving the reason** in the roll-up (for CUJ: `"no CUJs authored;
+   run /ux-spec"`). A missing or skipped auditor must never read as a clean pass. Honor
+   `--only`.
 
 2. **Fan out.** Run each selected auditor against the same `target`/`--scope`:
    - **Usability** — invoke the native `usability-audit` skill; it already writes a
@@ -51,6 +55,9 @@ One native auditor plus two wrapped from **[web-quality-skills](https://github.c
    - **Web performance** — invoke `web-quality-skills:performance` (and
      `core-web-vitals`); capture its findings, respecting its metric-honesty rule
      (unmeasured = potential, never fabricated).
+   - **Critical user journeys** — invoke the native `audit-cuj` skill; it replays the
+     host's `.ux/cujs/` and already writes a contract report. It honors its own
+     static-vs-live honesty rule (a static run cannot produce a verified pass).
 
 3. **Normalize into the shared contract.** For each wrapped auditor, write a
    contract-conforming report at `.ux/audits/<auditor>-<YYYYMMDD>-<HHMMSS>.md` — same
@@ -64,15 +71,22 @@ One native auditor plus two wrapped from **[web-quality-skills](https://github.c
    - **Omit severity 0** (non-problems), same as usability.
    Set `auditor` and `frameworks` per the table above; carry the tool's evidence
    (screenshots, `file:line`, measured metrics) into the Evidence field.
+   The **native** auditors (usability, `cuj`) already emit contract reports — no external
+   remapping. **CUJ carries one exception the roll-up must respect: `total: 0` is a *pass*
+   (every journey verified clean), not "found nothing".** Read the CUJ report's
+   executive-summary counts and `frameworks` list to tell a clean pass from a run that
+   verified nothing (`frameworks: [cuj-contract]` alone signals the latter), and never
+   fold a *skipped* CUJ run into the passed column.
 
 4. **Append the index.** Add one `.ux/audits/index.md` row per auditor run (append-only),
    exactly as a single-auditor run does.
 
 5. **Write the roll-up.** Create `.ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md`: a per-auditor
-   severity table, the auditors that ran vs. were skipped (with reasons), a merged
-   top-issues list ordered by severity across all auditors, and an overall **go/no-go
-   verdict** (e.g. no-go if any sev4, or any auditor reports a sev3 blocker). Link to each
-   individual report.
+   severity table, the auditors that ran vs. were skipped (with reasons — including a
+   CUJ run skipped for want of `.ux/cujs/`), a merged top-issues list ordered by severity
+   across all auditors, and an overall **go/no-go verdict** (e.g. no-go if any sev4, or any
+   auditor reports a sev3 blocker — a CUJ sev4 is a blocked journey and forces no-go). A
+   skipped CUJ run is disclosed, never scored as a pass. Link to each individual report.
 
 6. **Self-check.** Validate every report and the index with
    [`scripts/validate_report.py`](../../scripts/validate_report.py), and confirm the safety

@@ -536,12 +536,13 @@ Two rules carry the weight, and both guard a false PASS:
 
 ## Phase 10 — Suite roll-up
 
-### T10.1 — Wire `audit-cuj` into `/ux-audit`
-- [ ] Add the fourth, **conditional** suite member.
+### T10.1 — Wire `audit-cuj` into `/ux-audit` ✅
+- [x] Add the fourth, **conditional** suite member.
 - **Files:** `skills/ux-audit/SKILL.md` (4th auditor-table row; step 1 discovery; step 2
-  fan-out; step 3 severity mapping); `commands/ux-audit.md` (`argument-hint` + `--only`);
-  `tests/test_components.py:172` tuple → `("usability", "accessibility", "web-performance",
-  "audit-cuj")`.
+  fan-out; step 3 native/`total: 0` caveat; step 5 verdict); `commands/ux-audit.md`
+  (`argument-hint` + `--only cuj` + discovery note); `tests/test_components.py` tuple (loop
+  at line ~185, not `:172` — that's the existence guard) → `("usability", "accessibility",
+  "web-performance", "audit-cuj")`.
 - **Acceptance:** `audit-cuj` is native but **conditional** on a non-empty `.ux/cujs/` —
   absent → **skipped with the reason recorded**, never a silent pass, and the go/no-go must
   not read a *skipped* run as a *passed* one. Use **`"audit-cuj"`, not `"cuj"`**, in the

@@ -179,8 +179,9 @@ def check_rollup_skill() -> list[str]:
         _require(bool(str(fm.get("description", "")).strip()),
                  "rollup skill: frontmatter needs a non-empty 'description'", errs)
     low = body.lower()
-    # Fans out to all three auditors.
-    for auditor in ("usability", "accessibility", "web-performance"):
+    # Fans out to all four auditors. Use "audit-cuj", not "cuj": the latter is a bare
+    # substring the CUJ-heavy body matches anywhere, so it would assert essentially nothing.
+    for auditor in ("usability", "accessibility", "web-performance", "audit-cuj"):
         _require(auditor in low, f"rollup skill: must fan out to the {auditor} auditor",
                  errs)
     # Wraps the external web-quality-skills suite for a11y + performance.
