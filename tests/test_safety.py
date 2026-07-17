@@ -20,7 +20,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from audit_safety import changes_confined_to  # noqa: E402
+from audit_safety import EXTRA_BY_PROFILE, changes_confined_to, snapshot  # noqa: E402
+
+# Bind to the PROFILES, not to the function's defaults. The profiles are what the CLI
+# resolves and therefore what every auditor actually runs under; asserting against a
+# hand-passed allowlist would leave a widened profile undetected.
+AUDIT = EXTRA_BY_PROFILE["audit"]
+AUTHORING = EXTRA_BY_PROFILE["authoring"]
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -83,6 +89,102 @@ def main() -> int:
         v = changes_confined_to(repo, ".ux/audits/")
         if v:
             failures.append(f"run 2 should be confined, got violations: {v}")
+
+        # --- The authoring allowlist (/ux-spec) -----------------------------------
+        # /ux-spec writes .ux/cujs/ and the host's SPEC.md. That is an OPT-IN widening
+        # for authoring only; the audit invariant above must survive it untouched.
+        (repo / ".ux" / "cujs").mkdir(parents=True, exist_ok=True)
+        (repo / ".ux" / "cujs" / "CUJ-001-add-a-task.md").write_text("# CUJ-001\n")
+        (repo / "SPEC.md").write_text("# Spec\n\n## Critical User Journeys\n")
+
+        # 1. THE INVARIANT DOES NOT WEAKEN. This is the assertion the whole allowlist
+        #    design exists to protect: an AUDIT run that touched .ux/cujs/ or SPEC.md is
+        #    still a violation. If this ever passes, the suite's safety story is gone.
+        #    Note it resolves the `audit` PROFILE rather than passing an allowlist by
+        #    hand — otherwise widening that profile would go undetected here, which is
+        #    the precise mistake this assertion exists to prevent.
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT)
+        if not any(".ux/cujs" in x for x in v):
+            failures.append(f"audit profile must still flag .ux/cujs/, got: {v}")
+        if not any("SPEC.md" in x for x in v):
+            failures.append(f"audit profile must still flag SPEC.md, got: {v}")
+
+        # 2. The authoring profile permits exactly those two paths.
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUTHORING)
+        if v:
+            failures.append(f"authoring profile should permit .ux/cujs/ + SPEC.md, got: {v}")
+
+        # 3. Authoring is not a licence to touch host code — findings-only still means
+        #    never editing host application code.
+        (repo / "app.tsx").write_text("// mutated during authoring\n")
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUTHORING)
+        if not any("app.tsx" in x for x in v):
+            failures.append(f"authoring profile must still flag app.tsx, got: {v}")
+        (repo / "app.tsx").write_text("export const App = () => null;\n")  # revert
+
+        # 4. Prefix confusion. A naive startswith() would read "SPEC.md" as permitting
+        #    SPEC.md.bak, and ".ux/cujs" as permitting .ux/cujs-evil/. An allowlist that
+        #    silently widens to neighbouring paths is worse than no allowlist.
+        (repo / "SPEC.md.bak").write_text("# sneaky\n")
+        (repo / ".ux" / "cujs-evil").mkdir(parents=True, exist_ok=True)
+        (repo / ".ux" / "cujs-evil" / "x.md").write_text("# sneaky\n")
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUTHORING)
+        if not any("SPEC.md.bak" in x for x in v):
+            failures.append(f"'SPEC.md' must be an exact match, not a prefix: {v}")
+        if not any("cujs-evil" in x for x in v):
+            failures.append(f"'.ux/cujs/' must be a directory prefix, not a substring: {v}")
+        (repo / "SPEC.md.bak").unlink()
+        (repo / ".ux" / "cujs-evil" / "x.md").unlink()
+        (repo / ".ux" / "cujs-evil").rmdir()
+        (repo / "SPEC.md").unlink()
+        (repo / ".ux" / "cujs" / "CUJ-001-add-a-task.md").unlink()
+
+        # --- The baseline (found by Checkpoint F) ---------------------------------
+        # With no baseline this script diffs the working tree against HEAD, so it cannot
+        # tell "the agent edited host code" from "the repo was already dirty". That is
+        # fatal for the regression-check use case that /cuj-audit exists to serve: "did
+        # my refactor break a journey?" means the tree is dirty with the refactor BY
+        # DEFINITION, so the check fires on the user's own work every single run. A check
+        # that cries wolf gets muted, and a muted check is a deleted one.
+        (repo / "app.tsx").write_text("// the user's own uncommitted refactor\n")
+        base = snapshot(repo)
+
+        # 5. Pre-existing dirt belongs to the USER, not to the agent.
+        _write_report(repo, "cuj-20260716-120000.md")
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT, baseline=base)
+        if v:
+            failures.append(f"a pre-existing dirty file must not be blamed on the agent: {v}")
+
+        # 6. THE ONE THAT MATTERS, and the reason the baseline is content-addressed
+        #    rather than a set of paths. In the primary use case the dirty files ARE the
+        #    app files under audit — so "ignore paths that were already dirty" would blind
+        #    the check precisely where it must see, letting an agent edit any of them
+        #    undetected. That would weaken the invariant SPEC §9.6 calls critical, in
+        #    exchange for fixing a false positive. Digests keep both.
+        (repo / "app.tsx").write_text("// the user's refactor, SILENTLY EDITED by the agent\n")
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT, baseline=base)
+        if not any("app.tsx" in x for x in v):
+            failures.append(
+                f"an agent edit to an ALREADY-DIRTY file must still be flagged: {v}")
+
+        # 7. Restoring the baseline content clears it again (no false positive on churn).
+        (repo / "app.tsx").write_text("// the user's own uncommitted refactor\n")
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT, baseline=base)
+        if v:
+            failures.append(f"restoring baseline content should clear the violation: {v}")
+
+        # 8. No baseline => exactly the old behavior. Like `allow`, the baseline is
+        #    keyword-only and opt-in: the invariant must never weaken by default, and a
+        #    caller that passes nothing gets the strict check it had before.
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT)
+        if not any("app.tsx" in x for x in v):
+            failures.append(f"without a baseline, any dirty file is still a violation: {v}")
+
+        # 9. A file the agent CREATES is never in the baseline, so it is always caught.
+        (repo / "sneaky.ts").write_text("// created by the agent mid-audit\n")
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT, baseline=base)
+        if not any("sneaky.ts" in x for x in v):
+            failures.append(f"a file created after the baseline must be flagged: {v}")
 
     if failures:
         print("FAIL — safety:")

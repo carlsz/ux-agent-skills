@@ -28,18 +28,17 @@ ux-agent-skills/
 ├── .claude-plugin/
 │   ├── plugin.json         # plugin manifest — metadata only, no component lists
 │   └── marketplace.json    # marketplace catalog (self-lists this plugin)
-├── agents/                 # personas — the who
+├── agents/                 # personas — the who (usability-auditor, cuj-author, cuj-auditor)
 ├── skills/                 # skills — the how
-│   ├── usability-audit/
-│   │   ├── SKILL.md            # the usability audit workflow
-│   │   └── references/         # framework lenses + the shared report contract
-│   └── ux-audit/
-│       └── SKILL.md            # the suite roll-up (fan-out + normalize + verdict)
+│   ├── usability-audit/        # usability audit workflow + framework lenses & report contract
+│   ├── ux-audit/               # the suite roll-up (fan-out + normalize + verdict)
+│   ├── spec-cuj/               # author critical user journeys by interview (+ cuj-contract)
+│   └── audit-cuj/              # replay journeys, report the step that broke
 ├── commands/               # slash commands — the when
-├── scripts/                # validate_report.py, audit_safety.py
-├── tests/                  # contract / component / safety / docs / evals checks
+├── scripts/                # validate_report.py, validate_cuj.py, audit_safety.py
+├── tests/                  # contract / component / cuj-contract / safety / docs / evals checks
 ├── evals/                  # trigger + behavioral evals (Sprout as the target)
-└── SPEC.md                 # design spec for the usability auditor (what/why, not how-to)
+└── SPEC.md                 # this repo's design spec (§1–8 usability auditor, §9 CUJs) — what/why
 ```
 
 **Components are auto-discovered by convention** from `agents/`, `skills/*/SKILL.md`, and
@@ -94,6 +93,28 @@ conformance work. In order:
    auditor list in `check_rollup_skill()`.
 8. **Docs** — add the file to `DOC_FILES` in `tests/test_docs.py` so its links get checked, and
    update the catalog in the relevant subdirectory README.
+
+## The CUJ family (a second triad)
+
+Beside the auditor suite sits the **critical-user-journey** family — two triads, not one. The
+**authoring** side (`cuj-author` persona, `spec-cuj` skill, `/ux-spec` command) interviews the
+user and writes journey files under the host's `.ux/cujs/`; the **verification** side
+(`cuj-auditor` persona, `audit-cuj` skill, `/cuj-audit` command) is an auditor like any other,
+reusing the report contract with `auditor: cuj`. Two things to keep straight when you touch it:
+
+- **Authoring writes host docs; auditors don't.** `/ux-spec` may write `.ux/cujs/` and — only
+  after asking, only the marker block, always with a diff — the host's `SPEC.md`. That does not
+  weaken the findings-only invariant: auditors, `/cuj-audit` included, still write nowhere but
+  `.ux/audits/`. The `audit_safety.py` allowlist is keyword-only and authoring-scoped for
+  exactly this reason (SPEC.md §9.6–9.7).
+- **Two files named `SPEC.md` now exist.** Say **"the host's `SPEC.md`"** (the journey index
+  `/ux-spec` regenerates in an adopting app) vs **"this repo's `SPEC.md`"** (the design spec you
+  are reading) explicitly — never the bare name. This repo's `SPEC.md` has no CUJ index; it has
+  no journeys.
+- **`audit-cuj` is a conditional roll-up member.** It joins the `/ux-audit` fan-out only when
+  `.ux/cujs/` is non-empty; absent, it is skipped **with a reason**, never a silent pass. Its
+  entry in `check_rollup_skill()` uses the literal `"audit-cuj"`, not `"cuj"` (which the
+  CUJ-heavy body would match anywhere).
 
 ## The two test traps
 

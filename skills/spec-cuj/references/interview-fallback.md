@@ -1,0 +1,124 @@
+# Interview — built-in fallback question set
+
+Used **only when [`agent-skills:interview-me`](https://github.com/addyosmani/agent-skills) is
+not installed.** Prefer that skill when it's available: it is purpose-built for driving an
+interview to confidence, and this set is a smaller thing.
+
+When you use this instead, **say so** — tell the user `interview-me` isn't installed, that
+you're using the built-in questions, and offer to install it. Never auto-install, and never
+degrade silently: they should know which interview they got.
+
+## How to run it
+
+**One question at a time. Wait for the answer. Follow up before moving on.**
+
+A wall of questions gets a wall of shallow answers, and it throws away the follow-up — which
+is usually where the real answer is. The questions below are a spine, not a script: if an
+answer is vague, the [`cuj-author`](../../../agents/cuj-author.md) refusals apply and you ask
+again. Getting one journey right beats getting three written down.
+
+You may **lead with a guess** on the descriptive questions — who the actor is, where they
+start, what the first action is — the way `interview-me` would; a person corrects a wrong
+guess faster than they build an answer from nothing. But questions 7 (`success_criteria`) and
+the per-step *"what do you see?"* (`expect`), and question 8 (`criticality`), are
+**`elicited, never guessed`**: ask them open and refuse a bare "yes". Those three are what
+`audit-cuj` grades against, so a guess there sets a target nobody actually chose.
+
+Read the draft back before writing anything. When they correct you, **the correction is the
+answer** — record that, not your paraphrase of it.
+
+## The questions
+
+### 1. Who is this for — specifically?
+> "Who does this journey? Not 'users' — describe one person, and what they already have when
+> they arrive."
+
+Fills `actor`. Reject "the user" / "everyone". You want *"Returning user with 3-10 existing
+tasks, opens the app daily to capture new ones"*. If the honest answer really is everyone,
+this journey isn't critical — it's generic. Say so.
+
+### 2. What are they here to get done?
+> "What outcome are they after? And what does *done* look like **to them**?"
+
+Fills `goal`. An outcome, not a feature list. "Capture a new task without navigating away",
+not "the form has a title field and a save button".
+
+### 3. Where do they start?
+> "What screen or URL are they on when this begins?"
+
+Fills `entry_point`. Ask it even when the answer looks obvious — an unasked field silently
+becomes an invented one, and "/" is a guess until they say it.
+
+### 4. What has to be true before they begin?
+> "What state is the app in already? Logged in? Existing data? Anything they had to do first?"
+
+Fills `preconditions` — things that are **true**, not things they **do**. This split matters:
+if setup hides inside step 1, then *failing to set up* looks identical to *the journey being
+broken*, and a verification run reports a catastrophe for what was really "couldn't run this".
+
+**Then ask the follow-up: "how do I get back to that state to run this again?"** A
+precondition that expires — "nothing harvested today", "first visit", "the list is empty" —
+is true once and false forever after, so the second run fails a **healthy** app. That is the
+mirror of the failure everything else here guards against, and just as bad: a check that
+cries wolf gets muted, and a muted check is a deleted one.
+
+### 5. Walk me through it. What's the first thing they do?
+> "…and what do they **see** happen?"
+
+Fills `steps[0]`. The second half of that question is the one that matters. Push until the
+answer is **observable**:
+
+| They say | Ask |
+|----------|-----|
+| "It works" | "If I were watching over your shoulder — what would I see?" |
+| "The state updates" | "What changes on screen?" |
+| "It saves" | "How would you know it saved? What would prove it?" |
+
+### 6. And then? *(repeat until the goal is reached)*
+> "What's next — and what do they see happen?"
+
+Fills the remaining `steps`. One action per step: "fill out the form and submit" is two.
+Findings cite `step <n>`, so a bundled step points at a range and diagnoses nothing.
+
+### 7. Afterwards — how do you know it really worked?
+> "The steps all did what you said. What must still be true a minute later, or after a
+> reload, for this to have actually succeeded?"
+
+Fills `success_criteria`. **Don't let this become a restatement of the last step.** The
+question is deliberately about *after*, because a journey can pass every step and still lose
+the data on reload — and if the criteria just echo step N, that whole class of silent failure
+is invisible.
+
+### 8. If this broke tomorrow, what breaks for the business?
+> "Not 'would it be bad' — what specifically stops working, and for whom?"
+
+Fills `criticality` — grade from **their answer**, not their enthusiasm, and make that same
+answer the `## Narrative` so the rating is auditable.
+
+**Do not force a spread.** If two journeys both genuinely kill the product, both are
+`critical` and that is the correct answer — capture and completion in a to-do app are two
+halves of one contract, and ranking one below the other to make a table look varied would be
+a lie. Push back on **evidence**, not headcount: a journey whose honest answer is "users
+would be mildly annoyed" marked `critical`, or a rating with no "what breaks" behind it. And
+if they push back and they're right, say so — never manufacture a rationale for why their
+rating is fine.
+
+### 9. What is this journey deliberately *not* about?
+> "What related things should I leave out — separate journeys, edge cases, other paths?"
+
+Fills `## Out of scope`. This stops scope creep now, and later it stops a verification run
+inventing coverage it never had.
+
+### 10. Why does this journey exist?
+> "Two or three sentences — why does this matter enough to write down?"
+
+Fills `## Narrative`. This is the part a reviewer argues with, and the thing that justifies
+the `criticality` in question 8.
+
+## When they can't answer
+
+**Record the gap and stop.** Do not fill it in for them.
+
+An incomplete journey marked incomplete beats a fabricated one that looks finished. A guessed
+step doesn't just mislead once — it becomes the standard every future verification run is
+graded against, and it will pass, because you wrote it to match what you imagined.

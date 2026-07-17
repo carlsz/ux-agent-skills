@@ -1,7 +1,7 @@
 ---
 name: ux-audit
 description: Run the full UX auditor suite (usability + accessibility + web performance) against one target, normalize into the shared .ux/audits contract, and produce one combined go/no-go roll-up. Invokes the ux-audit skill.
-argument-hint: "[target] [--scope <area>] [--only usability,accessibility,web-performance] [--mode static|live|hybrid]"
+argument-hint: "[target] [--scope <area>] [--only usability,accessibility,web-performance,cuj] [--mode static|live|hybrid]"
 ---
 
 # /ux-audit
@@ -27,8 +27,10 @@ Namespaced as `/ux-agent-skills:ux-audit` to avoid colliding with `agent-skills`
 ## Behavior
 
 1. Discover available auditors — usability (native), accessibility and web performance
-   (wrapping [`web-quality-skills`](https://github.com/addyosmani/web-quality-skills)).
-   Skip any that aren't installed and disclose it in the roll-up.
+   (wrapping [`web-quality-skills`](https://github.com/addyosmani/web-quality-skills)), and
+   critical user journeys (native `cuj`, **conditional** on a non-empty `.ux/cujs/`).
+   Skip any that aren't available — a wrapped skill not installed, or no CUJs authored — and
+   disclose it in the roll-up; a skipped auditor is never treated as a pass.
 2. Invoke the `ux-audit` skill, which runs each auditor, normalizes every result into a
    contract report under `.ux/audits/`, appends the index, and writes
    `rollup-<timestamp>.md`.

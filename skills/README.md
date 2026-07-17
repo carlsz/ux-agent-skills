@@ -16,5 +16,10 @@ heuristics it applies) and `report-contract.md` (the shared `.ux/audits` contrac
   [`report-contract.md`](usability-audit/references/report-contract.md).
 - [`ux-audit/`](ux-audit/SKILL.md) — the suite roll-up: fans out to usability +
   accessibility + web-performance (wrapping
-  [web-quality-skills](https://github.com/addyosmani/web-quality-skills)) and merges the
-  results into one go/no-go verdict.
+  [web-quality-skills](https://github.com/addyosmani/web-quality-skills)) plus the conditional
+  CUJ auditor, and merges the results into one go/no-go verdict.
+- [`spec-cuj/`](spec-cuj/SKILL.md) — author critical user journeys by interview → write each to
+  `.ux/cujs/` → regenerate the host `SPEC.md` index. Holds the shared
+  [`cuj-contract.md`](spec-cuj/references/cuj-contract.md).
+- [`audit-cuj/`](audit-cuj/SKILL.md) — replay a stored journey against the running app and
+  report the exact step that broke (`auditor: cuj`).
