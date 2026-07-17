@@ -381,6 +381,90 @@ def _severity_bar(fm: dict) -> str:
     return f'<section class="sevrow">{"".join(cells)}</section>'
 
 
+# --- banners (cuj verified-pass, provenance) ---------------------------------------------
+
+def _banner(kind: str, icon: str, body_html: str) -> str:
+    return f'<div class="banner {kind}"><span class="b-ico">{icon}</span><div>{body_html}</div></div>'
+
+
+def _pass_banner(fm: dict, body: str) -> str:
+    """For a cuj report, render the verified-pass (or verified-nothing) banner.
+
+    `total: 0` is the cuj success state — but it is byte-identical to a run that verified
+    nothing. The discriminator is the frameworks: `task-completion` + `success-criteria`
+    mean journeys were actually completed and checked; `cuj-contract` alone means a static
+    or all-skipped run that proved nothing. This makes that distinction loud.
+    """
+    if fm.get("auditor") != "cuj" or (fm.get("summary") or {}).get("total", 0) != 0:
+        return ""
+    verified = {"task-completion", "success-criteria"} & set(fm.get("frameworks") or [])
+    jm = re.search(r"(\d+)\s*/\s*(\d+)\s+journeys passed", body)
+    sm = re.search(r"(\d+)\s+of\s+(\d+)\s+steps verified", body)
+    if verified:
+        detail = ""
+        if jm:
+            detail += f" — {jm.group(1)}/{jm.group(2)} journeys passed"
+        if sm:
+            detail += f", {sm.group(1)}/{sm.group(2)} steps verified"
+        return _banner("pass", "✓", f"<b>Verified pass</b>{detail}. Every journey completed "
+                       "live and persisted a reload.")
+    return _banner("warn", "⚠", "<b>Nothing verified</b> — <code>total: 0</code> here is a "
+                   "static or all-skipped run (frameworks: <code>cuj-contract</code> only), "
+                   "<b>not</b> a pass.")
+
+
+def _provenance_banner(fm: dict, body: str) -> str:
+    """Disclaim the two cases that most mislead: dev-lab web-perf, and static-mode runs."""
+    low = body.lower()
+    if fm.get("auditor") == "web-performance" and (
+        "dev-mode" in low or "dev mode" in low or "not production" in low
+    ):
+        return _banner("info", "🔬", "<b>Dev-mode lab metrics</b> — indicative timings from "
+                       "<code>next dev</code>, <b>not</b> production Core Web Vitals. Findings "
+                       "are structural/potential, not measured regressions.")
+    if fm.get("mode") == "static":
+        return _banner("info", "📄", "<b>Static mode</b> — traced from source, not observed on "
+                       "a running app; runtime-perception findings are <em>potential</em>.")
+    return ""
+
+
+# --- evidence fallback gallery (for reports with no walkthrough) --------------------------
+
+EVIDENCE_IMG_RE = re.compile(
+    r"\.?/?(assets/[\w./-]+\.(?:png|jpe?g|gif|webp|svg))", re.IGNORECASE
+)
+
+
+def _collect_evidence_images(body: str, report_dir: Path) -> list[tuple[str, str]]:
+    """Find every embeddable `assets/*` image path in the body (embed *or* bare path).
+
+    Older reports cite Evidence screenshots as bare `(./assets/x.png)` parentheticals rather
+    than `![](...)` embeds, so a `## Walkthrough`-less report would otherwise show no images.
+    This harvests both forms, dedupes by resolved path, and keeps first-seen order.
+    """
+    seen: set[str] = set()
+    out: list[tuple[str, str]] = []
+    for m in EVIDENCE_IMG_RE.finditer(body):
+        path = "./" + m.group(1)
+        if path in seen:
+            continue
+        uri = _embed_asset(report_dir, path)
+        if uri is not None:
+            seen.add(path)
+            out.append((path, uri))
+    return out
+
+
+def _gallery_section(imgs: list[tuple[str, str]]) -> str:
+    tiles = "".join(
+        f'<figure class="tile"><img alt="{html.escape(Path(p).stem)}" src="{uri}">'
+        f"<figcaption>{html.escape(Path(p).name)}</figcaption></figure>"
+        for p, uri in imgs
+    )
+    return ('<section class="md"><h2>Evidence gallery</h2>'
+            f'<div class="gallery">{tiles}</div></section>')
+
+
 # --- page shell --------------------------------------------------------------------------
 
 STYLE = """
@@ -470,6 +554,22 @@ min-width:3.6rem;text-align:center}
 .dots{display:flex;flex-wrap:wrap;gap:.4rem;justify-content:center;margin-top:.55rem}
 .dot{width:.5rem;height:.5rem;border-radius:50%;border:0;padding:0;cursor:pointer;
 background:var(--line)}.dot.is-active{background:var(--fg)}
+/* banners: cuj pass, provenance */
+.banner{display:flex;gap:.6rem;align-items:baseline;border:1px solid var(--line);
+border-left-width:4px;border-radius:12px;padding:.75rem 1rem;margin:.2rem 0 1.5rem;
+font-size:.9rem;box-shadow:var(--shadow)}
+.banner .b-ico{font-size:1rem;line-height:1.4}
+.banner b{font-weight:750}
+.banner.pass{background:rgba(34,197,94,.10);border-color:rgba(34,197,94,.35);border-left-color:#22c55e}
+.banner.warn{background:rgba(234,179,8,.12);border-color:rgba(234,179,8,.4);border-left-color:#eab308}
+.banner.info{background:rgba(148,163,184,.13);border-color:rgba(148,163,184,.4);border-left-color:#94a3b8}
+/* evidence fallback gallery */
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.8rem}
+.tile{margin:0;background:var(--card);border:1px solid var(--line);border-radius:10px;
+padding:.5rem;box-shadow:var(--shadow)}
+.tile img{width:100%;max-height:220px;height:auto;object-fit:contain;background:var(--bg);
+border:1px solid var(--line);border-radius:7px;display:block}
+.tile figcaption{font-size:.72rem;color:var(--mut);margin-top:.35rem;word-break:break-all}
 """
 
 SCRIPT = """
@@ -514,21 +614,40 @@ def render(md_path: str | Path) -> str:
         raise ValueError(f"{md_path.name}: {body}")
 
     matches = list(SECTION_RE.finditer(body))
-    parts: list[str] = [_render_header(fm), _severity_bar(fm)]
-
+    sections: list[tuple[str, str]] = []  # (lowercased name, section html)
+    has_walkthrough = False
     for idx, m in enumerate(matches):
         name = m.group(1).strip()
         start = m.end()
         end = matches[idx + 1].start() if idx + 1 < len(matches) else len(body)
         content = body[start:end]
-        parts.append(f"<section class=\"md\"><h2>{_inline(name, report_dir)}</h2>")
         if name.lower() == "findings":
-            parts.append(_render_findings(content, report_dir))
+            inner = _render_findings(content, report_dir)
         elif name.lower() == "walkthrough":
-            parts.append(_render_walkthrough(content, report_dir))
+            has_walkthrough = True
+            inner = _render_walkthrough(content, report_dir)
         else:
-            parts.append(_render_blocks(content, report_dir))
-        parts.append("</section>")
+            inner = _render_blocks(content, report_dir)
+        sections.append((name.lower(),
+                         f'<section class="md"><h2>{_inline(name, report_dir)}</h2>{inner}</section>'))
+
+    # A report with no walkthrough surfaces its Evidence screenshots as a fallback gallery.
+    gallery = ""
+    if not has_walkthrough:
+        imgs = _collect_evidence_images(body, report_dir)
+        if imgs:
+            gallery = _gallery_section(imgs)
+
+    parts: list[str] = [_render_header(fm), _pass_banner(fm, body),
+                        _provenance_banner(fm, body), _severity_bar(fm)]
+    injected = False
+    for nlow, shtml in sections:
+        if nlow == "appendix" and gallery and not injected:
+            parts.append(gallery)
+            injected = True
+        parts.append(shtml)
+    if gallery and not injected:
+        parts.append(gallery)
 
     auditor = fm.get("auditor", "report")
     scope = fm.get("scope", "")
