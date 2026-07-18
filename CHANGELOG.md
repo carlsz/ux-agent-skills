@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-17
+
+### Changed
+- **Docs: sharpened positioning and README structure.** The tagline and intro now read
+  "Audit, spec, **and verify**" / "specify, audit, and rigorously verify" — dropping the
+  "design and ship" / "generate" wording that overclaimed against the **findings-only**
+  boundary. The corrected tagline is synced across `README.md`, `plugin.json`, and
+  `marketplace.json` (the marketplace-facing descriptions).
+- README restructured for readability: **Installation** moved up front (right after the
+  command table), the **shared reporting contract** promoted to a top-level section, the
+  **visual walk-through / HTML** section moved ahead of the Sprout example, the roll-up
+  heading shortened, command namespacing standardized (`/ux-agent-skills:<name>`), and the
+  duplicated repo-layout tree trimmed to a pointer to `AGENTS.md`.
+- Documented **[agent-skills](https://github.com/addyosmani/agent-skills) as an optional
+  install** in the Dependency section — it sharpens the CUJ-authoring interview via
+  `interview-me`, and `/ux-spec` degrades gracefully without it.
+
 ## [0.5.0] - 2026-07-17
 
 ### Added

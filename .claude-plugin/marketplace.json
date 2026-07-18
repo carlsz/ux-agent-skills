@@ -1,13 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "ux-agent-skills",
-  "description": "Audit, spec, design, and ship production-grade experiences for humans and agents alike.",
+  "description": "Audit, spec, and verify production-grade experiences for humans and agents alike.",
   "owner": { "name": "Carl Sziebert", "email": "carlsz@gmail.com" },
   "plugins": [
     {
       "name": "ux-agent-skills",
       "source": "./",
-      "description": "Audit, spec, design, and ship production-grade experiences for humans and agents alike.",
+      "description": "Audit, spec, and verify production-grade experiences for humans and agents alike.",
       "dependencies": ["web-quality-skills@addy-web-quality-skills"]
     }
   ]
