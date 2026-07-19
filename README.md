@@ -231,6 +231,12 @@ That writes one normalized report per auditor plus a `rollup-<timestamp>.md` wit
 per-auditor severity table and a go/no-go verdict — all under `Sprout/.ux/audits/`, and
 nothing else in the repo is touched.
 
+![A completed /ux-audit run of Sprout in Claude Code: the roll-up go/no-go verdict and per-auditor table on the left, and the self-contained HTML usability report — findings as cards, prioritized fixes — open in a browser on the right.](docs/images/audit-review.png)
+
+*A full `/ux-audit` roll-up — the go/no-go verdict and per-auditor summary in the session,
+and the derived HTML report open in a browser. Everything under `.ux/audits/`; nothing else
+in the host repo is touched.*
+
 ## Contributing
 
 Working on the plugin itself? See [AGENTS.md](AGENTS.md) for the repo layout, the
