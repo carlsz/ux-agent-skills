@@ -138,7 +138,7 @@ in the host repo beside the audits:
 > it's absent, `/ux-spec` falls back to its own question set, tells you it did, and offers to
 > install it rather than auto-installing. The capability degrades; it never fails.
 
-## The roll-up — every auditor, one verdict
+## The roll-up — one target, one verdict
 
 One command runs the default auditors against a single target and merges the results:
 

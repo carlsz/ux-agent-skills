@@ -22,7 +22,8 @@ Namespaced as `/ux-agent-skills:ux-audit` to avoid colliding with `agent-skills`
 - **`--only <list>`** — run a subset of auditors, e.g.
   `--only usability,accessibility`. Default (no `--only`): usability, accessibility, and
   cuj — **web performance is opt-in** and runs only when you name `web-performance` here.
-- **`--all`** — run every available auditor, **including web performance**.
+- **`--all`** — run every available auditor, **including web performance**. If both `--only`
+  and `--all` are given, `--only` wins.
 - **`--mode static | live | hybrid`** — passed through to auditors that support it
   (usability).
 

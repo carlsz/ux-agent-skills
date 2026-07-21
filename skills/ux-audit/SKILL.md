@@ -36,7 +36,8 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 - `--only <list>` — run a subset, e.g. `--only usability,accessibility`. Default (no
   `--only`): usability, accessibility, and cuj — **web performance is excluded (opt-in)**.
   Naming `web-performance` in `--only` runs it.
-- `--all` — run every available auditor, **including web performance**.
+- `--all` — run every available auditor, **including web performance**. If both `--only` and
+  `--all` are given, `--only` wins (the explicit subset is honored; `--all` is ignored).
 - `--mode` — passed through to auditors that support it (usability).
 
 ## Workflow

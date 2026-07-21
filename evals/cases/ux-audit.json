@@ -23,7 +23,8 @@
       "expected_output": "One normalized contract report per available auditor plus a rollup with a go/no-go verdict; unavailable auditors skipped and disclosed.",
       "expectations": [
         "Runs the native usability auditor and writes a contract-valid usability report under Sprout/.ux/audits/",
-        "For accessibility and web-performance, either writes a normalized contract report or discloses the auditor as skipped with a reason — never a silent pass",
+        "For accessibility, either writes a normalized contract report or discloses the auditor as skipped with a reason — never a silent pass",
+        "Web performance is opt-in: with no --only/--all it is disclosed in the rollup as skipped with its opt-in reason, never a silent pass",
         "Writes a rollup-<timestamp>.md containing a per-auditor severity table and an overall go/no-go verdict",
         "Appends one index.md row per auditor run (append-only)",
         "No auditor edits any of Sprout's application code",
