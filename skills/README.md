@@ -14,10 +14,11 @@ heuristics it applies) and `report-contract.md` (the shared `.ux/audits` contrac
 - [`usability-audit/`](usability-audit/SKILL.md) — the usability heuristic-evaluation
   workflow (static / live / hybrid). Also holds the framework lenses and the shared
   [`report-contract.md`](usability-audit/references/report-contract.md).
-- [`ux-audit/`](ux-audit/SKILL.md) — the suite roll-up: fans out to usability +
-  accessibility + web-performance (wrapping
+- [`ux-audit/`](ux-audit/SKILL.md) — the suite roll-up: by default fans out to usability +
+  accessibility (accessibility wrapping
   [web-quality-skills](https://github.com/addyosmani/web-quality-skills)) plus the conditional
-  CUJ auditor, and merges the results into one go/no-go verdict.
+  CUJ auditor, with web-performance (also wrapped) available opt-in via `--only`/`--all`, and
+  merges the results into one go/no-go verdict.
 - [`spec-cuj/`](spec-cuj/SKILL.md) — author critical user journeys by interview → write each to
   `.ux/cujs/` → regenerate the host `SPEC.md` index. Holds the shared
   [`cuj-contract.md`](spec-cuj/references/cuj-contract.md).
