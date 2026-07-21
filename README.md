@@ -138,18 +138,21 @@ in the host repo beside the audits:
 > it's absent, `/ux-spec` falls back to its own question set, tells you it did, and offers to
 > install it rather than auto-installing. The capability degrades; it never fails.
 
-## The roll-up — every auditor, one verdict
+## The roll-up — one target, one verdict
 
-One command runs every available auditor against a single target and merges the results:
+One command runs the default auditors against a single target and merges the results:
 
 ```
-/ux-agent-skills:ux-audit [target] [--scope <area>] [--only usability,accessibility,web-performance,cuj]
+/ux-agent-skills:ux-audit [target] [--scope <area>] [--only usability,accessibility,web-performance,cuj] [--all]
 ```
 
-It fans out to the **usability** and **critical-user-journeys** auditors (both native) plus
-**accessibility** and **web performance** — the latter two wrapped from
+By default it fans out to the **usability**, **accessibility**, and **critical-user-journeys**
+auditors — usability and CUJ native, accessibility wrapped from
 [web-quality-skills](https://github.com/addyosmani/web-quality-skills), the same-author
-companion to `agent-skills`. Every result is **normalized into the shared contract**
+companion to `agent-skills`. **Web performance** (also wrapped from `web-quality-skills`) is
+**opt-in** — its metrics are usually dev-mode / localhost lab numbers rather than production
+Core Web Vitals, so it runs only when you add `--only web-performance` or `--all`, and is
+otherwise disclosed as skipped. Every result is **normalized into the shared contract**
 (0–4 severity), so all reports land in one `.ux/audits/` directory, share one `index.md`,
 and are summarized in a `rollup-<timestamp>.md` with a per-auditor table and an overall
 **go/no-go verdict**. Auditors whose wrapping skill isn't installed are skipped and
@@ -220,7 +223,8 @@ The auditor drives the flow in a browser, then writes a severity-scored report t
   cancel" hint, and commit on blur only when the value changed.
 ```
 
-To run the **whole suite** (usability + accessibility + web performance) before shipping:
+To run the **default suite** (usability + accessibility + cuj) before shipping — add `--all`
+to also include the opt-in web-performance auditor:
 
 ```
 > Run a full UX audit of Sprout before launch.

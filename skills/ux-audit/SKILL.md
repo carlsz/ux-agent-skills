@@ -1,14 +1,16 @@
 ---
 name: ux-audit
-description: Suite roll-up — fan out to every available UX auditor (usability, accessibility, web performance) against one target, normalize all findings into the shared .ux/audits contract, and produce one combined go/no-go roll-up. Use for "full UX audit", "audit everything", "ux-audit".
+description: Suite roll-up — fan out to the default UX auditors (usability, accessibility, cuj) against one target, with web performance available opt-in, normalize all findings into the shared .ux/audits contract, and produce one combined go/no-go roll-up. Use for "full UX audit", "audit everything", "ux-audit".
 ---
 
 # UX Audit — suite roll-up
 
-Run the whole auditor suite against one target and merge the results. This is the
-fan-out the [report contract](../usability-audit/references/report-contract.md) was built
-for: every auditor writes the same schema into `.ux/audits/`, so their reports are
-comparable and can be rolled up into a single verdict.
+Run the auditor suite against one target and merge the results. By default this fans out to
+usability, accessibility, and cuj; web performance is opt-in (add `--only web-performance` or
+`--all`). This is the fan-out the
+[report contract](../usability-audit/references/report-contract.md) was built for: every
+auditor writes the same schema into `.ux/audits/`, so their reports are comparable and can be
+rolled up into a single verdict.
 
 Two native auditors plus two wrapped from **[web-quality-skills](https://github.com/addyosmani/web-quality-skills)**
 (the same-author companion to `agent-skills`, a coherent suite of web-quality checks):
@@ -17,7 +19,7 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 |---------|--------|------------|------------------|
 | Usability | native `skills/usability-audit` | Nielsen / Shneiderman / AI / NPCIS | `usability` |
 | Accessibility | wrap `web-quality-skills:accessibility` | WCAG 2.2 | `accessibility` |
-| Web performance | wrap `web-quality-skills:performance` (+ `core-web-vitals`) | Core Web Vitals | `web-performance` |
+| Web performance | wrap `web-quality-skills:performance` (+ `core-web-vitals`) **(opt-in — excluded from the default bundle; add via `--only web-performance` or `--all`)** | Core Web Vitals | `web-performance` |
 | Critical user journeys | native `skills/audit-cuj` **(conditional — needs `.ux/cujs/`)** | the host's own CUJ files | `cuj` |
 
 > Extensible: `web-quality-skills` also ships `seo` and `best-practices`; add them as
@@ -31,8 +33,11 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 - `target` — a URL (preferred; a11y and web-perf need a render) or a repo path. Omit to
   infer from the running dev server / repo.
 - `--scope` — narrow to a flow or area, shared by all auditors.
-- `--only <list>` — run a subset, e.g. `--only usability,accessibility`. Default: all
-  available.
+- `--only <list>` — run a subset, e.g. `--only usability,accessibility`. Default (no
+  `--only`): usability, accessibility, and cuj — **web performance is excluded (opt-in)**.
+  Naming `web-performance` in `--only` runs it.
+- `--all` — run every available auditor, **including web performance**. If both `--only` and
+  `--all` are given, `--only` wins (the explicit subset is honored; `--all` is ignored).
 - `--mode` — passed through to auditors that support it (usability).
 
 ## Workflow
@@ -40,21 +45,26 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 1. **Discover available auditors.** Usability is always available (native). For
    accessibility and web performance, check whether the wrapping skills
    (`web-quality-skills:accessibility`, `web-quality-skills:performance`) are installed.
+   **Web performance is also opt-in**: even when installed, it runs only when named in
+   `--only` or when `--all` is passed — it is *excluded from the default bundle* (its
+   metrics are typically dev-mode / localhost lab numbers, not production Core Web Vitals).
+   When it is not opted into, record it as skipped with the reason `"web performance is
+   opt-in; run with --only web-performance or --all"`, exactly as the CUJ skip is disclosed.
    The CUJ auditor (`audit-cuj`) is native but **conditional**: it runs only when the host
    has authored journeys — `.ux/cujs/` exists and is non-empty. **Skip any auditor that is
-   unavailable — a wrapped skill not installed, or `.ux/cujs/` absent/empty — and record it
-   as skipped with a note giving the reason** in the roll-up (for CUJ: `"no CUJs authored;
-   run /ux-spec"`). A missing or skipped auditor must never read as a clean pass. Honor
-   `--only`.
+   unavailable — a wrapped skill not installed, `.ux/cujs/` absent/empty, or web performance
+   not opted into — and record it as skipped with a note giving the reason** in the roll-up
+   (for CUJ: `"no CUJs authored; run /ux-spec"`). A missing, skipped, or opt-in-not-requested
+   auditor must never read as a clean pass. Honor `--only` and `--all`.
 
 2. **Fan out.** Run each selected auditor against the same `target`/`--scope`:
    - **Usability** — invoke the native `usability-audit` skill; it already writes a
      contract report.
    - **Accessibility** — invoke `web-quality-skills:accessibility`; capture its WCAG
      findings.
-   - **Web performance** — invoke `web-quality-skills:performance` (and
-     `core-web-vitals`); capture its findings, respecting its metric-honesty rule
-     (unmeasured = potential, never fabricated).
+   - **Web performance** *(only when opted in via `--only web-performance` or `--all`)* —
+     invoke `web-quality-skills:performance` (and `core-web-vitals`); capture its findings,
+     respecting its metric-honesty rule (unmeasured = potential, never fabricated).
    - **Critical user journeys** — invoke the native `audit-cuj` skill; it replays the
      host's `.ux/cujs/` and already writes a contract report. It honors its own
      static-vs-live honesty rule (a static run cannot produce a verified pass).
@@ -83,10 +93,12 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 
 5. **Write the roll-up.** Create `.ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md`: a per-auditor
    severity table, the auditors that ran vs. were skipped (with reasons — including a
-   CUJ run skipped for want of `.ux/cujs/`), a merged top-issues list ordered by severity
-   across all auditors, and an overall **go/no-go verdict** (e.g. no-go if any sev4, or any
-   auditor reports a sev3 blocker — a CUJ sev4 is a blocked journey and forces no-go). A
-   skipped CUJ run is disclosed, never scored as a pass. Link to each individual report.
+   CUJ run skipped for want of `.ux/cujs/`, and web performance skipped when not opted into,
+   with its opt-in reason), a merged top-issues list ordered by severity across all
+   auditors, and an overall **go/no-go verdict** (e.g. no-go if any sev4, or any auditor
+   reports a sev3 blocker — a CUJ sev4 is a blocked journey and forces no-go). A skipped CUJ
+   run, or a web-performance run not opted into, is disclosed, never scored as a pass. Link
+   to each individual report.
 
 6. **Self-check.** Validate every report and the index with
    [`scripts/validate_report.py`](../../scripts/validate_report.py), and confirm the safety
