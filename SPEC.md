@@ -252,6 +252,21 @@ and safety invariants:
    through `main()`, not through the function. `--allow-no-writes` is the deliberate,
    typed-on-purpose escape hatch for a run genuinely expected to write nothing.
 
+   **The negative half sees ignored escapes too, within bounds.** `_dirty_paths()` stays
+   blind to ignored files, so a host that ignores `.ux/` wholesale — which §11.6 nudges
+   authenticated runs toward — used to hide `.ux/cujs/` as well, and an auditor writing
+   there is exactly the violation "never repair the journey you are grading" exists to
+   catch. `changes_confined_to()` adds a second, **pathspec-scoped** pass over the union of
+   every profile's paths, which makes an ignored `.ux/cujs/` behave identically to a
+   non-ignored one. Scoped, not widened: `node_modules/` is never in view, and
+   `tests/test_safety.py` case 12 still fails the naive `--ignored` version.
+
+   **What it still cannot see, stated rather than implied:** an escape into an ignored path
+   *no profile names* — `dist/x.js` in a repo that ignores `dist/`. Closing that needs
+   either the repo-wide scan that fails every audit or digesting every ignored file at
+   snapshot time (minutes, with `node_modules/`). The plausible escape for this suite is
+   editing tracked application source, which both halves see today.
+
    The positive half takes the **same content-addressed baseline** as the negative one, for
    the same reason. Under an ignored prefix, prior runs' reports never leave the working
    tree, so without digests they would answer "were writes observed?" for every later run —

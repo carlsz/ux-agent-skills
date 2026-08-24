@@ -176,6 +176,14 @@ Three things to keep straight when you touch it:
   `snapshot()` sweeps the write prefixes with `writes_under()` so ignored prior reports are
   digested rather than mistaken for the current run's output.
 
+- **`_dirty_paths()` never gets `--ignored`, and the second pass is why it doesn't have to.**
+  `changes_confined_to()` looks for ignored escapes through a pathspec-scoped sweep of
+  `_ALL_PROFILE_PATHS` — the union of every profile's paths, so an ignored `.ux/cujs/`
+  behaves like a non-ignored one under the `audit` profile. `test_safety.py` case 12 fails
+  the repo-wide version and cases 20-25 fail its absence, so both mistakes are caught. An
+  escape into an ignored path no profile names (`dist/`, `tmp/`) is a **known, documented**
+  gap — see the module docstring; do not close it by widening the scan.
+
 **Testing it trips only one trap.** No new `SKILL.md` exists, so `test_evals.py` stays green
 and **no eval case is needed** — the loud trap never fires. The silent one does:
 `check_auth_handoff_reference()` had to be hand-wired into `CHECKS`, and `_check_auth_wiring()`

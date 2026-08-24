@@ -310,6 +310,69 @@ def main() -> int:
                             "the positive half")
 
     # ---------------------------------------------------------------------------------
+    # An escape can hide behind an ignore rule. The host that ignores `.ux/` wholesale is
+    # the one §11.6 nudges authenticated runs toward — and it hides `.ux/cujs/`, which is a
+    # VIOLATION under the audit profile. `_dirty_paths()` cannot see it and must not try.
+    # ---------------------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp)
+        _init_repo(repo)
+        (repo / "node_modules").mkdir()
+        (repo / "node_modules" / "index.js").write_text("// vendored\n")
+        (repo / "dist").mkdir()
+        (repo / ".gitignore").write_text(".ux/\nnode_modules/\ndist/\n")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "ignore .ux wholesale")
+
+        _write_report(repo, "cuj-20260824-130000.md")
+        (repo / ".ux" / "cujs").mkdir(parents=True, exist_ok=True)
+        (repo / ".ux" / "cujs" / "checkout.md").write_text("# repaired by the auditor\n")
+
+        # 20. THE SILENT ESCAPE. An auditor writing `.ux/cujs/` is the mechanical form of
+        #     "never repair the journey you are grading". With `.ux/` ignored, `git status`
+        #     shows nothing and the whole violation used to vanish.
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT)
+        if not any("checkout.md" in x for x in v):
+            failures.append(f"an auditor writing .ux/cujs/ is a violation even when the "
+                            f"host ignores .ux/ wholesale: {v}")
+
+        # 21. ...and the same write is PERMITTED for /ux-spec. The asymmetry is the point;
+        #     the second pass must not flatten it into "ignored means violation".
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUTHORING)
+        if v:
+            failures.append(f"authoring may write .ux/cujs/, ignored or not: {v}")
+
+        # 22. The false-positive guard, restated for the new pass. It is pathspec-scoped to
+        #     paths a profile names, so vendored and build output stay invisible — putting
+        #     `--ignored` on `_dirty_paths()` instead would flag every one of them.
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT)
+        for noise in ("node_modules", "dist"):
+            if any(noise in x for x in v):
+                failures.append(f"ignored {noise}/ is not a violation: {v}")
+
+        # 23. A pre-existing `.ux/cujs/` is the user's own authored journeys, not this run's
+        #     escape. The baseline must forgive it — otherwise every audit of a repo that
+        #     has CUJs cries wolf, and a muted check is a deleted one.
+        base = snapshot(repo)
+        if not any("checkout.md" in k for k in base):
+            failures.append("snapshot must digest ignored files under EVERY profile's "
+                            f"paths, not just the active one: {sorted(base)}")
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT, baseline=base)
+        if v:
+            failures.append(f"journeys already present at run start are not an escape: {v}")
+
+        # 24. ...but touching one after the baseline is an escape again, ignored or not —
+        #     the same content-addressed rule the visible half already applies.
+        (repo / ".ux" / "cujs" / "checkout.md").write_text("# edited mid-audit\n")
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT, baseline=base)
+        if not any("checkout.md" in x for x in v):
+            failures.append(f"editing a journey mid-audit must be caught: {v}")
+
+        # 25. End to end through the CLI, which is the only form a skill runs.
+        if _cli(repo) != 1:
+            failures.append("CLI: an ignored escape outside the profile must exit 1")
+
+    # ---------------------------------------------------------------------------------
     # Paths git C-quotes. The two halves of the union quote DIFFERENT subsets, so without
     # `-z` the same file gets two spellings and neither matches a file on disk.
     # ---------------------------------------------------------------------------------
@@ -337,7 +400,8 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — safety (invariant + idempotency + writes_under + CLI wiring)")
+    print("PASS — safety (invariant + idempotency + writes_under + CLI wiring "
+          "+ ignored escapes)")
     return 0
 
 

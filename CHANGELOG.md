@@ -30,6 +30,14 @@ All notable changes to this project are documented here. The format is based on
   only form auditors invoke: `audit_safety.py <repo>` now exits **1** when nothing escaped
   but nothing was written either, and prints the observed writes when it passes.
   `--allow-no-writes` opts out for a run genuinely expected to write nothing.
+- **`changes_confined_to()` now catches an escape hidden behind an ignore rule.** A host
+  that gitignores `.ux/` wholesale — which the artifact posture nudges authenticated runs
+  toward — also hid `.ux/cujs/`, so an auditor writing there (the mechanical form of "never
+  repair the journey you are grading") passed silently. A second, pathspec-scoped pass over
+  every profile's paths makes an ignored `.ux/cujs/` behave exactly like a non-ignored one.
+  Deliberately *not* a repo-wide `--ignored` scan, which would read every `node_modules/` as
+  an escape; the residual gap (ignored paths no profile names) is documented rather than
+  implied away.
 - Both halves of the invariant now take the same content-addressed `baseline`, and
   `snapshot()` sweeps the profile's write prefixes with `writes_under()`. Under an ignored
   `.ux/audits/`, prior runs' reports never leave the working tree — without this they would

@@ -34,6 +34,22 @@ user's own uncommitted work on every run. A check that cries wolf gets muted, an
 check is a deleted one. Take a `--snapshot` at run start and pass it back with
 `--baseline`; only the delta is the agent's.
 
+**Where the negative half can still not see.** `_dirty_paths()` is blind to ignored files
+on purpose — a repo-wide `--ignored` scan would read every `node_modules/` as an escape and
+fail every audit in every normal repo. `changes_confined_to()` therefore adds a second,
+**pathspec-scoped** pass over `_ALL_PROFILE_PATHS`, which closes the case this suite actually
+cares about: a host that ignores `.ux/` wholesale (§11.6 nudges authenticated runs that way)
+would otherwise hide `.ux/cujs/`, and an auditor writing there is the violation the CUJ rule
+exists to catch.
+
+What remains outside its view is an escape into an ignored path that **no profile names** —
+an agent writing `dist/x.js` in a repo that ignores `dist/`. That is a real gap and is stated
+here rather than papered over. Closing it needs either a repo-wide ignored scan (the
+false-positive disaster above) or digesting every ignored file at snapshot time (minutes, in
+a repo with `node_modules/`). Neither trade is worth it for a suite whose plausible escape is
+editing tracked application source — which both halves see today. If that calculus changes,
+change it deliberately; do not reach for `--ignored` on `_dirty_paths()`.
+
 **The baseline is content-addressed, not a path list**, and that distinction is the whole
 design. In the scenario above the dirty files ARE the app files under audit, so ignoring
 *paths* that were already dirty would blind the check exactly where it must see — an agent
@@ -63,6 +79,16 @@ EXTRA_BY_PROFILE: dict[str, tuple[str, ...]] = {
     "audit": (),
     "authoring": (".ux/cujs/", "SPEC.md"),
 }
+
+
+# Every path SOME profile permits. The union, not any one profile's list — which is what
+# makes it useful: a path in here is permitted for one caller and a violation for another,
+# and that asymmetry ("never repair the journey you are grading") is the suite's own rule.
+# Used as the pathspec set for the ignored-escape scan in `changes_confined_to()`; see the
+# "Where the negative half can still not see" note in the module docstring.
+_ALL_PROFILE_PATHS: tuple[str, ...] = tuple(sorted(
+    {DEFAULT_PREFIX, *(p for paths in EXTRA_BY_PROFILE.values() for p in paths)}
+))
 
 
 def _allowed(path: str, entries: tuple[str, ...]) -> bool:
@@ -190,7 +216,7 @@ def _digest(repo: Path, path: str) -> str:
 
 
 def snapshot(repo: str | Path,
-             prefixes: tuple[str, ...] = (DEFAULT_PREFIX,)) -> dict[str, str]:
+             prefixes: tuple[str, ...] = _ALL_PROFILE_PATHS) -> dict[str, str]:
     """Digest every already-dirty path, for passing back as `baseline`.
 
     Take this at the START of a run. What it records is "the mess that was already here",
@@ -201,6 +227,12 @@ def snapshot(repo: str | Path,
     ignores `.ux/audits/` (SPEC §11.6) the prior runs' reports would be absent from the
     baseline, so the *next* run would count them as its own writes and the positive half of
     the invariant would pass without the run writing anything.
+
+    The default is **every** profile's paths, not the active profile's, because both halves
+    of `changes_confined_to()` may look at any of them: `.ux/cujs/` is what the `audit`
+    profile must be caught writing. A baseline that covered only the active profile would
+    leave the other paths unforgiven, and a pre-existing `.ux/cujs/` would read as this
+    run's escape on every audit of a repo that has journeys.
     """
     repo = Path(repo)
     paths = {*_dirty_paths(repo)}
@@ -221,6 +253,17 @@ def changes_confined_to(repo: str | Path, prefix: str = DEFAULT_PREFIX, *,
     started — but only while its content is byte-identical. Touch a pre-existing dirty
     file and it is a violation again. `baseline=None` assumes the repo started clean,
     which is the strict reading and stays the default.
+
+    **Two passes, because an escape can hide behind an ignore rule.** `_dirty_paths()` is
+    blind to ignored files and must stay that way (see its docstring). But a host that
+    ignores `.ux/` wholesale — which §11.6 nudges authenticated runs toward — thereby hides
+    `.ux/cujs/` too, and `.ux/cujs/` is a *violation* under the `audit` profile. The escape
+    that matters most to this suite was the one it could not see.
+
+    The second pass is scoped to `_ALL_PROFILE_PATHS` by pathspec, so it looks only where
+    some profile could legitimately write and never at `node_modules/`. Its effect is to
+    make an ignored `.ux/cujs/` behave exactly like a non-ignored one — same violation,
+    same baseline forgiveness — rather than to widen what counts as a violation.
     """
     repo = Path(repo)
     permitted = (prefix, *allow)
@@ -231,7 +274,16 @@ def changes_confined_to(repo: str | Path, prefix: str = DEFAULT_PREFIX, *,
         if baseline is not None and baseline.get(path, _MISSING) == _digest(repo, path):
             continue  # already dirty at run start, and untouched since
         violations.append(path)
-    return violations
+
+    seen = {*violations}
+    for candidate in _ALL_PROFILE_PATHS:
+        if _allowed(candidate, permitted):
+            continue  # this profile may write here; the positive half counts it instead
+        for path in writes_under(repo, candidate, baseline=baseline):
+            if not _allowed(path, permitted) and path not in seen:
+                seen.add(path)
+                violations.append(path)
+    return sorted(violations)
 
 
 USAGE = """usage:
@@ -242,6 +294,12 @@ USAGE = """usage:
 Profiles — paths the agent is permitted to have touched:
   audit      .ux/audits/                       every auditor (default)
   authoring  .ux/audits/, .ux/cujs/, SPEC.md   /ux-spec only
+
+Scope — what this can and cannot see:
+  Both halves see tracked files and untracked-not-ignored ones anywhere in the repo, plus
+  ignored files under any path a profile names (.ux/audits/, .ux/cujs/, SPEC.md). An escape
+  into an ignored path no profile names — dist/, tmp/ — is outside its view; widening the
+  scan repo-wide would read every node_modules/ as an escape. See the module docstring.
 
 Both halves must hold (SPEC §5.2):
   Nothing changed outside the profile, AND the run's own writes were observed inside it.
@@ -324,12 +382,10 @@ def main(argv: list[str]) -> int:
         return 2
 
     if take_snapshot:
-        # Sweep the profile's own write targets too, not just `git status`. Those are the
-        # paths the positive half measures, and in a repo that ignores them `_dirty_paths()`
-        # cannot see what was already there. See `snapshot()`.
-        prefixes = (DEFAULT_PREFIX, *(p for p in EXTRA_BY_PROFILE[profile]
-                                      if p.endswith("/")))
-        json.dump(snapshot(repo, prefixes), sys.stdout, indent=2, sort_keys=True)
+        # Sweeps every profile's write targets, not just `git status` and not just this
+        # profile's — those are the paths both halves may look at, and where they are
+        # ignored `_dirty_paths()` cannot see what was already there. See `snapshot()`.
+        json.dump(snapshot(repo), sys.stdout, indent=2, sort_keys=True)
         sys.stdout.write("\n")
         return 0
 
