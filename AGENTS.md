@@ -145,6 +145,39 @@ above does *not* apply to it: no persona (a mechanical transform holds no point 
 needs `evals/cases/render-report.json` (the loud glob) and a hand-wired `check_*` in
 `test_components.py` (the silent one).
 
+## Auth handoff — a shared reference, not a fourth component
+
+Auditing behind a login wall (SPEC §11) added **one file and no components**:
+[`skills/usability-audit/references/auth-handoff.md`](skills/usability-audit/references/auth-handoff.md).
+It holds the handshake, the two-clause capability test, the Never list, and the artifact
+posture; `usability-audit`, `audit-cuj`, and `ux-audit` **cite** it and never restate it —
+the same one-owner/consumers-link-across rule as `report-contract.md`.
+
+Three things to keep straight when you touch it:
+
+- **The auditor still never authenticates.** SPEC §6's *"Never enter credentials, bypass
+  authentication"* is preserved verbatim; the rung is the *human* signing in while the agent
+  waits. Anything that would have the agent hold a secret is out of scope by construction,
+  not by policy debate.
+- **The credential is not the leak — the capture is.** Most of the reference is about what an
+  authenticated run leaves behind (screenshots and quoted records of a real account), which
+  is why an authenticated run recommends gitignoring `.ux/audits/` **wholesale**: the HTML
+  companion base64-embeds the images, so ignoring `assets/` alone does nothing.
+- **`EXTRA_BY_PROFILE["audit"]` stays `()`.** The auditor *recommends* the `.gitignore` line
+  and the user applies it. Do not widen the baseline profile to let an auditor edit a
+  root-level file.
+
+**Testing it trips only one trap.** No new `SKILL.md` exists, so `test_evals.py` stays green
+and **no eval case is needed** — the loud trap never fires. The silent one does:
+`check_auth_handoff_reference()` had to be hand-wired into `CHECKS`, and `_check_auth_wiring()`
+is called from all four components that can meet a login wall (both auditor personas, both
+auditing skills). Without those call sites, any of the four could drop the Never list with the
+suite still green.
+
+**`_flatten()` before phrase-matching.** These are hard-wrapped prose files, so a probe like
+`"session material"` fails the moment the sentence shifts by a word, and inside a blockquote
+the continuation carries a `> ` as well. Match content, never the wrap.
+
 ## The two test traps
 
 The authoring rules aren't written down anywhere except the tests — and the two most important ones

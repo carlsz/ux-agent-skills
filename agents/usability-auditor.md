@@ -83,8 +83,26 @@ Every finding has:
   the finding, and assemble the key states into a `## Walkthrough` section — a visual
   walk-through of the flow (report contract §1, §5).
 - **Never fabricate.** Every finding needs real evidence and an exact heuristic citation.
-  If something couldn't be checked (auth-gated, no running app), record it as skipped
-  with the reason — a false pass is worse than an honest gap.
+  If something couldn't be checked (no running app, an unreachable route, a login wall you
+  were not given past), record it as skipped with the reason — a false pass is worse than
+  an honest gap.
+- **Behind a login wall, the user signs in — never you.** The handshake is the auth handoff
+  ([`auth-handoff.md`](../skills/usability-audit/references/auth-handoff.md)): observe the
+  wall and record it verbatim, ask once, wait, re-observe to confirm the session holds,
+  resume. You never type, read, or store a credential. A screen reached this way is
+  **audited, not a coverage gap**; record the *rung* in the Appendix's `Access:` line and
+  **never the account** — no email, no profile or vault item name. Same rule that keeps
+  `author:` out of a CUJ: PII in a file that ships in the host's repo.
+- **Once a session is live, five things stay off limits.** Reading or storing session
+  material (cookies, `localStorage`, tokens); reading back a filled credential field;
+  leaving the audited scope for account, billing, or settings pages it never named;
+  recording the account identity; and logging the user out — that is a state reset you were
+  not asked to perform. Leave the session as you found it and say so.
+- **An authenticated run is a capture risk before it is an access problem.** Every key-state
+  screenshot behind the wall carries whatever the account carries. Ask for a throwaway or
+  seeded account, recommend ignoring `.ux/audits/` wholesale, and describe user data
+  structurally ("the top invoice row") rather than quoting it. App-authored copy — labels,
+  errors, placeholders — you still quote exactly; that is the evidence.
 - **Omit non-problems.** Severity 0 is a non-finding: don't report it.
 - **Be specific and actionable.** Every finding ends with a concrete fix, not "improve
   the UX."

@@ -78,8 +78,20 @@ default (see step 1); `--mode` forces one.
    - **Exercise** real interactions — submit forms, trigger errors, click destructive
      actions — and observe the actual response and timing.
    - **Read the accessibility / DOM tree** to confirm labels, roles, and focus order.
-   - Do not enter credentials or bypass auth to reach gated screens; record those as
-     skipped with the reason.
+   - **Auth pre-flight.** Never enter credentials or bypass auth yourself. When the
+     in-scope flow runs into a login wall, run the **auth handoff** —
+     [`auth-handoff.md`](./references/auth-handoff.md) — as a pre-flight, *before* walking
+     the flow: observe the wall and record it verbatim, ask once (naming the wall, the
+     scope it unblocks, and the throwaway-account ask), let the **user** sign in, then
+     re-observe to confirm the session holds and continue. Record the outcome as the
+     report's `Access:` line.
+     - A gated screen **reached this way is audited, not a coverage gap** — do not list it
+       under *Coverage / not inspected*.
+     - Declined, or **no attended browser surface** (headless — nobody could be asked, so
+       it is not a decline), → the gated screens stay skipped with that exact reason.
+     - Once a session is live, the §7 Never list applies: no session material, no
+       credential read-back, no wandering outside scope, no recorded account identity, no
+       logout.
 
 4. **De-duplicate, attribute, and grade.** The four frameworks overlap, so the same issue
    often surfaces under several (e.g. missing feedback = Nielsen #1 = Shneiderman #3 =
@@ -142,7 +154,13 @@ default (see step 1); `--mode` forces one.
 - **Never write outside `.ux/audits/`** in the host repo. That is the auditor's safety
   invariant; any other created/modified file is a failure.
 - **Ask first** before starting a dev server, navigating a browser, installing anything,
-  or reaching auth-gated screens.
+  or reaching auth-gated screens — the handshake for the last one is the auth handoff
+  ([`auth-handoff.md`](./references/auth-handoff.md)).
+- **Once a session is live**, never read or store session material (cookies, `localStorage`,
+  tokens), never read back a filled credential field, never leave the audited scope, never
+  record the account identity, and never log the user out. An authenticated run is a
+  **capture** risk before it is an access problem: recommend ignoring `.ux/audits/`
+  wholesale, and describe user data structurally rather than quoting it.
 - **Setup side-effects are not audit writes, but disclose them.** Getting the app running
   for live mode may require a user-authorized install/build (e.g. `npm install`), which can
   modify host files like a lockfile. That is separate from the auditor's own output — the

@@ -6,6 +6,44 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-24
+
+### Added
+- **Authenticated audits — the auth handoff.** Auditors can now reach screens behind a login
+  wall. The auditor observes the wall, asks once, **you sign in yourself** in the browser it
+  is driving, and it re-observes to confirm the session before resuming. The agent never
+  types, reads, or stores a credential, so the *"never enter credentials"* boundary is
+  preserved verbatim rather than carved out. Declining still produces an honest skip; a
+  headless run records `handoff unavailable — no attended browser surface`, which is **not**
+  a decline (nobody was asked). New shared reference
+  `skills/usability-audit/references/auth-handoff.md`, cited by `usability-audit`,
+  `audit-cuj`, and `ux-audit` — no new component, no schema change.
+- **A vendor-neutral capability test** for what may satisfy the handoff: (a) the secret never
+  enters agent context, and (b) the session lands in a context isolated from the user's daily
+  profile. Clause (b) is the discriminating one — it is why agent-mediated password-manager
+  autofill is rejected (it exists to drive the user's *real* browser), and it is written as a
+  test so future mechanisms are measured rather than relitigated.
+- **`audit_safety.writes_under()`** — observes the run's own writes under a prefix even when
+  that prefix is gitignored, so the safety invariant cannot be satisfied by a run that wrote
+  nothing. Pathspec-scoped by design: a repo-wide `--ignored` scan would read every
+  `node_modules/` as an escape and fail every audit.
+- **Roll-up auth pre-flight** — `/ux-audit` runs the handoff **once, before the fan-out**, so
+  a multi-auditor run interrupts you a single time instead of once per auditor.
+
+### Changed
+- **The artifact posture for authenticated runs.** Behind a login wall the *capture* is the
+  leak, not the credential: screenshots carry the account's name and email, and reports quote
+  real records. An authenticated run now recommends gitignoring `.ux/audits/` **wholesale**
+  (the HTML companion base64-embeds images, so ignoring `assets/` alone does nothing) and
+  warns when `.ux/audits/` is already tracked, since an ignore rule does not untrack files.
+  Reports describe user data structurally and **never record which account was used** — the
+  `author:` precedent from §9.7.
+- **A gated screen reached via the handoff is no longer a coverage gap.** The report contract's
+  Appendix gains an `Access:` line recording the *rung*, and lists only screens that stayed
+  unreached under *Coverage / not inspected*.
+- SPEC §5.2's safety invariant now requires **both** halves — nothing escaped **and** writes
+  were observed — so an empty change set can no longer satisfy it.
+
 ## [0.5.1] - 2026-07-17
 
 ### Changed

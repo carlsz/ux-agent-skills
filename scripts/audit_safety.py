@@ -81,18 +81,18 @@ def _allowed(path: str, entries: tuple[str, ...]) -> bool:
     return False
 
 
-def _dirty_paths(repo: Path) -> list[str]:
-    """Every path currently differing from HEAD.
-
-    Uses `git status --porcelain -uall` so untracked files are listed individually
-    (a whole new `.ux/` dir would otherwise collapse to one summary line).
-    """
+def _git(repo: Path, *args: str) -> str:
+    """Run a git command in `repo` and return its stdout."""
     proc = subprocess.run(
-        ["git", "-C", str(repo), "status", "--porcelain", "-uall"],
-        check=True, capture_output=True, text=True,
+        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True,
     )
+    return proc.stdout
+
+
+def _parse_porcelain(stdout: str) -> list[str]:
+    """Paths out of `git status --porcelain` v1 output."""
     paths: list[str] = []
-    for line in proc.stdout.splitlines():
+    for line in stdout.splitlines():
         if not line.strip():
             continue
         # Porcelain v1: 2 status chars, a space, then the path (handle "R old -> new").
@@ -101,6 +101,52 @@ def _dirty_paths(repo: Path) -> list[str]:
             path = path.split(" -> ", 1)[1]
         paths.append(path.strip().strip('"'))
     return paths
+
+
+def _dirty_paths(repo: Path) -> list[str]:
+    """Every path currently differing from HEAD.
+
+    Uses `git status --porcelain -uall` so untracked files are listed individually
+    (a whole new `.ux/` dir would otherwise collapse to one summary line).
+
+    **Deliberately blind to ignored files, and it must stay that way.** Adding
+    `--ignored` here to make an ignored `.ux/audits/` visible (see `writes_under`) would
+    also surface every *other* ignored path in the host repo — `node_modules/`, `.venv/`,
+    build output — and `changes_confined_to()` would report each one as a violation
+    outside the profile. Every audit in a normal repo would fail. Ignored-ness is made
+    visible where it is needed by scoping to a pathspec, never by widening this scan.
+    """
+    return _parse_porcelain(_git(repo, "status", "--porcelain", "-uall"))
+
+
+def writes_under(repo: str | Path, prefix: str = DEFAULT_PREFIX) -> list[str]:
+    """Files the run actually wrote under `prefix` — **even when `prefix` is gitignored**.
+
+    `changes_confined_to()` answers "did anything escape?", which is satisfied by an empty
+    working tree: a run that wrote nothing at all passes it identically to one that wrote a
+    full report. That was harmless while audit output was always visible to `git status`.
+    It stops being harmless once an authenticated run recommends ignoring `.ux/audits/`
+    wholesale (SPEC §11.6), because from that moment the invariant certifies a set it can
+    no longer see. This is the positive half: *writes were observed, and confined*.
+
+    Scoped to `prefix` by a **pathspec**, which is what makes looking at ignored files safe
+    here and unsafe in `_dirty_paths()`.
+
+    Two commands, because neither alone covers every state the prefix can be in:
+
+    - `git status -- <prefix>` sees tracked-and-modified and untracked-not-ignored files,
+      individually. It sees nothing at all once the prefix is ignored.
+    - `git ls-files -o -i --exclude-standard -- <prefix>` sees ignored files individually.
+      `git status --ignored=matching` is **not** a substitute: when the ignore rule names
+      the directory, the directory itself is the match, so the whole prefix collapses to a
+      single `!! .ux/audits/` entry and per-file granularity is lost.
+
+    Returned sorted and de-duplicated, so a path both commands can report appears once.
+    """
+    repo = Path(repo)
+    tracked = _parse_porcelain(_git(repo, "status", "--porcelain", "-uall", "--", prefix))
+    ignored = _git(repo, "ls-files", "-o", "-i", "--exclude-standard", "--", prefix)
+    return sorted({*tracked, *(p for p in ignored.splitlines() if p.strip())})
 
 
 def _digest(repo: Path, path: str) -> str:

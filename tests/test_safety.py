@@ -20,7 +20,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from audit_safety import EXTRA_BY_PROFILE, changes_confined_to, snapshot  # noqa: E402
+from audit_safety import (  # noqa: E402
+    EXTRA_BY_PROFILE, changes_confined_to, snapshot, writes_under,
+)
 
 # Bind to the PROFILES, not to the function's defaults. The profiles are what the CLI
 # resolves and therefore what every auditor actually runs under; asserting against a
@@ -186,12 +188,63 @@ def main() -> int:
         if not any("sneaky.ts" in x for x in v):
             failures.append(f"a file created after the baseline must be flagged: {v}")
 
+    # ---------------------------------------------------------------------------------
+    # An authenticated run recommends ignoring `.ux/audits/` wholesale (SPEC §11.6), so
+    # from then on the invariant must certify a set `git status` alone cannot see.
+    # ---------------------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp)
+        _init_repo(repo)
+        (repo / "node_modules").mkdir()
+        (repo / "node_modules" / "index.js").write_text("// vendored\n")
+        (repo / ".gitignore").write_text(".ux/audits/\nnode_modules/\n")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "ignore audits + vendor")
+
+        # 10. The invariant is not vacuous BEFORE the run: nothing written, nothing seen.
+        #     This is the assertion that fails if `writes_under` ever silently returns a
+        #     constant — without it, case 11 would pass on a broken implementation.
+        if writes_under(repo, ".ux/audits/"):
+            failures.append("no report written yet, but writes_under saw something")
+
+        _write_report(repo, "usability-20260824-090000.md")
+
+        # 11. THE CASE THIS ALL EXISTS FOR. With the prefix ignored, plain `git status`
+        #     is blind to the report, so `changes_confined_to` passes trivially. The run
+        #     must still be able to prove it wrote what it claims to have written.
+        w = writes_under(repo, ".ux/audits/")
+        if not any("usability-20260824-090000.md" in x for x in w):
+            failures.append(f"writes under an IGNORED prefix must stay observable: {w}")
+        if not any("index.md" in x for x in w):
+            failures.append(f"every write under an ignored prefix, not just the first: {w}")
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT)
+        if v:
+            failures.append(f"an ignored prefix is still confined, not a violation: {v}")
+
+        # 12. The regression that guards the obvious-but-wrong fix. Putting `--ignored`
+        #     on `_dirty_paths()` would make it see EVERY ignored path in the host repo,
+        #     and each one outside the prefix would read as an escape — `node_modules/`
+        #     would fail every audit in every normal repo.
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT)
+        if any("node_modules" in x for x in v):
+            failures.append(f"ignored paths OUTSIDE the prefix are not violations: {v}")
+        w = writes_under(repo, ".ux/audits/")
+        if any("node_modules" in x for x in w):
+            failures.append(f"writes_under is pathspec-scoped; node_modules is not ours: {w}")
+
+        # 13. The posture is a RECOMMENDATION, so the un-ignored repo is just as real a
+        #     case. Same call, same answer — the auditor cannot know which repo it is in.
+        (repo / ".gitignore").write_text("node_modules/\n")
+        w = writes_under(repo, ".ux/audits/")
+        if not any("usability-20260824-090000.md" in x for x in w):
+            failures.append(f"writes must be observable when the prefix is NOT ignored: {w}")
+
     if failures:
         print("FAIL — safety:")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — safety (invariant + idempotency)")
+    print("PASS — safety (invariant + idempotency + writes_under)")
     return 0
 
 

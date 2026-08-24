@@ -236,8 +236,14 @@ and safety invariants:
    framework citation + a fix. Reject fabricated or generic findings.
 3. **Severity calibration** — apply the rubric to a fixed set of known issues and confirm
    consistent scoring across runs.
-4. **Safety invariant (critical)** — after a run, `git status` in the host repo shows
-   changes **only** under `.ux/audits/`. Any other modified/created file is a failure.
+4. **Safety invariant (critical)** — after a run, **both** halves must hold: `changes_confined_to()`
+   reports nothing changed outside `.ux/audits/` (any other modified/created file is a failure),
+   **and** `writes_under()` reports the run's own writes under that prefix. The second half is not
+   ceremony — an authenticated run recommends ignoring `.ux/audits/` wholesale (§11.6), and from
+   that moment `git status` alone cannot see the reports, so "nothing escaped" is satisfied
+   identically by a full audit and by an audit that wrote nothing at all. `writes_under()` is
+   pathspec-scoped for this reason; `_dirty_paths()` stays blind to ignored files, because a
+   repo-wide `--ignored` scan would read every `node_modules/` as an escape.
 5. **Idempotency** — re-running never overwrites or deletes a prior report; it creates a
    new timestamped file and appends one `index.md` row.
 6. **Command wiring** — `/ux-agent-skills:usability-audit` resolves and invokes the
@@ -259,7 +265,13 @@ and safety invariants:
 
 ### Ask first
 - Starting or restarting the host dev server, or navigating a browser to any URL.
-- Reaching auth-gated screens (the user must supply access; the auditor won't authenticate).
+- **Reaching auth-gated screens** — the user must supply access; the auditor won't
+  authenticate. "Supply access" has a defined handshake: the **auth handoff** (§11,
+  [`auth-handoff.md`](skills/usability-audit/references/auth-handoff.md)) — observe the wall,
+  ask once, the *user* signs in, re-observe, resume. Declining is a first-class answer.
+- **Capturing screenshots while authenticated when `.ux/audits/` is already git-tracked.**
+  The ignore recommendation is decorative against files git already tracks, so this is the
+  user's call to make knowingly (§11.6).
 - **Resetting host app state** to establish a CUJ precondition — clearing localStorage, logging out,
   starting a fresh session — and **only when the journey file names the reset** (§9.4). This destroys
   state the user may care about, so it is gated like a server start rather than treated as ordinary
@@ -274,6 +286,15 @@ and safety invariants:
 - **Edit, refactor, or "fix" host application code** — this is a findings-only auditor.
 - Fabricate findings, severities, or evidence; report anything not actually observed.
 - Enter credentials, bypass authentication, or defeat bot/CAPTCHA gates to reach screens.
+- **Read, transcribe, or store session material** — cookies, `localStorage`,
+  `sessionStorage`, tokens — or read back a filled credential field. (§11.5)
+- **Leave the audited scope while a session is live** — no account, billing, or settings
+  pages the scope did not name.
+- **Record the account identity** anywhere in a report: no `account:` key, no email, no
+  profile or vault item name. Record the rung, not who satisfied it — the `author:`
+  precedent in §9.7.
+- **Log the user out or tear down a session** the audit did not create. A logout is a state
+  reset, permitted only when a journey names it (L2.5). Leave it as found and say so.
 - Delete or overwrite prior audit reports (append / new-file only).
 - Publish, post, or send a report to any external service.
 - Silently skip in-scope areas without noting the gap in the report appendix.
@@ -792,3 +813,231 @@ and hand-wired `check_render_report_skill` / `check_ux_review_command` in `tests
 - [ ] `/ux-review` + the `render-report` skill render existing reports on demand; both are
       covered by an eval case (routing green) and a hand-wired component check.
 - [ ] README / CHANGELOG updated; `plugin.json` at **0.5.0**.
+
+---
+
+# 11. Authenticated audits — the handoff rung
+
+> The suite can only audit what it can reach. Today every screen behind a login wall is a
+> coverage gap, which means the auditors are scrupulous about the small part of a product in
+> front of the wall and silent about the large part behind it. This section closes that gap
+> **without the auditor ever holding a secret**, and without letting an authenticated run
+> quietly commit a real account's data into the host repo.
+
+- **Status:** Approved — delivered in 0.6.0
+- **Date:** 2026-08-24
+- **Adds:** a defined handoff handshake at ladder rung L3; a shared
+  `references/auth-handoff.md`; an artifact posture for authenticated runs; new boundary
+  entries. **No new components, no new skill, no schema change.**
+
+## 11.1 Objective
+
+**Problem.** [`audit-cuj`](skills/audit-cuj/SKILL.md)'s ladder ends at *"L3 — Ask the user.
+For auth-gated or seeded state you may not create."* but never defines what *supplied* means,
+and §6 forbids the obvious reading (*"Never enter credentials, bypass authentication"*). The
+rung is therefore a dead end: every signed-in journey is a skip. `usability-audit` has the same
+hole, recording auth-gated screens as coverage gaps and stopping there.
+
+**Goal.** Give L3 a real handshake — the **human signs in themselves**, the auditor waits and
+resumes — so authenticated screens become auditable, while the "auditor never holds a
+credential" invariant survives *unchanged*.
+
+**Non-goals.** Not unattended operation: this rung requires a human at the keyboard, and in a
+headless or scheduled context it degrades to today's honest skip (§11.3). Not a credential
+store, a session-material format, or a login automation. Not a new schema — no report or CUJ
+frontmatter key is added (§11.5).
+
+## 11.2 The rung — five beats
+
+Ordered, and each one is load-bearing:
+
+1. **Observe the wall.** Navigate to `entry_point` and confirm the gate is actually there,
+   recording what it said verbatim. *Auth-gated* must be an observation, never an assumption —
+   the same discipline L0 already imposes on preconditions.
+2. **Ask once, naming everything.** The URL, what it is blocked on, which journey or scope it
+   unblocks, and the account-hygiene ask: **use a throwaway or seeded account, not
+   production** (§11.4).
+3. **The user signs in themselves**, in the browser the auditor is driving. The auditor types
+   nothing, reads nothing, and stores nothing.
+4. **Re-observe and confirm** the session actually holds before resuming, then record that the
+   rung succeeded — the rung, not the identity (§11.5).
+5. **Resume, or skip with a named cause.** Declined, unanswered, or no attended browser
+   surface → the existing skip path, unchanged.
+
+**The rung's own precondition** is an *attended, human-visible browser surface*. A headless
+browser has no seat for the human, so where one is unavailable the rung cannot be attempted and
+the skip is correct rather than a failure. Say so; never report it as a decline the user made.
+
+## 11.3 What may satisfy the rung — a capability test, not a vendor
+
+Mechanisms other than human handoff may satisfy step 3, but the suite names **no browser and
+no password manager**: [§5.1](#51-evaluation-mode--hybrid-auto) says *"a browser MCP"* on
+purpose, and that portability is a feature to defend. A mechanism qualifies when **both**
+clauses hold:
+
+> **(a)** The secret **never enters agent context** — the agent may request, a human approves,
+> and the value passes directly to the page.
+> **(b)** The resulting session lands in a **browser context isolated from the user's daily
+> profile**.
+
+Clause (a) is the obvious one and is rarely the discriminator. **Clause (b) does the real
+work**, and the reason is §11.6: the credential was never the largest leak — the *evidence* is.
+A mechanism that authenticates flawlessly into a browser full of production sessions, other
+tabs, and personal bookmarks has made the artifact problem worse while solving a problem that
+was not open.
+
+| Mechanism | (a) | (b) | Verdict |
+|-----------|-----|-----|---------|
+| **Human handoff** | ✅ agent types nothing | ✅ whichever context it drives | **The rung.** Zero dependencies — no harness feature, no host cooperation, no file on disk. This is why it is the *floor* and not a fallback. |
+| **App-side test login** (seeded account, dev-only route) | ✅ no credential exists to leak | ✅ | Qualifies, but needs host-app cooperation, so it cannot be *the* rung. Recommended configuration instead — §11.4. |
+| **Agent-mediated password-manager autofill** | ✅ value never in context | ❌ | **Rejected.** Its purpose is to drive the user's real browser *with existing sessions*; that is clause (b) inverted. Rejected for failing (b), **not** for being a particular product — a mechanism meeting both clauses qualifies whatever its vendor. |
+| **Saved session material** (storage-state file, exported profile) | ✅ | ⚠️ depends | **Rejected here.** It exists to serve unattended runs, which are a non-goal, and it puts live session tokens in a file the auditor would have to reference. Revisit only alongside CI support. |
+| **Credentials via env var / `.env` / prompt** | ❌ | — | **Rejected.** Fails (a) outright, and independently collides with §6 and with host-harness rules that prohibit an agent entering credentials at all. |
+
+**Why record the rejections.** The password-manager path is the one that keeps looking
+attractive, because it optimises the surface that is already safe. Writing the test down means
+the next proposal is measured against two clauses instead of relitigated from scratch.
+
+## 11.4 The recommended host configuration
+
+Not a rung and not enforced — the setup to *recommend*, because it dissolves both surfaces at
+once instead of managing either:
+
+- **A seeded, non-production account** with synthetic data. Nothing sensitive is ever captured,
+  so nothing needs redacting. This is [§9.7](#97-boundaries)'s principle applied to pixels:
+  **no PII in the artifact beats a rule about handling PII in the artifact.**
+- **A dedicated audit browser profile** that stays signed in to that account between runs.
+  This is not the rejected "saved session material": the auditor never reads, references,
+  copies, or writes the profile — it drives whatever browser it is handed. The distinction is
+  *who touches the session material*, and here nobody but the browser does.
+
+## 11.5 Boundaries — additions to §6
+
+**§6 needs no deletions.** *"Never enter credentials, bypass authentication"* is preserved
+exactly; the rung is the human doing it, not the auditor. The additions govern what becomes
+tempting **once a live session exists** — a threat surface that did not previously exist.
+
+### Ask first
+- **Handing off for sign-in** — asked once, naming the URL, the blocker, the scope it unblocks,
+  and the hygiene ask. Declined → skip with a named cause.
+- **Capturing screenshots while authenticated**, when `.ux/audits/` is already tracked by git
+  (§11.6).
+
+### Never
+- **Read, transcribe, or store session material.** No cookies, `localStorage`, `sessionStorage`,
+  or tokens — a single `evaluate_script` lifts `document.cookie` into the transcript, which is
+  a second, independent reason for the ban the ladder already imposes for state injection.
+- **Read back a filled credential field.** Where a mechanism satisfies clause (a) by keeping a
+  value out of context, that guarantee holds only until the agent goes looking. It is a rule,
+  not a property to lean on.
+- **Leave the audited scope while a session is live.** No account, billing, or settings pages
+  that the scope did not name — an authenticated session is not a licence to browse.
+- **Record the account identity anywhere.** No `account:` frontmatter key, no email, no vault
+  or profile item name in a report. This is the [§9.7](#97-boundaries) `author:` precedent
+  applied unchanged: *PII in a file that ships in the host's repo.* Record the **rung**, not
+  who satisfied it.
+- **Log the user out, or otherwise tear down the session.** A logout is a state reset, which
+  L2.5 permits only when a journey names it. Leave the session exactly as found and **say so
+  in the closing summary** — an explicit hand-back, not a silent one.
+
+**Session hygiene asymmetry, stated because it reads as inconsistent.** The session is left
+alone but any *credential grant* a mechanism issues is released at end of run. A session is app
+state the user may care about; a grant is not, and releasing it has no destructive side effect.
+
+## 11.6 The artifact posture — the surface that actually leaks
+
+**The credential was never the biggest problem.** Behind a login wall every screenshot carries
+the account's name and email in the app chrome, and every expected-vs-observed line quotes real
+records verbatim. [§10](#10-visual-walk-through-report-contract-schema-2) then embeds those
+inline, and [§8](#8-open-questions--future-suite-work) notes that *committing* is what makes
+them render on GitHub. An authenticated run under the current posture puts a real account's
+data into git history — the flavour that cannot be deleted.
+
+**Posture:** when a run authenticates, the auditor **recommends ignoring `.ux/audits/`
+wholesale** — reports, assets, and the derived `.html` alike — and recommends it **at the
+moment auth is established**, not at report-write time, which is too late if anything
+auto-commits.
+
+Wholesale rather than assets-only, because narrower rules do not hold:
+
+- [`render_report_html.py`](scripts/render_report_html.py) base64-embeds every `./assets/*`
+  image into the `.html` written beside the `.md`. Ignoring the PNGs leaves their bytes riding
+  into git inside the companion.
+- The Markdown leaks independently of both: *"Observed: row reads `Invoice #4417 — Acme Corp`"*
+  is PII that no image-level rule touches.
+
+Two collisions this creates, both of which must be handled rather than assumed away:
+
+1. **`.gitignore` does not untrack.** If `.ux/audits/` is already committed — and §10.3
+   encouraged exactly that — the ignore line is decorative and the next run's captures commit
+   over the top. **The auditor checks `git ls-files .ux/audits/` before capturing**; non-empty
+   means it says so plainly and lets the user choose (untrack first, or accept), rather than
+   writing behind a false sense of safety.
+2. **Ignoring the directory blinds the safety invariant.**
+   [`audit_safety.py`](scripts/audit_safety.py) collects `git status --porcelain -uall`
+   **without `--ignored`**, so once `.ux/audits/` is ignored the auditor's own writes vanish
+   from the snapshot. The invariant that matters — *no writes outside the allowlist* — still
+   holds, since those paths are not ignored. But §5.2's phrasing (*"`git status` shows changes
+   only under `.ux/audits/`"*) becomes **trivially true**, passing identically whether a full
+   report was written or nothing at all. The check must keep seeing the writes it certifies.
+
+   **Delivered as `writes_under(repo, prefix)`** — a *positive* assertion beside the
+   violation scan, and §5.2 reworded so an empty change set cannot satisfy the invariant.
+   Two details the obvious implementation gets wrong, both verified against real
+   repositories rather than reasoned about:
+
+   - **Never widen `_dirty_paths()`.** Putting `--ignored` on the repo-wide scan surfaces
+     every ignored path in the host repo, and each one outside the prefix registers as an
+     escape — `node_modules/` would fail every audit. Ignored-ness is made visible by
+     **pathspec scoping**, never by widening. `tests/test_safety.py` case 12 is the
+     regression guard, and it does fail against the naive version.
+   - **One command is not enough.** `git status --ignored=matching -- <prefix>` collapses to
+     a single `!! .ux/audits/` entry when the ignore rule names the directory (the directory
+     *is* the match), losing per-file granularity — and it sees nothing at all when the
+     prefix is **not** ignored, which is the state of every repo that has not applied the
+     recommendation. `writes_under()` therefore unions `git status … -- <prefix>` with
+     `git ls-files -o -i --exclude-standard -- <prefix>`, returning the same per-file list
+     across all four prefix states.
+
+**`EXTRA_BY_PROFILE["audit"]` stays empty.** The auditor does **not** write the host's
+`.gitignore`; it recommends the line and the user applies it. That tuple's emptiness is
+load-bearing, and widening the baseline profile so an auditor can edit a root-level file would
+cost more than the convenience is worth.
+
+## 11.7 Components and testing
+
+**One new file, no new component.** `skills/usability-audit/references/auth-handoff.md` holds
+the rung, the capability test, the boundaries, and the artifact posture; `audit-cuj` cites it
+as L3 and `usability-audit` from its live-mode step, rather than either restating it. This
+follows the `report-contract.md` cross-link precedent — one owner, consumers link across.
+
+**Neither test trap fires the same way.** No new `SKILL.md` exists, so `test_evals.py`'s glob
+stays green and **no new eval case is required**. `test_components.py`'s silent trap still
+applies: `check_references()` will not pick up a new reference file on its own, so the
+assertion is hand-wired, and the path is added to `DOC_FILES` in `test_docs.py`.
+
+**What is and is not testable.** Testable: the reference exists and states the rung, the two
+clauses, and every Never; both skills link it; `audit_safety.py` still sees writes under an
+ignored prefix; the baseline profile is still empty. Not testable: the handshake itself, which
+is agent behaviour with a human in the loop. That is a documentation-and-persona guarantee, and
+saying so is better than a test that pretends otherwise.
+
+## 11.8 Acceptance criteria (Definition of Done)
+
+- [x] `skills/usability-audit/references/auth-handoff.md` exists, stating the five beats, the
+      attended-surface precondition, the two-clause capability test with its rejection table,
+      the recommended host configuration, and the boundary additions.
+- [x] `audit-cuj`'s L3 cites the reference instead of dead-ending; `usability-audit`'s live-mode
+      step cites it instead of recording auth-gated screens as an unconditional gap.
+- [x] Both auditor personas carry the new Never list — no session material, no read-back, no
+      scope wandering, no recorded identity, no logout.
+- [x] §6 gains the Ask-first and Never entries of §11.5; *"Never enter credentials"* is
+      unchanged.
+- [x] An authenticated run recommends ignoring `.ux/audits/` at auth time, checks
+      `git ls-files .ux/audits/` before capturing, and hands the session back explicitly in its
+      summary.
+- [x] `audit_safety.py` still observes writes under an ignored prefix; `EXTRA_BY_PROFILE["audit"]`
+      is still `()`; §5.2's invariant is reworded so an empty change set cannot satisfy it.
+- [x] `tests/test_components.py` has a hand-wired check for the reference; `DOC_FILES` includes
+      it; `test_evals.py` unchanged (no new skill).
+- [x] README / AGENTS / CHANGELOG updated; `plugin.json` bumped.

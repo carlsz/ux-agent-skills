@@ -38,6 +38,7 @@ DOC_FILES = [
     "skills/spec-cuj/references/interview-fallback.md",
     "skills/ux-audit/SKILL.md",
     "skills/usability-audit/references/report-contract.md",
+    "skills/usability-audit/references/auth-handoff.md",
     "skills/spec-cuj/references/cuj-contract.md",
     "commands/ux-audit.md",
     "agents/README.md", "skills/README.md", "commands/README.md",

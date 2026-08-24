@@ -101,7 +101,28 @@ Auto-select: a reachable running app → live; no app and no permission to start
 browser to any URL. If a requested `live` falls back to `static`, report it as `static` with
 the reason — never claim evidence you could not gather.
 
-**Exit criteria:** mode fixed and recorded, with the reason if it differs from the request.
+**Auth pre-flight (live/hybrid).** Once the app is reachable, navigate to the selected
+journeys' `entry_point`s and check whether a login wall stands between you and them. If one
+does, run the **auth handoff** now — see
+[`auth-handoff.md`](../usability-audit/references/auth-handoff.md) for the five beats, the
+Never list, and the artifact posture.
+
+Do it **here**, before step 4, not lazily when a precondition fails. A journey that needs a
+session usually has a *precondition* that needs one too, so a lazy handoff asks the user the
+same question twice — once for the precondition and once for the steps — and the second ask
+arrives minutes into a run. One interruption, before any journey starts.
+
+Record the outcome; it becomes the report's `Access:` line (report contract §5):
+
+| Outcome | Then |
+|---|---|
+| No wall | Nothing to record. Proceed. |
+| Handoff succeeded | Proceed. Every selected journey inherits the session. |
+| Declined | Journeys behind the wall are skipped with cause `precondition unmet — access declined`. |
+| No attended browser surface | Same skip, cause `handoff unavailable — no attended browser surface`. **Not** a decline — nobody was asked. |
+
+**Exit criteria:** mode fixed and recorded, with the reason if it differs from the request;
+and, if a wall was met, the handoff outcome recorded.
 
 ### 4. Establish each journey's preconditions — the precondition ladder
 
@@ -131,6 +152,13 @@ attempted, with its result — an unrecorded attempt makes a skip unauditable.
   price.
 - **L3 — Ask the user.** For auth-gated or seeded state you may not create. Ask once, naming
   the exact state and the journey it unblocks. Supplied → back to L0. Declined → skip.
+  **For an auth-gated precondition this rung has a defined handshake** — the auth handoff
+  ([`auth-handoff.md`](../usability-audit/references/auth-handoff.md)): observe the wall,
+  ask once, the *user* signs in, re-observe to confirm the session actually holds, then back
+  to L0. Normally the pre-flight in step 3 has already run it and the session is in place, so
+  arriving here still walled means the pre-flight was declined or unavailable — do not ask a
+  second time; record the rung as attempted with that cause and skip. For **seeded** state
+  that is not auth-gated, the rung is unchanged: ask, and take what you are given.
 
 **The hard stop, below L3.** No host code, fixtures, migrations, seed scripts, direct
 DB/API writes, and no `evaluate_script` state injection. This is a correctness rule before it
@@ -299,9 +327,14 @@ work as your violation, and do not quietly dismiss a real one as "probably their
 - **Never write to `.ux/cujs/` or the host's `SPEC.md`.** Report authoring defects; recommend
   `/ux-spec`.
 - **Ask first** before starting a dev server, navigating a browser, performing a
-  journey-named state reset, installing anything, or reaching auth-gated screens.
+  journey-named state reset, installing anything, or reaching auth-gated screens (the
+  handshake for the last one is [`auth-handoff.md`](../usability-audit/references/auth-handoff.md)).
 - **Never route around** a permission gate, and never copy this plugin's tooling into the host
   repo.
+- **Once a session is live**, never read or store session material (cookies, `localStorage`,
+  tokens), never read back a filled credential field, never leave the audited scope, never
+  record the account identity, and never log the user out — a logout is a state reset no
+  journey named. Full list: [`auth-handoff.md`](../usability-audit/references/auth-handoff.md) §7.
 - **Never fabricate.** A step you did not observe is not a step that passed.
 - **No opinions.** Ugly, slow, or inaccessible are real problems belonging to the other three
   auditors. You have no standard to judge them by.
