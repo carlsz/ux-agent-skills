@@ -64,7 +64,12 @@ List the `.html` files written and confirm every change is confined to `.ux/audi
 python3 scripts/audit_safety.py <host-repo>
 ```
 
-**Exit criteria:** `git status` in the host repo shows changes only under `.ux/audits/`.
+This exits 0 only when **both** halves hold — nothing outside `.ux/audits/`, and the `.html`
+files you just wrote observed inside it. A render that produced no files exits 1, which is
+the correct answer: there was nothing to render or nothing got written.
+
+**Exit criteria:** `audit_safety.py` exits 0 on **both** halves: nothing changed outside
+`.ux/audits/`, **and** the `.html` files this run wrote inside it were observed and listed.
 
 ## Boundaries
 
@@ -80,4 +85,7 @@ python3 scripts/audit_safety.py <host-repo>
 - Every selected report has a self-contained `.html` companion beside it, and `index.html` is
   refreshed; each opens offline with no external references.
 - An absent/empty `.ux/audits/` stopped the run with a reason instead of inventing a report.
-- `git status` in the host repo shows changes only under `.ux/audits/`.
+- `audit_safety.py` exits 0 on **both** halves: nothing changed outside `.ux/audits/`,
+  **and** the writes this run made inside it were observed and listed. (`git status` alone is
+  not the check — once `.ux/audits/` is gitignored it shows nothing, which a run that wrote
+  nothing satisfies identically.)

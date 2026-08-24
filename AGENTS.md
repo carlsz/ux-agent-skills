@@ -167,6 +167,15 @@ Three things to keep straight when you touch it:
   and the user applies it. Do not widen the baseline profile to let an auditor edit a
   root-level file.
 
+- **The invariant has two halves, and both run from `main()`.** `changes_confined_to()`
+  answers "did anything escape?"; `writes_under()` answers "did this run write what it
+  claims?". Only the second survives `.ux/audits/` being gitignored, and it is only real
+  because the CLI calls it — `tests/test_safety.py` therefore asserts through
+  `audit_safety.main()`, not through the function, precisely so an unwired-again
+  `writes_under()` fails CI. Both halves take the same content-addressed `baseline`, and
+  `snapshot()` sweeps the write prefixes with `writes_under()` so ignored prior reports are
+  digested rather than mistaken for the current run's output.
+
 **Testing it trips only one trap.** No new `SKILL.md` exists, so `test_evals.py` stays green
 and **no eval case is needed** — the loud trap never fires. The silent one does:
 `check_auth_handoff_reference()` had to be hand-wired into `CHECKS`, and `_check_auth_wiring()`

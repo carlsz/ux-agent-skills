@@ -202,7 +202,12 @@ The finding is just as actionable either way; only the leak differs.
 An authenticated run is still checked by
 [`audit_safety.py`](../../../scripts/audit_safety.py), and `writes_under()` keeps the
 auditor's own writes observable even once `.ux/audits/` is ignored — so "nothing escaped"
-cannot be satisfied by a run that wrote nothing (SPEC §5.2).
+cannot be satisfied by a run that wrote nothing (SPEC §5.2). The CLI enforces both halves:
+it exits 1 on *"no writes were observed"* and prints the writes when it passes.
+
+**Take the `--snapshot` before the handoff, not after.** Under an ignored `.ux/audits/`,
+previous runs' reports are still sitting in the working tree; the baseline is what stops them
+from answering "were writes observed?" on this run's behalf.
 
 ---
 

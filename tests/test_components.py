@@ -9,6 +9,7 @@ Run: `python3 tests/test_components.py` (exit 0 = pass, 1 = fail).
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -56,6 +57,24 @@ def _flatten(text: str) -> str:
         line.lstrip().lstrip(">").strip() for line in text.splitlines()
     )
     return " ".join(joined.split()).lower()
+
+
+def _numbered_steps(body: str) -> list[str]:
+    """Titles of the `N. **Title**` workflow steps, in document order, normalized.
+
+    Hyphens become spaces so a probe matches "fan-out" and "fan out" alike — the two
+    spellings are one word, and no assertion should turn on which one a sentence used.
+    """
+    return [" ".join(title.replace("-", " ").split()).lower()
+            for title in re.findall(r"^\d+\.\s+\*\*(.+?)\*\*", body, re.M)]
+
+
+def _step_index(steps: list[str], phrase: str) -> int | None:
+    """Position of the first step whose title contains `phrase`; None if there is none."""
+    for i, title in enumerate(steps):
+        if phrase in title:
+            return i
+    return None
 
 
 def _check_auth_wiring(low: str, who: str, errs: list[str]) -> None:
@@ -248,8 +267,22 @@ def check_rollup_skill() -> list[str]:
     _require("auth-handoff" in flat, "rollup skill: must cite auth-handoff.md", errs)
     _require("pre-flight" in flat, "rollup skill: must run the auth handoff as a pre-flight",
              errs)
-    if "pre-flight" in flat and "fan out" in flat:
-        _require(flat.index("pre-flight") < flat.index("fan out"),
+    # Ordered by STEP NUMBER, not by character offset, and asserted unconditionally.
+    # Two earlier forms both failed for the same reason — they measured the prose instead
+    # of the workflow. Guarding on `"fan out" in flat` was self-disabling: the body spells
+    # it "fan-out" almost everywhere, so normalizing the hyphen (an edit with no semantic
+    # content) falsified the guard and left the ordering unchecked with CI green. Taking
+    # the first offset of either spelling is no better: the intro paragraph calls the skill
+    # "the fan-out the report contract was built for" long before step 2 exists. The steps
+    # are what carry the ordering, so read the steps.
+    steps = _numbered_steps(body)
+    auth_step = _step_index(steps, "auth pre flight")
+    fanout_step = _step_index(steps, "fan out")
+    _require(auth_step is not None, "rollup skill: needs a numbered auth pre-flight step",
+             errs)
+    _require(fanout_step is not None, "rollup skill: needs a numbered fan-out step", errs)
+    if auth_step is not None and fanout_step is not None:
+        _require(auth_step < fanout_step,
                  "rollup skill: the auth pre-flight must come BEFORE the fan-out", errs)
     # Declining is not a reason to abandon the run — it degrades to an unauthenticated
     # audit with disclosed gaps, the same honesty rule the skipped auditors follow.
@@ -826,15 +859,23 @@ def check_auth_handoff_reference() -> list[str]:
         return ["missing reference: skills/usability-audit/references/auth-handoff.md"]
     low = _flatten(path.read_text(encoding="utf-8"))
 
-    # The five beats, by the idea each one turns on. Alternatives rather than one exact
-    # string: the doc is prose, so the same beat is "the user signs in" in a heading and
-    # "sign in yourself" in the ask. Pinning one inflection tests the wording, not the beat.
+    # The five beats. Alternatives per beat, but **every alternative must be a phrase that
+    # occurs nowhere else in the document** — the surrounding prose is saturated with this
+    # vocabulary, so a loose probe passes with its own beat deleted. Verified by mutation:
+    # the earlier `("observe", ...)` / `("skip",)` forms all survived deleting the beat
+    # outright ("observe" x6, "verbatim" x6, "skip" x4 elsewhere), which is the same defect
+    # the attended-surface rule below was already hardened against. Keep new alternatives
+    # to phrases you have counted.
     beats = [
-        (("observe the wall", "observe"), "beat 1 — observe the wall"),
-        (("verbatim",), "beat 1 — record the wall verbatim"),
-        (("sign in", "signs in", "signed in"), "beat 3 — the user signs in"),
-        (("re-observe", "reobserve"), "beat 4 — re-observe and confirm"),
-        (("skip",), "beat 5 — resume or skip"),
+        (("observe the wall", "confirm the gate is actually there"),
+         "beat 1 — observe the wall"),
+        (("record what it said",), "beat 1 — record the wall verbatim"),
+        (("the user signs in", "reads nothing, stores nothing"),
+         "beat 3 — the user signs in while the auditor idles"),
+        (("re-observe and confirm", "verify the session actually holds"),
+         "beat 4 — re-observe and confirm"),
+        (("resume, or skip with a named cause", "return to the workflow"),
+         "beat 5 — resume or skip"),
     ]
     for alts, what in beats:
         _require(any(a in low for a in alts),

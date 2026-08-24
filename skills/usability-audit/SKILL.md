@@ -133,7 +133,11 @@ default (see step 1); `--mode` forces one.
    [`scripts/validate_report.py`](../../scripts/validate_report.py) — `validate_report.py
    <report>` and `validate_report.py --index .ux/audits/index.md`. Then confirm the safety
    invariant with [`scripts/audit_safety.py`](../../scripts/audit_safety.py)
-   `<host-repo>` — it must report all changes confined to `.ux/audits/`.
+   `<host-repo>`. It checks **both halves** of the invariant (SPEC §5.2) and exits 0 only if both
+   hold: nothing changed outside `.ux/audits/`, **and** the writes you just made inside it
+   were observed — it prints them. Exit 1 with *"no writes were observed"* means the run
+   produced nothing; that is a real failure for an auditor, not a formality, and it is the
+   only signal you get once `.ux/audits/` is gitignored and `git status` has gone quiet.
 
 9. **Render the HTML companion.** After the report validates, generate its self-contained
    HTML view (findings as cards, the live screenshots as a walk-through gallery) beside the
@@ -183,4 +187,7 @@ default (see step 1); `--mode` forces one.
   embedded inline in findings, and assembled into a `## Walkthrough` section (omitted in
   static mode).
 - The appendix names all in-scope areas that were not inspected.
-- `git status` in the host repo shows changes only under `.ux/audits/`.
+- `audit_safety.py` exits 0 on **both** halves: nothing changed outside `.ux/audits/`,
+  **and** the writes this run made inside it were observed and listed. (`git status` alone is
+  not the check — once `.ux/audits/` is gitignored it shows nothing, which a run that wrote
+  nothing satisfies identically.)

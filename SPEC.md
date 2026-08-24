@@ -244,6 +244,19 @@ and safety invariants:
    identically by a full audit and by an audit that wrote nothing at all. `writes_under()` is
    pathspec-scoped for this reason; `_dirty_paths()` stays blind to ignored files, because a
    repo-wide `--ignored` scan would read every `node_modules/` as an escape.
+
+   **Both halves run from the CLI**, which is the only form any auditor actually invokes:
+   `audit_safety.py <repo>` exits 1 when nothing escaped *but nothing was written either*,
+   and prints the observed writes when it exits 0. A library function no shipped path calls
+   is not an invariant, it is a comment — so the wiring is asserted in `tests/test_safety.py`
+   through `main()`, not through the function. `--allow-no-writes` is the deliberate,
+   typed-on-purpose escape hatch for a run genuinely expected to write nothing.
+
+   The positive half takes the **same content-addressed baseline** as the negative one, for
+   the same reason. Under an ignored prefix, prior runs' reports never leave the working
+   tree, so without digests they would answer "were writes observed?" for every later run —
+   the vacuity moved up one level rather than closed. `snapshot()` therefore sweeps the
+   profile's write prefixes with `writes_under()`, not just `git status`.
 5. **Idempotency** — re-running never overwrites or deletes a prior report; it creates a
    new timestamped file and appends one `index.md` row.
 6. **Command wiring** — `/ux-agent-skills:usability-audit` resolves and invokes the
@@ -310,7 +323,10 @@ and safety invariants:
       valid report to `.ux/audits/`.
 - [ ] Static-mode fallback works with no running app.
 - [ ] Report validates against the §3.4 shared contract; `index.md` gets one appended row.
-- [ ] Post-run `git status` in the host repo shows changes only under `.ux/audits/`.
+- [ ] Post-run `audit_safety.py` exits 0 on **both** halves of §5.2: nothing changed
+      outside `.ux/audits/`, and the run's own writes inside it were observed. A bare
+      `git status` is not the check — an ignored `.ux/audits/` (§11.6) makes it
+      trivially true.
 - [ ] Every finding: cites a framework, carries a 0–4 severity, has evidence, has a fix.
 - [ ] README/CHANGELOG updated to reflect the auditor and the shared report contract.
 
@@ -982,7 +998,8 @@ Two collisions this creates, both of which must be handled rather than assumed a
    report was written or nothing at all. The check must keep seeing the writes it certifies.
 
    **Delivered as `writes_under(repo, prefix)`** — a *positive* assertion beside the
-   violation scan, and §5.2 reworded so an empty change set cannot satisfy the invariant.
+   violation scan, wired into the CLI (exit 1 on "nothing escaped, nothing written"), and
+   §5.2 reworded so an empty change set cannot satisfy the invariant.
    Two details the obvious implementation gets wrong, both verified against real
    repositories rather than reasoned about:
 
@@ -998,6 +1015,11 @@ Two collisions this creates, both of which must be handled rather than assumed a
      recommendation. `writes_under()` therefore unions `git status … -- <prefix>` with
      `git ls-files -o -i --exclude-standard -- <prefix>`, returning the same per-file list
      across all four prefix states.
+   - **Both commands run with `-z`.** The two quote *different* subsets of awkward paths —
+     `git status` quotes a space, `git ls-files` does not; both escape non-ASCII — so the
+     newline forms spell one file two ways, the union never de-duplicates, and the escaped
+     spelling matches nothing on disk, which makes `_digest()` read it as absent and the
+     baseline forgive it silently. NUL-terminated output removes the whole class.
 
 **`EXTRA_BY_PROFILE["audit"]` stays empty.** The auditor does **not** write the host's
 `.gitignore`; it recommends the line and the user applies it. That tuple's emptiness is

@@ -12,6 +12,8 @@ Run: `python3 tests/test_safety.py` (exit 0 = pass, 1 = fail).
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -20,6 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import audit_safety  # noqa: E402
 from audit_safety import (  # noqa: E402
     EXTRA_BY_PROFILE, changes_confined_to, snapshot, writes_under,
 )
@@ -55,6 +58,19 @@ def _write_report(repo: Path, name: str) -> Path:
     with index.open("a") as fh:
         fh.write(header + f"| now | [r]({name}) |\n")
     return report
+
+
+def _cli(repo: Path, *args: str) -> int:
+    """Run the CLI exactly as a skill's self-check step does, and return its exit code.
+
+    Asserted through `audit_safety.main()` rather than the library functions, because the
+    gap this guards is precisely that a correct library function can be wired into nothing.
+    `writes_under()` shipped unreachable once; a test that only ever imports it would not
+    have noticed, and would not notice it becoming unreachable again.
+    """
+    sink = io.StringIO()
+    with contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
+        return audit_safety.main([str(repo), *args])
 
 
 def main() -> int:
@@ -239,12 +255,89 @@ def main() -> int:
         if not any("usability-20260824-090000.md" in x for x in w):
             failures.append(f"writes must be observable when the prefix is NOT ignored: {w}")
 
+    # ---------------------------------------------------------------------------------
+    # The positive half must be reachable from the COMMAND LINE. Every skill's self-check
+    # step runs `python3 scripts/audit_safety.py <host-repo>`; a `writes_under()` that only
+    # the test suite calls leaves the vacuous pass exactly where it was.
+    # ---------------------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp)
+        _init_repo(repo)
+        (repo / ".gitignore").write_text(".ux/audits/\n")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "ignore audits")
+
+        # 14. THE WIRING CASE. Ignored prefix, nothing written: `changes_confined_to()` is
+        #     empty, so the negative half alone would exit 0 and certify a run that did
+        #     nothing. The CLI must exit 1.
+        if _cli(repo) != 1:
+            failures.append("CLI: an ignored prefix + zero writes must NOT exit 0 — "
+                            "that is the vacuous pass the positive half exists to close")
+
+        # 15. ...and --allow-no-writes is the deliberate, typed-on-purpose escape hatch,
+        #     so a genuinely write-free run is still expressible.
+        if _cli(repo, "--allow-no-writes") != 0:
+            failures.append("CLI: --allow-no-writes must permit a write-free run")
+
+        # 16. A real report under the ignored prefix satisfies both halves.
+        _write_report(repo, "usability-20260824-100000.md")
+        if _cli(repo) != 0:
+            failures.append("CLI: a report written under an ignored prefix must exit 0")
+
+        # 17. The baseline is what keeps the positive half honest on the SECOND run.
+        #     Prior reports linger under an ignored prefix forever, so without content
+        #     digests they would answer "were writes observed?" for every later run —
+        #     the same vacuity as case 14, one level up. `snapshot()` must therefore see
+        #     ignored files, which `_dirty_paths()` alone cannot.
+        base = snapshot(repo)
+        if not any("usability-20260824-100000.md" in k for k in base):
+            failures.append(f"snapshot must digest ignored files under the prefix: {base}")
+        if writes_under(repo, ".ux/audits/", baseline=base):
+            failures.append("a prior run's report is not THIS run's write")
+        _write_report(repo, "usability-20260824-110000.md")
+        w = writes_under(repo, ".ux/audits/", baseline=base)
+        if not any("usability-20260824-110000.md" in x for x in w):
+            failures.append(f"the new report must read as this run's write: {w}")
+        if any("usability-20260824-100000.md" in x for x in w):
+            failures.append(f"the untouched prior report must not: {w}")
+
+        # 18. The authoring profile writes to `.ux/cujs/`, NOT `.ux/audits/`. Requiring
+        #     writes under the default prefix alone would fail every /ux-spec run.
+        (repo / ".ux" / "cujs").mkdir(parents=True, exist_ok=True)
+        (repo / ".ux" / "cujs" / "checkout.md").write_text("# journey\n")
+        if _cli(repo, "--profile", "authoring") != 0:
+            failures.append("CLI: authoring writes land in .ux/cujs/ and must satisfy "
+                            "the positive half")
+
+    # ---------------------------------------------------------------------------------
+    # Paths git C-quotes. The two halves of the union quote DIFFERENT subsets, so without
+    # `-z` the same file gets two spellings and neither matches a file on disk.
+    # ---------------------------------------------------------------------------------
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp)
+        _init_repo(repo)
+        awkward = "usability-caf\u00e9 flow-20260824-120000.md"
+        for ignored in (True, False):
+            (repo / ".gitignore").write_text(".ux/audits/\n" if ignored else "\n")
+            _write_report(repo, awkward)
+            w = writes_under(repo, ".ux/audits/")
+            # 19. The returned path must name a file that actually EXISTS. An escaped
+            #     spelling digests to "" via _digest(), so the baseline would forgive it
+            #     forever — a silent hole, not a cosmetic one.
+            missing = [x for x in w if not (repo / x).exists()]
+            if missing:
+                failures.append(f"writes_under returned unusable paths "
+                                f"(ignored={ignored}): {missing}")
+            if not any(x.endswith(awkward) for x in w):
+                failures.append(f"a C-quoted path must survive verbatim "
+                                f"(ignored={ignored}): {w}")
+
     if failures:
         print("FAIL — safety:")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — safety (invariant + idempotency + writes_under)")
+    print("PASS — safety (invariant + idempotency + writes_under + CLI wiring)")
     return 0
 
 

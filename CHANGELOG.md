@@ -26,7 +26,14 @@ All notable changes to this project are documented here. The format is based on
 - **`audit_safety.writes_under()`** — observes the run's own writes under a prefix even when
   that prefix is gitignored, so the safety invariant cannot be satisfied by a run that wrote
   nothing. Pathspec-scoped by design: a repo-wide `--ignored` scan would read every
-  `node_modules/` as an escape and fail every audit.
+  `node_modules/` as an escape and fail every audit. **Wired into the CLI**, which is the
+  only form auditors invoke: `audit_safety.py <repo>` now exits **1** when nothing escaped
+  but nothing was written either, and prints the observed writes when it passes.
+  `--allow-no-writes` opts out for a run genuinely expected to write nothing.
+- Both halves of the invariant now take the same content-addressed `baseline`, and
+  `snapshot()` sweeps the profile's write prefixes with `writes_under()`. Under an ignored
+  `.ux/audits/`, prior runs' reports never leave the working tree — without this they would
+  answer "were writes observed?" for every later run.
 - **Roll-up auth pre-flight** — `/ux-audit` runs the handoff **once, before the fan-out**, so
   a multi-auditor run interrupts you a single time instead of once per auditor.
 
@@ -42,7 +49,19 @@ All notable changes to this project are documented here. The format is based on
   Appendix gains an `Access:` line recording the *rung*, and lists only screens that stayed
   unreached under *Coverage / not inspected*.
 - SPEC §5.2's safety invariant now requires **both** halves — nothing escaped **and** writes
-  were observed — so an empty change set can no longer satisfy it.
+  were observed — so an empty change set can no longer satisfy it. Every skill's exit
+  criteria were swept off the old *"`git status` shows changes only under `.ux/audits/`"*
+  phrasing, which is trivially true once that directory is ignored.
+- `audit_safety.py` parses `git status` and `git ls-files` with `-z`. The two commands
+  C-quote *different* subsets of awkward paths, so the newline forms spelled one file two
+  ways — and the escaped spelling matches nothing on disk, so `_digest()` read it as absent
+  and the baseline forgave it silently.
+- **The `/ux-audit` auth pre-flight is skipped for runs that never open a browser** — a
+  repo-path target or `--mode static` has no page to probe and is not owed a dev server.
+- **`audit-cuj` asks once per *wall*, not once per run.** The pre-flight only probes
+  `entry_point`s, so a journey that starts public and authenticates partway through
+  (catalogue → checkout) shows it nothing. Reaching that wall at L3 now runs the handoff
+  instead of recording a decline the user never made.
 
 ## [0.5.1] - 2026-07-17
 

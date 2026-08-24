@@ -57,8 +57,15 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
    (for CUJ: `"no CUJs authored; run /ux-spec"`). A missing, skipped, or opt-in-not-requested
    auditor must never read as a clean pass. Honor `--only` and `--all`.
 
-2. **Auth pre-flight — once, before any auditor runs.** Navigate to `target` (honoring
-   `--scope`) and check for a login wall. If one stands there, run the **auth handoff** now:
+2. **Auth pre-flight — once, before any auditor runs.** *Applies only when this run will
+   actually drive a browser:* `target` is a URL (or a reachable running app) **and** the
+   resolved mode is live or hybrid. A repo-path target, or `--mode static`, has no page to
+   navigate and no session to establish — skip this step entirely and record nothing. Do not
+   start a dev server or open a browser just to run the probe; that is the ask-first
+   boundary below, and a static run is not owed a browser.
+
+   Otherwise: navigate to `target` (honoring `--scope`) and check for a login wall. If one
+   stands there, run the **auth handoff** now:
    [`auth-handoff.md`](../usability-audit/references/auth-handoff.md) — observe the wall
    verbatim, ask once, the **user** signs in, re-observe to confirm the session holds.
 
@@ -69,6 +76,7 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 
    | Outcome | Then |
    |---|---|
+   | Not applicable (repo-path target, or static mode) | Proceed. Nothing to record. |
    | No wall | Proceed. Nothing to record. |
    | Handoff succeeded | Proceed. **Every** auditor inherits the session, native and wrapped alike. |
    | Declined | Proceed **unauthenticated** — do not skip the run. Auditors cover what is reachable and disclose the gated screens as coverage gaps. |
@@ -131,6 +139,11 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 7. **Self-check.** Validate every report and the index with
    [`scripts/validate_report.py`](../../scripts/validate_report.py), and confirm the safety
    invariant with [`scripts/audit_safety.py`](../../scripts/audit_safety.py) `<host-repo>`.
+   It checks **both halves** of the invariant (SPEC §5.2) and exits 0 only if both
+   hold: nothing changed outside `.ux/audits/`, **and** the writes you just made inside it
+   were observed — it prints them. Exit 1 with *"no writes were observed"* means the run
+   produced nothing; that is a real failure for an auditor, not a formality, and it is the
+   only signal you get once `.ux/audits/` is gitignored and `git status` has gone quiet.
 
 8. **Render the HTML companions.** Generate a self-contained HTML view for every member
    report, the roll-up dashboard (with its go/no-go verdict and per-auditor matrix linking to
@@ -159,4 +172,5 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
   with one appended index row apiece.
 - A `rollup-<timestamp>.md` exists with the per-auditor table, skipped auditors (with
   reasons), merged issues, and a go/no-go verdict.
-- Every report validates; `audit_safety.py` reports all changes confined to `.ux/audits/`.
+- Every report validates; `audit_safety.py` exits 0 on **both** halves: nothing changed
+  outside `.ux/audits/`, **and** the reports this run wrote inside it were observed.

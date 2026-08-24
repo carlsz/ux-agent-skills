@@ -116,10 +116,16 @@ Record the outcome; it becomes the report's `Access:` line (report contract §5)
 
 | Outcome | Then |
 |---|---|
-| No wall | Nothing to record. Proceed. |
+| No wall at any `entry_point` | Nothing to record *yet* — see below. Proceed. |
 | Handoff succeeded | Proceed. Every selected journey inherits the session. |
 | Declined | Journeys behind the wall are skipped with cause `precondition unmet — access declined`. |
 | No attended browser surface | Same skip, cause `handoff unavailable — no attended browser surface`. **Not** a decline — nobody was asked. |
+
+**The probe only sees the front door.** It navigates to `entry_point`s, so it can only
+discover a wall that stands *there*. A journey that starts public and signs the user in
+partway through — browse the catalogue, then authenticate at checkout — shows this probe no
+wall at all, and the session it would have needed is not established. That case is real and
+common; it is handled at L3 below, not here.
 
 **Exit criteria:** mode fixed and recorded, with the reason if it differs from the request;
 and, if a wall was met, the handoff outcome recorded.
@@ -155,10 +161,21 @@ attempted, with its result — an unrecorded attempt makes a skip unauditable.
   **For an auth-gated precondition this rung has a defined handshake** — the auth handoff
   ([`auth-handoff.md`](../usability-audit/references/auth-handoff.md)): observe the wall,
   ask once, the *user* signs in, re-observe to confirm the session actually holds, then back
-  to L0. Normally the pre-flight in step 3 has already run it and the session is in place, so
-  arriving here still walled means the pre-flight was declined or unavailable — do not ask a
-  second time; record the rung as attempted with that cause and skip. For **seeded** state
-  that is not auth-gated, the rung is unchanged: ask, and take what you are given.
+  to L0. For **seeded** state that is not auth-gated, the rung is unchanged: ask, and take
+  what you are given.
+
+  **Arriving here still walled — which of the two happened?** The answer decides whether you
+  ask, and getting it wrong writes a decline into the report that the user never made.
+
+  | What step 3's pre-flight did | Then |
+  |---|---|
+  | **Ran the handoff, and it was declined or unavailable** | Do **not** ask a second time. Record the rung as attempted, carry that cause forward verbatim, and skip. |
+  | **Never met this wall** — it stood past the `entry_point`, so the probe could not see it | The user has not been asked about this wall. Run the handoff **now**, once, naming the step that hit it. |
+
+  A wall the pre-flight never saw is not a decline and not "unavailable", and recording it
+  as either blames a user who was never asked — the same failure
+  [`auth-handoff.md`](../usability-audit/references/auth-handoff.md) §3 keeps out of the
+  headless case. Ask once per *wall*, not once per run.
 
 **The hard stop, below L3.** No host code, fixtures, migrations, seed scripts, direct
 DB/API writes, and no `evaluate_script` state injection. This is a correctness rule before it
@@ -314,6 +331,12 @@ Pass step 1's baseline so this measures **your** footprint rather than the state
 you walked into. The baseline forgives pre-existing dirt only while its bytes are unchanged —
 so if you touched a file that was already modified, this still catches you, which is the point.
 
+It is also what keeps the **positive** half honest across runs. Exit 0 requires that your own
+writes under `.ux/audits/` were observed, and in a repo that ignores that directory (SPEC
+§11.6) every previous run's report is still sitting there — without the baseline they would
+answer "were writes observed?" on your behalf forever. With it, only bytes that differ from
+run start count as yours.
+
 If you never took the snapshot, say so and report the check as **run without a baseline**,
 naming the pre-existing changes it flagged. Do not quietly present the user's own uncommitted
 work as your violation, and do not quietly dismiss a real one as "probably theirs".
@@ -355,4 +378,7 @@ work as your violation, and do not quietly dismiss a real one as "probably their
 - The executive summary leads with `P/N journeys passed, S skipped, M of T steps verified`,
   where `N` is the journeys selected.
 - `frameworks` claims only what the run proved.
-- `git status` in the host repo shows changes only under `.ux/audits/`.
+- `audit_safety.py` exits 0 on **both** halves: nothing changed outside `.ux/audits/`,
+  **and** the writes this run made inside it were observed and listed. (`git status` alone is
+  not the check — once `.ux/audits/` is gitignored it shows nothing, which a run that wrote
+  nothing satisfies identically.)
