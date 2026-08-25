@@ -153,9 +153,27 @@ After the frontmatter, in order:
 
 5. **`## Walkthrough`** *(optional; live/hybrid only)* — a rendered visual sequence of the
    captured screenshots. See below.
-6. **`## Appendix`** — `mode`, `frameworks applied`, and **`Coverage / not inspected`**:
-   everything in scope that was NOT audited (auth-gated screens, unreachable routes),
-   named explicitly. Silent gaps are prohibited.
+6. **`## Appendix`** — `mode`, `frameworks applied`, **`Coverage / not inspected`**, and —
+   when the run met a login wall — one **`Access:`** line.
+
+   `Coverage / not inspected` names everything in scope that was NOT audited (unreachable
+   routes, gated screens that stayed unreached), explicitly. Silent gaps are prohibited.
+
+   **A gated screen that was reached via the auth handoff is not a coverage gap** and must
+   not be listed as one — it was audited. What the reader needs instead is *how access was
+   obtained*, which is the `Access:` line. Record the **rung, never the account**: no
+   `account:` key, no email, no profile or vault item name (SPEC §9.7's `author:`
+   precedent — PII in a file that ships in the host's repo).
+
+   ```markdown
+   ## Appendix
+   - Access: auth-gated; satisfied at L3 (user handoff). Account not recorded.
+   ```
+
+   Other outcomes take the same shape — `declined by user`, or
+   `handoff unavailable — no attended browser surface` (which is *not* a decline; nobody
+   was asked). Those two leave the gated screens in `Coverage / not inspected`.
+   Full procedure: [`auth-handoff.md`](./auth-handoff.md).
 
 ### The `## Walkthrough` section
 

@@ -6,6 +6,71 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-24
+
+### Added
+- **Authenticated audits — the auth handoff.** Auditors can now reach screens behind a login
+  wall. The auditor observes the wall, asks once, **you sign in yourself** in the browser it
+  is driving, and it re-observes to confirm the session before resuming. The agent never
+  types, reads, or stores a credential, so the *"never enter credentials"* boundary is
+  preserved verbatim rather than carved out. Declining still produces an honest skip; a
+  headless run records `handoff unavailable — no attended browser surface`, which is **not**
+  a decline (nobody was asked). New shared reference
+  `skills/usability-audit/references/auth-handoff.md`, cited by `usability-audit`,
+  `audit-cuj`, and `ux-audit` — no new component, no schema change.
+- **A vendor-neutral capability test** for what may satisfy the handoff: (a) the secret never
+  enters agent context, and (b) the session lands in a context isolated from the user's daily
+  profile. Clause (b) is the discriminating one — it is why agent-mediated password-manager
+  autofill is rejected (it exists to drive the user's *real* browser), and it is written as a
+  test so future mechanisms are measured rather than relitigated.
+- **`audit_safety.writes_under()`** — observes the run's own writes under a prefix even when
+  that prefix is gitignored, so the safety invariant cannot be satisfied by a run that wrote
+  nothing. Pathspec-scoped by design: a repo-wide `--ignored` scan would read every
+  `node_modules/` as an escape and fail every audit. **Wired into the CLI**, which is the
+  only form auditors invoke: `audit_safety.py <repo>` now exits **1** when nothing escaped
+  but nothing was written either, and prints the observed writes when it passes.
+  `--allow-no-writes` opts out for a run genuinely expected to write nothing.
+- **`changes_confined_to()` now catches an escape hidden behind an ignore rule.** A host
+  that gitignores `.ux/` wholesale — which the artifact posture nudges authenticated runs
+  toward — also hid `.ux/cujs/`, so an auditor writing there (the mechanical form of "never
+  repair the journey you are grading") passed silently. A second, pathspec-scoped pass over
+  every profile's paths makes an ignored `.ux/cujs/` behave exactly like a non-ignored one.
+  Deliberately *not* a repo-wide `--ignored` scan, which would read every `node_modules/` as
+  an escape; the residual gap (ignored paths no profile names) is documented rather than
+  implied away.
+- Both halves of the invariant now take the same content-addressed `baseline`, and
+  `snapshot()` sweeps the profile's write prefixes with `writes_under()`. Under an ignored
+  `.ux/audits/`, prior runs' reports never leave the working tree — without this they would
+  answer "were writes observed?" for every later run.
+- **Roll-up auth pre-flight** — `/ux-audit` runs the handoff **once, before the fan-out**, so
+  a multi-auditor run interrupts you a single time instead of once per auditor.
+
+### Changed
+- **The artifact posture for authenticated runs.** Behind a login wall the *capture* is the
+  leak, not the credential: screenshots carry the account's name and email, and reports quote
+  real records. An authenticated run now recommends gitignoring `.ux/audits/` **wholesale**
+  (the HTML companion base64-embeds images, so ignoring `assets/` alone does nothing) and
+  warns when `.ux/audits/` is already tracked, since an ignore rule does not untrack files.
+  Reports describe user data structurally and **never record which account was used** — the
+  `author:` precedent from §9.7.
+- **A gated screen reached via the handoff is no longer a coverage gap.** The report contract's
+  Appendix gains an `Access:` line recording the *rung*, and lists only screens that stayed
+  unreached under *Coverage / not inspected*.
+- SPEC §5.2's safety invariant now requires **both** halves — nothing escaped **and** writes
+  were observed — so an empty change set can no longer satisfy it. Every skill's exit
+  criteria were swept off the old *"`git status` shows changes only under `.ux/audits/`"*
+  phrasing, which is trivially true once that directory is ignored.
+- `audit_safety.py` parses `git status` and `git ls-files` with `-z`. The two commands
+  C-quote *different* subsets of awkward paths, so the newline forms spelled one file two
+  ways — and the escaped spelling matches nothing on disk, so `_digest()` read it as absent
+  and the baseline forgave it silently.
+- **The `/ux-audit` auth pre-flight is skipped for runs that never open a browser** — a
+  repo-path target or `--mode static` has no page to probe and is not owed a dev server.
+- **`audit-cuj` asks once per *wall*, not once per run.** The pre-flight only probes
+  `entry_point`s, so a journey that starts public and authenticates partway through
+  (catalogue → checkout) shows it nothing. Reaching that wall at L3 now runs the handoff
+  instead of recording a decline the user never made.
+
 ## [0.5.1] - 2026-07-17
 
 ### Changed

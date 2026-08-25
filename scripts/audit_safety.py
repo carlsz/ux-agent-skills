@@ -22,7 +22,8 @@ same reason.
     python3 scripts/audit_safety.py <host-repo-dir> --snapshot > base.json   # at run START
     python3 scripts/audit_safety.py <host-repo-dir> [--profile P] [--baseline base.json]
 
-Exit 0 = confined (safe); 1 = a change escaped the profile; 2 = usage/other error.
+Exit 0 = confined (safe); 1 = a change escaped the profile, or the run wrote nothing
+inside it; 2 = usage/other error.
 
 **Why a baseline exists.** Git tells you the tree differs from HEAD; it does not tell you
 *who* made it differ. With no baseline this script must assume the repo was clean when the
@@ -32,6 +33,22 @@ dirty with the refactor **by definition**, so `/cuj-audit` would report a violat
 user's own uncommitted work on every run. A check that cries wolf gets muted, and a muted
 check is a deleted one. Take a `--snapshot` at run start and pass it back with
 `--baseline`; only the delta is the agent's.
+
+**Where the negative half can still not see.** `_dirty_paths()` is blind to ignored files
+on purpose — a repo-wide `--ignored` scan would read every `node_modules/` as an escape and
+fail every audit in every normal repo. `changes_confined_to()` therefore adds a second,
+**pathspec-scoped** pass over `_ALL_PROFILE_PATHS`, which closes the case this suite actually
+cares about: a host that ignores `.ux/` wholesale (§11.6 nudges authenticated runs that way)
+would otherwise hide `.ux/cujs/`, and an auditor writing there is the violation the CUJ rule
+exists to catch.
+
+What remains outside its view is an escape into an ignored path that **no profile names** —
+an agent writing `dist/x.js` in a repo that ignores `dist/`. That is a real gap and is stated
+here rather than papered over. Closing it needs either a repo-wide ignored scan (the
+false-positive disaster above) or digesting every ignored file at snapshot time (minutes, in
+a repo with `node_modules/`). Neither trade is worth it for a suite whose plausible escape is
+editing tracked application source — which both halves see today. If that calculus changes,
+change it deliberately; do not reach for `--ignored` on `_dirty_paths()`.
 
 **The baseline is content-addressed, not a path list**, and that distinction is the whole
 design. In the scenario above the dirty files ARE the app files under audit, so ignoring
@@ -64,6 +81,16 @@ EXTRA_BY_PROFILE: dict[str, tuple[str, ...]] = {
 }
 
 
+# Every path SOME profile permits. The union, not any one profile's list — which is what
+# makes it useful: a path in here is permitted for one caller and a violation for another,
+# and that asymmetry ("never repair the journey you are grading") is the suite's own rule.
+# Used as the pathspec set for the ignored-escape scan in `changes_confined_to()`; see the
+# "Where the negative half can still not see" note in the module docstring.
+_ALL_PROFILE_PATHS: tuple[str, ...] = tuple(sorted(
+    {DEFAULT_PREFIX, *(p for paths in EXTRA_BY_PROFILE.values() for p in paths)}
+))
+
+
 def _allowed(path: str, entries: tuple[str, ...]) -> bool:
     """True if `path` is permitted by any allowlist entry.
 
@@ -81,26 +108,99 @@ def _allowed(path: str, entries: tuple[str, ...]) -> bool:
     return False
 
 
+def _git(repo: Path, *args: str) -> str:
+    """Run a git command in `repo` and return its stdout."""
+    proc = subprocess.run(
+        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True,
+    )
+    return proc.stdout
+
+
+def _parse_porcelain(stdout: str) -> list[str]:
+    """Paths out of `git status --porcelain -z` output.
+
+    **`-z`, never the newline form.** Git C-quotes any path carrying a non-ASCII byte, a
+    space, or a quote — and `git ls-files` quotes a *different* subset than `git status`
+    does, so the two halves of `writes_under()`'s union would spell the same file two ways
+    and never de-duplicate. Worse, the escaped spelling (`caf\\303\\251.md`) matches no file
+    on disk, so `_digest()` reads it as absent and the baseline silently forgives it.
+    NUL-terminated output is unambiguous and needs no unescaping.
+
+    In `-z` form a rename/copy is **two** records — `XY SP <new> NUL <old> NUL` — rather
+    than one `R  old -> new` line, so the origin field is consumed explicitly.
+    """
+    fields = [f for f in stdout.split("\0") if f]
+    paths: list[str] = []
+    i = 0
+    while i < len(fields):
+        entry = fields[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        paths.append(entry[3:])
+        if entry[0] in ("R", "C") or entry[1] in ("R", "C"):
+            i += 1  # the rename/copy origin, its own NUL-terminated record
+    return paths
+
+
 def _dirty_paths(repo: Path) -> list[str]:
     """Every path currently differing from HEAD.
 
     Uses `git status --porcelain -uall` so untracked files are listed individually
     (a whole new `.ux/` dir would otherwise collapse to one summary line).
+
+    **Deliberately blind to ignored files, and it must stay that way.** Adding
+    `--ignored` here to make an ignored `.ux/audits/` visible (see `writes_under`) would
+    also surface every *other* ignored path in the host repo — `node_modules/`, `.venv/`,
+    build output — and `changes_confined_to()` would report each one as a violation
+    outside the profile. Every audit in a normal repo would fail. Ignored-ness is made
+    visible where it is needed by scoping to a pathspec, never by widening this scan.
     """
-    proc = subprocess.run(
-        ["git", "-C", str(repo), "status", "--porcelain", "-uall"],
-        check=True, capture_output=True, text=True,
-    )
-    paths: list[str] = []
-    for line in proc.stdout.splitlines():
-        if not line.strip():
-            continue
-        # Porcelain v1: 2 status chars, a space, then the path (handle "R old -> new").
-        path = line[3:]
-        if " -> " in path:
-            path = path.split(" -> ", 1)[1]
-        paths.append(path.strip().strip('"'))
-    return paths
+    return _parse_porcelain(_git(repo, "status", "--porcelain", "-z", "-uall"))
+
+
+def writes_under(repo: str | Path, prefix: str = DEFAULT_PREFIX, *,
+                 baseline: dict[str, str] | None = None) -> list[str]:
+    """Files the run actually wrote under `prefix` — **even when `prefix` is gitignored**.
+
+    `changes_confined_to()` answers "did anything escape?", which is satisfied by an empty
+    working tree: a run that wrote nothing at all passes it identically to one that wrote a
+    full report. That was harmless while audit output was always visible to `git status`.
+    It stops being harmless once an authenticated run recommends ignoring `.ux/audits/`
+    wholesale (SPEC §11.6), because from that moment the invariant certifies a set it can
+    no longer see. This is the positive half: *writes were observed, and confined*.
+
+    Scoped to `prefix` by a **pathspec**, which is what makes looking at ignored files safe
+    here and unsafe in `_dirty_paths()`.
+
+    Two commands, because neither alone covers every state the prefix can be in:
+
+    - `git status -- <prefix>` sees tracked-and-modified and untracked-not-ignored files,
+      individually. It sees nothing at all once the prefix is ignored.
+    - `git ls-files -o -i --exclude-standard -- <prefix>` sees ignored files individually.
+      `git status --ignored=matching` is **not** a substitute: when the ignore rule names
+      the directory, the directory itself is the match, so the whole prefix collapses to a
+      single `!! .ux/audits/` entry and per-file granularity is lost.
+
+    Both run with `-z` so the two halves spell a path the same way — see
+    `_parse_porcelain()`. Returned sorted and de-duplicated.
+
+    `baseline` (from `snapshot()`) is the same content-addressed forgiveness
+    `changes_confined_to()` applies, and it is needed here for the same reason. A repo that
+    ignores `.ux/audits/` accumulates prior runs' reports as ignored files, and every one of
+    them answers "were writes observed?" forever — so without a baseline the positive half
+    goes vacuous exactly where the negative half already did. With one, a report is *this
+    run's* only while its bytes differ from what was there at run start. `baseline=None`
+    keeps the strict reading (the prefix started empty), matching `changes_confined_to()`.
+    """
+    repo = Path(repo)
+    tracked = _parse_porcelain(
+        _git(repo, "status", "--porcelain", "-z", "-uall", "--", prefix))
+    ignored = _git(repo, "ls-files", "-z", "-o", "-i", "--exclude-standard", "--", prefix)
+    paths = sorted({*tracked, *(p for p in ignored.split("\0") if p)})
+    if baseline is None:
+        return paths
+    return [p for p in paths if baseline.get(p, _MISSING) != _digest(repo, p)]
 
 
 def _digest(repo: Path, path: str) -> str:
@@ -115,14 +215,30 @@ def _digest(repo: Path, path: str) -> str:
         return ""
 
 
-def snapshot(repo: str | Path) -> dict[str, str]:
+def snapshot(repo: str | Path,
+             prefixes: tuple[str, ...] = _ALL_PROFILE_PATHS) -> dict[str, str]:
     """Digest every already-dirty path, for passing back as `baseline`.
 
     Take this at the START of a run. What it records is "the mess that was already here",
     which is the only way a later check can attribute the rest to the agent.
+
+    `prefixes` are additionally swept with `writes_under()`, which sees ignored files.
+    `_dirty_paths()` alone would miss them, and missing them is not cosmetic: in a repo that
+    ignores `.ux/audits/` (SPEC §11.6) the prior runs' reports would be absent from the
+    baseline, so the *next* run would count them as its own writes and the positive half of
+    the invariant would pass without the run writing anything.
+
+    The default is **every** profile's paths, not the active profile's, because both halves
+    of `changes_confined_to()` may look at any of them: `.ux/cujs/` is what the `audit`
+    profile must be caught writing. A baseline that covered only the active profile would
+    leave the other paths unforgiven, and a pre-existing `.ux/cujs/` would read as this
+    run's escape on every audit of a repo that has journeys.
     """
     repo = Path(repo)
-    return {path: _digest(repo, path) for path in _dirty_paths(repo)}
+    paths = {*_dirty_paths(repo)}
+    for prefix in prefixes:
+        paths.update(writes_under(repo, prefix))
+    return {path: _digest(repo, path) for path in sorted(paths)}
 
 
 def changes_confined_to(repo: str | Path, prefix: str = DEFAULT_PREFIX, *,
@@ -137,6 +253,17 @@ def changes_confined_to(repo: str | Path, prefix: str = DEFAULT_PREFIX, *,
     started — but only while its content is byte-identical. Touch a pre-existing dirty
     file and it is a violation again. `baseline=None` assumes the repo started clean,
     which is the strict reading and stays the default.
+
+    **Two passes, because an escape can hide behind an ignore rule.** `_dirty_paths()` is
+    blind to ignored files and must stay that way (see its docstring). But a host that
+    ignores `.ux/` wholesale — which §11.6 nudges authenticated runs toward — thereby hides
+    `.ux/cujs/` too, and `.ux/cujs/` is a *violation* under the `audit` profile. The escape
+    that matters most to this suite was the one it could not see.
+
+    The second pass is scoped to `_ALL_PROFILE_PATHS` by pathspec, so it looks only where
+    some profile could legitimately write and never at `node_modules/`. Its effect is to
+    make an ignored `.ux/cujs/` behave exactly like a non-ignored one — same violation,
+    same baseline forgiveness — rather than to widen what counts as a violation.
     """
     repo = Path(repo)
     permitted = (prefix, *allow)
@@ -147,16 +274,40 @@ def changes_confined_to(repo: str | Path, prefix: str = DEFAULT_PREFIX, *,
         if baseline is not None and baseline.get(path, _MISSING) == _digest(repo, path):
             continue  # already dirty at run start, and untouched since
         violations.append(path)
-    return violations
+
+    seen = {*violations}
+    for candidate in _ALL_PROFILE_PATHS:
+        if _allowed(candidate, permitted):
+            continue  # this profile may write here; the positive half counts it instead
+        for path in writes_under(repo, candidate, baseline=baseline):
+            if not _allowed(path, permitted) and path not in seen:
+                seen.add(path)
+                violations.append(path)
+    return sorted(violations)
 
 
 USAGE = """usage:
   audit_safety.py <host-repo-dir> --snapshot                  record pre-existing dirt
   audit_safety.py <host-repo-dir> [--profile audit|authoring] [--baseline <file>]
+                                  [--allow-no-writes]
 
 Profiles — paths the agent is permitted to have touched:
   audit      .ux/audits/                       every auditor (default)
   authoring  .ux/audits/, .ux/cujs/, SPEC.md   /ux-spec only
+
+Scope — what this can and cannot see:
+  Both halves see tracked files and untracked-not-ignored ones anywhere in the repo, plus
+  ignored files under any path a profile names (.ux/audits/, .ux/cujs/, SPEC.md). An escape
+  into an ignored path no profile names — dist/, tmp/ — is outside its view; widening the
+  scan repo-wide would read every node_modules/ as an escape. See the module docstring.
+
+Both halves must hold (SPEC §5.2):
+  Nothing changed outside the profile, AND the run's own writes were observed inside it.
+  The second half is not ceremony. An authenticated run recommends gitignoring
+  .ux/audits/ wholesale (§11.6), and from that moment `git status` alone cannot see the
+  reports — so "nothing escaped" is satisfied identically by a full audit and by one that
+  wrote nothing. Pass --allow-no-writes only for a run that is genuinely expected to write
+  nothing; it is never right for an auditor that just produced a report.
 
 Baseline — who made the mess:
   Git says the tree differs from HEAD; it cannot say who made it differ. Without a
@@ -169,7 +320,8 @@ Baseline — who made the mess:
   Only the delta is the agent's. Pre-existing dirt is forgiven while its content is
   unchanged — touch one of those files and it is a violation again.
 
-Exit 0 = confined (safe), 1 = a change escaped the profile, 2 = usage."""
+Exit 0 = confined (safe), 1 = a change escaped the profile or no writes were
+observed, 2 = usage."""
 
 
 def main(argv: list[str]) -> int:
@@ -194,6 +346,10 @@ def main(argv: list[str]) -> int:
     take_snapshot = "--snapshot" in args
     if take_snapshot:
         args.remove("--snapshot")
+
+    allow_no_writes = "--allow-no-writes" in args
+    if allow_no_writes:
+        args.remove("--allow-no-writes")
 
     baseline: dict[str, str] | None = None
     baseline_path: str | None = None
@@ -226,6 +382,9 @@ def main(argv: list[str]) -> int:
         return 2
 
     if take_snapshot:
+        # Sweeps every profile's write targets, not just `git status` and not just this
+        # profile's — those are the paths both halves may look at, and where they are
+        # ignored `_dirty_paths()` cannot see what was already there. See `snapshot()`.
         json.dump(snapshot(repo), sys.stdout, indent=2, sort_keys=True)
         sys.stdout.write("\n")
         return 0
@@ -256,7 +415,32 @@ def main(argv: list[str]) -> int:
                   "user's own work rather than the agent's — re-run with a --snapshot "
                   "taken at run start to tell them apart.", file=sys.stderr)
         return 1
+
+    # The positive half. Sweeping every directory the profile permits, because for
+    # `authoring` the writes land in `.ux/cujs/` and `SPEC.md` rather than under the
+    # default prefix — requiring writes under `.ux/audits/` alone would fail /ux-spec.
+    written: list[str] = []
+    for target in (DEFAULT_PREFIX, *allow):
+        written.extend(writes_under(repo, target, baseline=baseline))
+    written = sorted(set(written))
+
+    if not written and not allow_no_writes:
+        print(f"SAFETY VIOLATION — nothing escaped {permitted}, but no writes were "
+              f"observed inside it either (profile: {profile}; {scope}).", file=sys.stderr)
+        print("\nBoth halves of the invariant must hold (SPEC §5.2). An empty change set "
+              "satisfies 'nothing escaped' identically whether a full report was written "
+              "or nothing at all — and once .ux/audits/ is gitignored (§11.6) that is the "
+              "normal state of `git status`. If this run genuinely wrote nothing, say so "
+              "with --allow-no-writes.", file=sys.stderr)
+        return 1
+
     print(f"safe: all changes confined to {permitted} (profile: {profile}; {scope})")
+    if written:
+        print(f"observed {len(written)} write(s) inside {permitted}:")
+        for w in written:
+            print(f"  - {w}")
+    else:
+        print("no writes observed inside the profile (--allow-no-writes)")
     return 0
 
 

@@ -129,6 +129,24 @@ visible instead of silently absorbed. If everything skipped, say so in the first
   Static mode captures nothing, so it emits no walk-through.
 - **Never fabricate.** A step you did not observe is not a step that passed. If you could not
   check it, record it as skipped with the reason — a false pass is worse than an honest gap.
+- **Behind a login wall, the user signs in — never you.** The handshake is the auth handoff
+  ([`auth-handoff.md`](../skills/usability-audit/references/auth-handoff.md)): observe the
+  wall, ask once, wait, re-observe to confirm the session holds, resume. You never type, read,
+  or store a credential. A journey reached this way is **audited, not a coverage gap**;
+  record the *rung* in the Appendix's `Access:` line and **never the account** — no email, no
+  profile or vault item name. That is the `author:` rule again: PII in a file that ships in
+  the host's repo.
+- **Once a session is live, five things stay off limits.** Reading or storing session material
+  (cookies, `localStorage`, tokens — one `evaluate_script` lifts `document.cookie` into the
+  transcript); reading back a filled credential field; leaving the audited scope for account,
+  billing, or settings pages the journey never named; recording the account identity; and
+  logging the user out — a logout is a **state reset**, which L2.5 permits only when a journey
+  names it. Leave the session as you found it and say so.
+- **An authenticated run is a capture risk before it is an access problem.** Every screenshot
+  behind the wall carries whatever the account carries. Ask for a throwaway or seeded account,
+  recommend ignoring `.ux/audits/` wholesale, and prefer describing user data structurally
+  ("the top invoice row") over quoting it verbatim. App-authored copy — labels, errors,
+  placeholders — you still quote exactly; that is the evidence.
 - **A skip is not a finding**, and never a sev4. Failing to establish the starting state is
   "couldn't run this", not "the journey is broken". Keeping those apart is the entire reason
   `preconditions` are not step 0.

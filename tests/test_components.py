@@ -9,6 +9,7 @@ Run: `python3 tests/test_components.py` (exit 0 = pass, 1 = fail).
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -40,6 +41,67 @@ def _asks_first(low: str) -> bool:
     ("the write is ask-first"), which reads better in prose than a bare imperative.
     """
     return any(p in low for p in ("ask before", "ask first", "ask-first"))
+
+
+def _flatten(text: str) -> str:
+    """Lowercase `text` onto one line, dropping line-leading markdown, for phrase matching.
+
+    Every multi-word probe in this file is fragile without it. These are hard-wrapped prose
+    documents, so a phrase straddles a line break the moment a sentence shifts by one word —
+    "session material" becomes "session\\n  material" — and inside a blockquote the
+    continuation also carries a `> `, which reaches a naive matcher as "daily > profile".
+    Both cost a real debugging cycle before this existed. Match on content; never on where
+    the wrap happened to fall.
+    """
+    joined = " ".join(
+        line.lstrip().lstrip(">").strip() for line in text.splitlines()
+    )
+    return " ".join(joined.split()).lower()
+
+
+def _numbered_steps(body: str) -> list[str]:
+    """Titles of the `N. **Title**` workflow steps, in document order, normalized.
+
+    Hyphens become spaces so a probe matches "fan-out" and "fan out" alike — the two
+    spellings are one word, and no assertion should turn on which one a sentence used.
+    """
+    return [" ".join(title.replace("-", " ").split()).lower()
+            for title in re.findall(r"^\d+\.\s+\*\*(.+?)\*\*", body, re.M)]
+
+
+def _step_index(steps: list[str], phrase: str) -> int | None:
+    """Position of the first step whose title contains `phrase`; None if there is none."""
+    for i, title in enumerate(steps):
+        if phrase in title:
+            return i
+    return None
+
+
+def _check_auth_wiring(low: str, who: str, errs: list[str]) -> None:
+    """A component that can meet a login wall must cite the handoff and carry its Nevers.
+
+    Both auditors and both auditing skills reach gated screens, so all four need this — and
+    none of their existing checks would notice it disappearing. `auth-handoff.md` holds the
+    procedure, but a persona that stops *citing* it silently reverts to the old behaviour
+    (treat the wall as a coverage gap and move on) with every test still green. That is the
+    silent trap in its exact shape, so the citation and the load-bearing Nevers are asserted
+    at each of the four call sites rather than trusted to the reference alone.
+
+    Alternatives per rule, not one exact string: these are four prose files, and the same
+    rule is "never log the user out" in a skill's imperative and "logging the user out" in a
+    persona's list. Pinning one inflection would test the wording instead of the rule.
+    """
+    low = _flatten(low)
+    _require("auth-handoff" in low, f"{who}: must cite auth-handoff.md", errs)
+    for alts, what in [
+        (("session material",), "no session material"),
+        (("read back", "reading back"), "no credential read-back"),
+        (("audited scope",), "no scope wandering"),
+        (("account identity", "never the account"), "no recorded account identity"),
+        (("log the user out", "logging the user out"), "no logout"),
+    ]:
+        _require(any(a in low for a in alts),
+                 f"{who}: auth Never list must cover {what}", errs)
 
 
 def check_persona() -> list[str]:
@@ -76,6 +138,7 @@ def check_persona() -> list[str]:
     _require("not yet in scope" not in low and "not yet supported" not in low,
              "persona: frameworks must be applied, not deferred (stale Phase-1 wording)",
              errs)
+    _check_auth_wiring(low, "persona", errs)
     return errs
 
 
@@ -136,6 +199,7 @@ def check_skill() -> list[str]:
              "skill: overlapping findings attributed to a primary framework", errs)
     _require("arrive in a later phase" not in low and "later phase" not in low,
              "skill: frameworks must be applied now, not deferred to a later phase", errs)
+    _check_auth_wiring(low, "skill", errs)
     return errs
 
 
@@ -194,6 +258,36 @@ def check_rollup_skill() -> list[str]:
              "rollup skill: must map external findings to the 0-4 severity scale", errs)
     _require(".ux/audits" in low,
              "rollup skill: must write into .ux/audits", errs)
+    # The auth handoff is a PRE-FLIGHT here, not a lazy trigger, and the ordering is the
+    # whole point: every auditor shares one browser session, so a handoff inside the
+    # fan-out interrupts the user minutes in and can ask once per auditor. Assert both
+    # that it exists and that it is ordered before the fan-out — a pre-flight that drifts
+    # below step 3 still reads fine and quietly restores the behaviour it replaced.
+    flat = _flatten(body)
+    _require("auth-handoff" in flat, "rollup skill: must cite auth-handoff.md", errs)
+    _require("pre-flight" in flat, "rollup skill: must run the auth handoff as a pre-flight",
+             errs)
+    # Ordered by STEP NUMBER, not by character offset, and asserted unconditionally.
+    # Two earlier forms both failed for the same reason — they measured the prose instead
+    # of the workflow. Guarding on `"fan out" in flat` was self-disabling: the body spells
+    # it "fan-out" almost everywhere, so normalizing the hyphen (an edit with no semantic
+    # content) falsified the guard and left the ordering unchecked with CI green. Taking
+    # the first offset of either spelling is no better: the intro paragraph calls the skill
+    # "the fan-out the report contract was built for" long before step 2 exists. The steps
+    # are what carry the ordering, so read the steps.
+    steps = _numbered_steps(body)
+    auth_step = _step_index(steps, "auth pre flight")
+    fanout_step = _step_index(steps, "fan out")
+    _require(auth_step is not None, "rollup skill: needs a numbered auth pre-flight step",
+             errs)
+    _require(fanout_step is not None, "rollup skill: needs a numbered fan-out step", errs)
+    if auth_step is not None and fanout_step is not None:
+        _require(auth_step < fanout_step,
+                 "rollup skill: the auth pre-flight must come BEFORE the fan-out", errs)
+    # Declining is not a reason to abandon the run — it degrades to an unauthenticated
+    # audit with disclosed gaps, the same honesty rule the skipped auditors follow.
+    _require("unauthenticated" in flat,
+             "rollup skill: a declined handoff proceeds unauthenticated, never skips", errs)
     # Resilience: skip missing auditors, disclosed honestly.
     _require(("skip" in low or "not installed" in low or "unavailable" in low)
              and "note" in low,
@@ -401,6 +495,7 @@ def check_cuj_auditor_persona() -> list[str]:
     _require(".ux/cujs" in low,
              "cuj-auditor: must state that it never repairs the journey it is grading",
              errs)
+    _check_auth_wiring(low, "cuj-auditor persona", errs)
     return errs
 
 
@@ -592,6 +687,7 @@ def check_audit_cuj_skill() -> list[str]:
              "the host repo", errs)
     _require("exit" in low or "done when" in low or "acceptance" in low,
              "audit-cuj: must state explicit exit criteria", errs)
+    _check_auth_wiring(low, "audit-cuj skill", errs)
     return errs
 
 
@@ -749,6 +845,79 @@ def check_cuj_references() -> list[str]:
     return errs
 
 
+def check_auth_handoff_reference() -> list[str]:
+    """The shared auth-handoff procedure, cited by three skills (SPEC §11).
+
+    Asserted here rather than in `check_references()` because it is not a framework lens:
+    the lenses supply a point of view, this supplies a procedure and a boundary set. What
+    matters is that the load-bearing clauses survive an edit — a reference that lost its
+    Never list would still parse, still link, and quietly stop protecting anything.
+    """
+    errs: list[str] = []
+    path = ROOT / "skills" / "usability-audit" / "references" / "auth-handoff.md"
+    if not path.exists():
+        return ["missing reference: skills/usability-audit/references/auth-handoff.md"]
+    low = _flatten(path.read_text(encoding="utf-8"))
+
+    # The five beats. Alternatives per beat, but **every alternative must be a phrase that
+    # occurs nowhere else in the document** — the surrounding prose is saturated with this
+    # vocabulary, so a loose probe passes with its own beat deleted. Verified by mutation:
+    # the earlier `("observe", ...)` / `("skip",)` forms all survived deleting the beat
+    # outright ("observe" x6, "verbatim" x6, "skip" x4 elsewhere), which is the same defect
+    # the attended-surface rule below was already hardened against. Keep new alternatives
+    # to phrases you have counted.
+    beats = [
+        (("observe the wall", "confirm the gate is actually there"),
+         "beat 1 — observe the wall"),
+        (("record what it said",), "beat 1 — record the wall verbatim"),
+        (("the user signs in", "reads nothing, stores nothing"),
+         "beat 3 — the user signs in while the auditor idles"),
+        (("re-observe and confirm", "verify the session actually holds"),
+         "beat 4 — re-observe and confirm"),
+        (("resume, or skip with a named cause", "return to the workflow"),
+         "beat 5 — resume or skip"),
+    ]
+    for alts, what in beats:
+        _require(any(a in low for a in alts),
+                 f"auth-handoff.md: must state {what}", errs)
+
+    # The two-clause capability test — (b) is the clause that does the work, so a doc
+    # carrying only (a) has kept the reassuring half and dropped the discriminating one.
+    _require("never enters agent context" in low,
+             "auth-handoff.md: must state capability clause (a)", errs)
+    _require("isolated" in low and "daily profile" in low,
+             "auth-handoff.md: must state capability clause (b)", errs)
+
+    # Attended-surface precondition: headless is 'cannot attempt', never 'declined'.
+    # `attended` and `handoff unavailable` both also occur in the Appendix examples, so
+    # probing only those passes even with the whole rule deleted (a real miss, caught by
+    # the mutation matrix). Pin the discriminating claim, which lives only in the rule.
+    _require("attended" in low, "auth-handoff.md: must state the attended-surface rule", errs)
+    _require("handoff unavailable" in low,
+             "auth-handoff.md: must distinguish unavailable from declined", errs)
+    _require("cannot be attempted" in low,
+             "auth-handoff.md: no attended surface means the rung cannot be ATTEMPTED — "
+             "blaming a user who was never asked is the failure this prevents", errs)
+
+    # The Never list, one probe per rule.
+    for term, what in [
+        ("localstorage", "no session material"),
+        ("read back", "no credential read-back"),
+        ("leave the audited scope", "no scope wandering"),
+        ("account:", "no recorded identity"),
+        ("log the user out", "no logout"),
+    ]:
+        _require(term in low, f"auth-handoff.md: Never list must cover {what}", errs)
+
+    # The artifact posture — the surface that actually leaks.
+    _require("git ls-files" in low,
+             "auth-handoff.md: must check whether .ux/audits/ is already tracked", errs)
+    _require(".gitignore" in low and "does not untrack" in low,
+             "auth-handoff.md: must state that .gitignore does not untrack", errs)
+    _require(_asks_first(low), "auth-handoff.md: must state an ask-first gate", errs)
+    return errs
+
+
 def check_references() -> list[str]:
     """The skill-local framework lenses must exist and carry their defining terms."""
     errs: list[str] = []
@@ -776,6 +945,7 @@ def check_references() -> list[str]:
 # Adding a component means adding its check HERE, in the same commit.
 CHECKS = (
     check_persona, check_skill, check_command, check_references,
+    check_auth_handoff_reference,
     check_rollup_skill, check_rollup_command,
     check_cuj_author_persona, check_spec_cuj_skill, check_ux_spec_command,
     check_cuj_references,

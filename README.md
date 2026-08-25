@@ -171,6 +171,37 @@ framework vocabulary differ. Reports self-validate via
 [`scripts/validate_report.py`](scripts/validate_report.py); the safety invariant (writes
 stay under `.ux/audits/`) is checked by [`scripts/audit_safety.py`](scripts/audit_safety.py).
 
+## Auditing behind a login wall
+
+Most of a product lives behind sign-in, so an auditor that stops at the login page audits the
+marketing site. These auditors go further **without ever handling your credentials**:
+
+1. The auditor navigates to your target, sees the wall, and records what it saw.
+2. It stops and asks — naming the wall, what it unblocks, and how to keep the run clean.
+3. **You sign in yourself**, in the browser it is driving. It types nothing, reads nothing,
+   stores nothing.
+4. It confirms the session actually took, then audits normally.
+
+Declining is a perfectly good answer: the run continues on whatever is reachable and lists the
+gated screens as coverage gaps. On `/ux-agent-skills:ux-audit` the handoff happens **once, up
+front**, before any auditor starts — so a four-auditor fan-out interrupts you a single time.
+
+**The screenshots are the part to think about.** Once past the wall, every captured image
+carries whatever your account carries — your name, your email, real customer records — and
+those images are embedded in the report. So:
+
+- **Use a throwaway or seeded account**, never production. This is the whole fix: nothing
+  sensitive gets captured, so nothing needs scrubbing afterwards.
+- The auditor will **recommend adding `.ux/audits/` to your `.gitignore`** *before* it
+  captures anything. It cannot edit that file itself — that is yours to apply. If
+  `.ux/audits/` is already tracked, it will tell you, because an ignore rule does not untrack
+  files git already follows.
+- Reports describe your data structurally ("the top invoice row") rather than quoting it, and
+  **never record which account was used**.
+
+Full procedure and boundaries:
+[`auth-handoff.md`](skills/usability-audit/references/auth-handoff.md).
+
 ## Visual walk-throughs and shareable HTML reports
 
 Every audit is also a **self-contained HTML page** you can open in a browser or hand to a

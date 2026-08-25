@@ -36,13 +36,22 @@ Namespaced as `/ux-agent-skills:ux-audit` to avoid colliding with `agent-skills`
    `--only web-performance` or `--all`, and is otherwise disclosed as skipped. Skip any that
    aren't available — a wrapped skill not installed, no CUJs authored, or web performance not
    opted into — and disclose it in the roll-up; a skipped auditor is never treated as a pass.
-2. Invoke the `ux-audit` skill, which runs each auditor, normalizes every result into a
+2. **Auth pre-flight — once, before any auditor runs.** If the target sits behind a login
+   wall, hand off so *you* can sign in, then every auditor inherits that one session
+   ([`auth-handoff.md`](../skills/usability-audit/references/auth-handoff.md)). Doing this
+   up front means one interruption before the work starts, rather than a prompt arriving
+   partway through a multi-auditor run. Decline and the run proceeds unauthenticated, with
+   the gated screens disclosed as coverage gaps — it is never a reason to skip the audit.
+3. Invoke the `ux-audit` skill, which runs each auditor, normalizes every result into a
    contract report under `.ux/audits/`, appends the index, and writes
    `rollup-<timestamp>.md`.
-3. Print the roll-up verdict and the paths of every report written.
+4. Print the roll-up verdict and the paths of every report written.
 
 ## Guarantees
 
 - **Findings only** — no auditor edits host application code.
 - **Writes only under `.ux/audits/`** in the host repo.
+- **Never enters credentials.** Behind a login wall you sign in yourself; the auditor waits,
+  confirms the session, and never records which account you used. An authenticated run
+  recommends gitignoring `.ux/audits/` before it captures anything.
 - A skipped auditor is disclosed, never silently treated as a pass.
