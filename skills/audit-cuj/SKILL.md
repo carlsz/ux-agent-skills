@@ -133,7 +133,7 @@ and, if a wall was met, the handoff outcome recorded.
 ### 4. Establish each journey's preconditions — the precondition ladder
 
 `preconditions` say what must already be **true**; they are not steps. This is what lets a run
-say *"skipped, `precondition unmet`"* honestly instead of reporting a severity-4 catastrophe
+say *"skipped, `precondition unmet`"* honestly instead of reporting a P0 blocker
 for what is really "couldn't run this".
 
 Walk the ladder in order. Stop at the first **rung** that succeeds, and record every rung you
@@ -190,7 +190,7 @@ and littering.
 reach their own starting state through the very flow they exist to test — CUJ-001's
 precondition is *"at least one existing task"*, and add-a-task is what CUJ-001 tests. Such a
 precondition is **self-referential**, and under a naive ladder, breaking add-task would turn
-CUJ-001 into a *skip* and the severity-4 would silently disappear.
+CUJ-001 into a *skip* and the P0 would silently disappear.
 
 So: **a self-referential precondition is never a skip.** Navigate to a bare `entry_point`,
 note the unmet precondition in the Appendix, run the steps, and grade normally — adding
@@ -246,14 +246,20 @@ baseline that makes the score falsifiable.
 
 ### 7. Grade, then write one report per run
 
-Grade each failure in two stages, naming **both** in the justification: classify (4 blocked /
-3 workaround-or-criteria-fail / 2 observable mismatch / 1 cosmetic / 0 match), then **clamp**
-by the journey's own `criticality` — `critical`/`high` uncapped, `medium` max 3, `low` max 2.
-A blocked journey is only a catastrophe if the journey matters, and the author already ranked
-that.
+Grade each failure in two stages, naming **both** in the justification: classify (`P0`
+blocked / `P1` workaround-or-criteria-fail / `P2` observable mismatch / `P3` cosmetic / match
+→ omit), then **clamp** by the journey's own `criticality` — `critical`/`high` uncapped,
+`medium` **never `P0`**, `low` **never `P0` or `P1`**. A blocked journey is only *blocking* if
+the journey matters, and the author already ranked that.
 
-A **match is severity 0, and severity 0 is never a finding** — passing steps are enumerated in
-the Appendix. And **a skip is not a finding** either: it carries no severity at all.
+**The clamp is a floor, not a ceiling.** `P0` is the worst value and the lowest number, the
+reverse of the 0–4 scale this replaced, so the clamp raises the tag's floor rather than
+capping it. Writing it as "`medium` max `P1`" inverts the rule and escalates exactly the
+journeys the author marked least important.
+
+A **match is not a finding and carries no priority tag** — passing steps are enumerated in
+the Appendix and counted in the `health` scorecard. And **a skip is not a finding** either:
+it carries no priority at all.
 
 **On a cascade, do not open a second finding.** When CUJ-002 was skipped because CUJ-001 broke,
 the bug is already reported against CUJ-001 — CUJ-002 reports
@@ -370,7 +376,7 @@ work as your violation, and do not quietly dismiss a real one as "probably their
   self-referential, or skipped with a named cause.
 - Every step has a verdict backed by evidence; unobserved steps are listed as not observed.
 - `success_criteria` were scored separately, and every absence criterion has a baseline.
-- Every finding names its journey and step, and its justification names both severity stages.
+- Every finding names its journey and step, and its justification names both priority stages.
 - One report per run under `.ux/audits/`, validating against the report contract, with an
   index row appended.
 - In live/hybrid mode, each replayed step was screenshot with its stable name and the

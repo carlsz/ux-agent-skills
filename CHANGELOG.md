@@ -6,7 +6,81 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+- **Severity `sev4`–`sev1` is now priority `P0`–`P3`, everywhere — report contract
+  `schema: 3`.** The old scale said how bad a finding was; the new one says **what to do
+  about it**: `P0` Blocking (fix immediately), `P1` Major (fix before release), `P2` Minor
+  (fix in the next pass), `P3` Polish (fix if time allows). The migration is
+  `sev4 → P0 … sev1 → P3`, and it touches the frontmatter keys, the `### [PN]` finding
+  tags and their anchors, the `index.md` columns, the roll-up gate, both auditor personas,
+  four skills, the commands and the eval cases. Reports already written at `schema: 1` or
+  `2` keep their `sevN` vocabulary — `schema` records the contract a report was born
+  under, and rewriting it would falsify a historical record.
+- **The scale now carries tie-breakers, so a re-run lands in the same place.** A judgment
+  scale drifts: *if a user would contact support about it, it is at least `P1`*; no
+  workaround at all is `P0`, not merely difficult; a defect on a journey in `.ux/cujs/`
+  rises a level; something only visible by reading source is at most `P2`. Where two rules
+  disagree the higher priority wins and the Priority field names the rule that decided it.
+- **The `criticality` clamp inverted with the scale, and that is the dangerous part of this
+  migration.** Under 0–4 it was a ceiling (`medium → max 3`); under `P0`–`P3` the worst
+  value is the *lowest* number, so the same rule is now a floor (`medium → never P0`). A
+  component that still says "max" has carried the old direction across and will clamp
+  backwards — silently, and only on the journeys that matter least. `test_components.py`
+  now asserts the floor wording specifically.
+- **The old `sev0` invariant inverted too.** The scale used to have no zero, so a `[sev0]`
+  heading was the error; it now *starts* at zero. `tests/fixtures/invalid/sev0-present.md`
+  is replaced by two fixtures that catch what can actually go wrong now: a tag above the
+  top (`[P4]`) and frontmatter still counting on the superseded scale.
+- **`index.md` gains a `Health` column**, so the index carries the trend the roll-up reads.
+  A report with no scorecard writes an em dash.
+
+### Added
+- **The `health` scorecard (contract §4.1) — every auditor, in its own idiom.** A findings
+  list is silent about everything that works, so a clean audit had nothing to show and the
+  suite looked best when the app was broken. Each report now grades its own framework into
+  `health`: `score`, `max`, `pct`, `band` (Excellent / Good / Acceptable / Poor / Critical)
+  and one `items` row per graded item. **`of` is what lets one block serve four auditors
+  without pretending they share a scale** — Nielsen grades 0–4, a WCAG criterion 0–1, a
+  journey step 0–1 — while the percentage stays comparable across all of them.
+- **The scorecard's headline is derived and validated against its own rows.** `score`,
+  `max`, `pct` and `band` are all recomputed from `items`; a hand-written number that
+  cannot be reconciled with what it is made of is rejected. Same discipline as the derived
+  go/no-go verdict.
+- **A weak or n/a item must carry a `note`.** An unexplained 2/4 is an assertion, not a
+  finding — the same rule that makes a skipped auditor state its reason.
+- **`band: Unscored` for a run with nothing gradable.** A static or all-skipped CUJ run has
+  no item it can grade, and both obvious defaults lie: `0%` reads as catastrophic, `100%`
+  as a clean pass. It now says so explicitly, and the roll-up can refuse to average it in.
+- **A suite scorecard on the roll-up** — the mean of its members, each member's band, and a
+  `trend` of prior runs. `trend` holds **prior** runs only and **must degrade to `[]`**: an
+  authenticated run is advised to gitignore `.ux/audits/` wholesale, so in those repos
+  there is no history to read and the trend cannot be load-bearing.
+- **The HTML renders the scorecard from frontmatter and skips the body's `## Design health`
+  section.** The Markdown keeps the table for its own readers; printing the same numbers
+  twice in one view is the duplication the contract now rules out.
+- **Priority badges that pass WCAG contrast.** The old ramp put white text on `#ef4444`
+  (3.76:1) and `#f97316` (2.80:1) — the two badges meaning *this is serious* were the two
+  that failed, on an accessibility auditing tool. The `P0`–`P3` ramp clears 4.5:1
+  throughout.
+
 ### Fixed
+- **Every finding card had lost its Priority row — and not to a blank.** The HTML
+  renderer's field pattern still listed the schema-2 name `Severity` and not `Priority`,
+  and a field name absent from that pattern is absent from its lookahead too, so the
+  priority line was swallowed into `Framework Violation`'s value: the rationale for the
+  tag disappeared while the card count, the only thing `test_render_html.py` asserted,
+  stayed correct. Both names are now matched (`Severity` for append-only history) and the
+  row is titled by what the scale is today. Tests assert each of the five fields reaches
+  its own row, and that none of them absorbs the next.
+- **Two instruction files still mapped onto the 0–4 numbers, which inverts under `P0`–`P3`.**
+  `audit-cuj/SKILL.md` graded "4 blocked / 3 workaround / … / 0 match" and clamped with
+  `medium max 3` — the ceiling direction this migration reverses, in the one file the
+  auditor actually follows; the cuj-auditor *persona* had been migrated and the skill had
+  not, and no check covered it. `ux-audit/SKILL.md` normalized wrapped tools under the
+  heading "map each tool's severity onto the `P0`-`P3` scale" while its targets stayed bare
+  numbers, so "blocker → 3–4" read as `P3`–`P2`: the most serious findings in the suite
+  filed as polish. `test_components.py` now asserts the floor wording on the skill as well
+  as the persona, and that the normalization map names its targets as tags.
 - **The suite roll-up dashboard, which had never rendered.** `render_report_html.py`
   dispatched on a `rollup` frontmatter key that no roll-up ever wrote, so every roll-up fell
   through to the generic auditor-report path. One missed branch produced four visible

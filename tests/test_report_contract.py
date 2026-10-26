@@ -74,7 +74,12 @@ def main() -> int:
     failures += _expect_valid(FIXTURES / "valid" / "cuj-20260716-140000.md")
 
     # Each malformed report must be rejected for the right reason.
-    failures += _expect_invalid(FIXTURES / "invalid" / "sev0-present.md", "sev0")
+    # Schema 3 inverted the old `sev0` rule. The scale used to have no zero, so a `[sev0]`
+    # heading was the error; it now STARTS at zero, so the two failures worth catching are
+    # a tag above the top (P4) and frontmatter still counting on the superseded scale.
+    failures += _expect_invalid(FIXTURES / "invalid" / "priority-out-of-range.md", "[P4]")
+    failures += _expect_invalid(FIXTURES / "invalid" / "stale-severity-scale.md",
+                                "superseded severity scale")
     failures += _expect_invalid(FIXTURES / "invalid" / "count-mismatch.md", "summary")
     failures += _expect_invalid(FIXTURES / "invalid" / "missing-key.md", "auditor")
     # Coverage honesty: a report with no appendix / not-inspected section is rejected.
@@ -109,13 +114,29 @@ def main() -> int:
     # made every real roll-up render as a red NO-GO: the renderer tests this value, and
     # "GO — all journeys pass" equals neither verdict.
     failures += _expect_invalid(FIXTURES / "invalid" / "rollup-verdict-prose.md", "verdict")
-    # The gate is mechanical: NO-GO iff sev4 or sev3 is non-zero. A roll-up that declares GO
-    # over a sev3 is rejected rather than left to the auditor's judgment — two real runs
+    # The gate is mechanical: NO-GO iff p0 or p1 is non-zero. A roll-up that declares GO
+    # over a P1 is rejected rather than left to the auditor's judgment — two real runs
     # reached opposite verdicts from identical counts before this rule existed.
     failures += _expect_invalid(FIXTURES / "invalid" / "rollup-verdict-mismatch.md",
                                 "derive")
     # A skipped auditor without a reason reads as a clean pass; the reason is structural.
     failures += _expect_invalid(FIXTURES / "invalid" / "rollup-skip-no-reason.md", "reason")
+
+    # --- the health scorecard (§4.1) ------------------------------------------------------
+    # `score`, `max`, `pct` and `band` are DERIVED, so the headline is checked against the
+    # rows it is made of. A number nobody can reconcile with its items is the kind of
+    # unfalsifiable claim this suite exists to avoid.
+    failures += _expect_invalid(FIXTURES / "invalid" / "health-derived-mismatch.md",
+                                "its items derive")
+    # A weak score is an assertion until it says what it is based on — the same rule as a
+    # skipped auditor needing a reason.
+    failures += _expect_invalid(FIXTURES / "invalid" / "health-unexplained-low.md", "note")
+    # The scorecard cannot cite a lens the run never applied.
+    failures += _expect_invalid(FIXTURES / "invalid" / "health-rubric-not-applied.md",
+                                "not in 'frameworks'")
+    # "Unscored" is reserved for a run with nothing gradable; it is not an opt-out.
+    failures += _expect_invalid(FIXTURES / "invalid" / "health-false-unscored.md",
+                                "Unscored")
 
     # index.md: a conforming index passes; a malformed one is rejected.
     failures += _expect_valid_index(FIXTURES / "valid" / "index.md")
@@ -126,7 +147,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (18 checks)")
+    print("PASS — report contract (23 checks)")
     return 0
 
 

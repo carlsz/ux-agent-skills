@@ -20,7 +20,7 @@ from pathlib import Path
 import yaml
 
 REQUIRED_KEYS = ["auditor", "schema", "version", "date", "target", "mode", "scope",
-                 "frameworks", "summary"]
+                 "frameworks", "summary", "health"]
 KNOWN_MODES = {"live", "static", "hybrid"}
 
 # Framework vocabulary is PER-AUDITOR — the contract is auditor-agnostic, so each suite
@@ -38,14 +38,28 @@ FRAMEWORKS_BY_AUDITOR = {
     # traced source without completing the task or observing persistence.
     "cuj": {"cuj-contract", "task-completion", "success-criteria"},
 }
-SEVERITY_KEYS = ["sev4", "sev3", "sev2", "sev1"]  # sev0 is intentionally absent
+# Schema 3: P0-P3 replaces sev4-sev1. The tag says what to DO, not just how bad it is.
+PRIORITY_KEYS = ["p0", "p1", "p2", "p3"]
+PRIORITY_ACTION = {"p0": "fix immediately", "p1": "fix before release",
+                   "p2": "fix in the next pass", "p3": "fix if time allows"}
+# Band thresholds for `health.pct` (contract §4.1), highest floor first.
+BANDS = [(90, "Excellent"), (70, "Good"), (50, "Acceptable"), (30, "Poor"), (0, "Critical")]
+# A run with nothing gradable is "Unscored" — never 0% (reads catastrophic) and never
+# 100% (reads like a clean pass). See `_check_health`.
+UNSCORED = "Unscored"
+
+
+def band_for(pct: int) -> str:
+    """The band a health percentage falls into."""
+    return next(name for floor, name in BANDS if pct >= floor)
 
 # --- roll-up vocabulary (contract §9) ----------------------------------------------------
 
 # A suite roll-up is a sibling document type, not an auditor report: it has no single
 # `auditor`, `mode`, or `frameworks`, so it validates through its own path.
 ROLLUP_REQUIRED_KEYS = ["kind", "schema", "version", "date", "target", "scope", "verdict",
-                        "verdict_reason", "auditors_ran", "auditors_skipped", "summary"]
+                        "verdict_reason", "auditors_ran", "auditors_skipped", "summary",
+                        "health"]
 ROLLUP_VERDICTS = {"GO", "NO-GO"}
 
 
@@ -66,21 +80,25 @@ def is_rollup(fm: dict) -> bool:
 def derive_verdict(summary: dict) -> str:
     """The go/no-go gate, as a function of the counts rather than a judgment call.
 
-    Any catastrophe (sev4) or major (sev3) blocks the release; everything else ships.
+    Any P0 (fix immediately) or P1 (fix before release) blocks; everything else ships.
+    The gate reads straight off the rubric rather than reinterpreting it.
     This is deliberately total and mechanical: five runs of the same app produced five
     different verdicts from the same facts — two of them opposite on identical counts —
     because the gate lived in prose ("any auditor reports a sev3 blocker") and left the
     auditor to decide what counted as a blocker. A derived verdict cannot drift.
     """
-    return "NO-GO" if (summary.get("sev4") or summary.get("sev3")) else "GO"
+    return "NO-GO" if (summary.get("p0") or summary.get("p1")) else "GO"
 
-# A finding is a level-3 heading tagged with its severity, e.g. "### [sev3] Foo".
-FINDING_RE = re.compile(r"^###\s+\[sev([0-4])\]", re.MULTILINE)
+# A finding is a level-3 heading tagged with its priority, e.g. "### [P1] Foo".
+FINDING_RE = re.compile(r"^###\s+\[P([0-3])\]", re.MULTILINE)
+# Tags from the superseded schema-2 scale, and out-of-range P-levels. Detected so a stale
+# report fails with "this is the old scale" rather than a baffling count mismatch.
+LEGACY_TAG_RE = re.compile(r"^###\s+\[(sev\d|P[4-9]|P\d\d+)\]", re.MULTILINE | re.IGNORECASE)
 # The optional `## Walkthrough` section (§5) and the markdown images inside it.
 WALKTHROUGH_RE = re.compile(r"^##\s+Walkthrough\s*$", re.MULTILINE | re.IGNORECASE)
 IMAGE_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 # The five labelled fields every finding block must contain.
-FINDING_FIELDS = ["Issue Description", "Framework Violation", "Severity",
+FINDING_FIELDS = ["Issue Description", "Framework Violation", "Priority",
                   "Evidence", "Recommended Fix"]
 
 
@@ -107,8 +125,8 @@ def _check_frontmatter(fm: dict) -> list[str]:
         if key not in fm:
             errors.append(f"frontmatter missing required key: {key!r}")
 
-    if fm.get("schema") != 2:
-        errors.append("frontmatter 'schema' must equal 2")
+    if fm.get("schema") != 3:
+        errors.append("frontmatter 'schema' must equal 3")
 
     mode = fm.get("mode")
     if mode not in KNOWN_MODES:
@@ -155,37 +173,127 @@ def _check_summary(fm: dict, body: str) -> list[str]:
         errors.append("frontmatter 'summary' must be a mapping")
         return errors
 
-    if "sev0" in summary:
-        errors.append("summary must not contain 'sev0' (severity 0 findings are omitted)")
+    stale = [k for k in summary if re.fullmatch(r"sev\d", str(k), re.IGNORECASE)]
+    if stale:
+        errors.append(
+            f"summary uses the superseded severity scale {sorted(stale)}; schema 3 counts "
+            f"are {PRIORITY_KEYS} (sev4->p0, sev3->p1, sev2->p2, sev1->p3)")
 
-    for key in ["total"] + SEVERITY_KEYS:
+    for key in ["total"] + PRIORITY_KEYS:
         if key not in summary:
             errors.append(f"summary missing required key: {key!r}")
         elif not isinstance(summary[key], int) or summary[key] < 0:
             errors.append(f"summary {key!r} must be a non-negative integer")
 
-    # Counts must reconcile: total == sum of per-severity counts.
-    if all(isinstance(summary.get(k), int) for k in ["total"] + SEVERITY_KEYS):
-        by_sev = sum(summary[k] for k in SEVERITY_KEYS)
-        if summary["total"] != by_sev:
+    # A tag outside P0-P3 is reported for what it is, not as a count mismatch.
+    for tag in sorted(set(LEGACY_TAG_RE.findall(body))):
+        errors.append(
+            f"body contains a [{tag}] finding; schema 3 tags findings P0-P3 (§4)")
+
+    if all(isinstance(summary.get(k), int) for k in ["total"] + PRIORITY_KEYS):
+        by_pri = sum(summary[k] for k in PRIORITY_KEYS)
+        if summary["total"] != by_pri:
             errors.append(
-                f"summary 'total' ({summary['total']}) != sum of sev1-4 ({by_sev})")
+                f"summary 'total' ({summary['total']}) != sum of p0-p3 ({by_pri})")
 
         # Findings in the body must match the declared counts.
         found = FINDING_RE.findall(body)
-        if any(sev == "0" for sev in found):
-            errors.append("body contains a [sev0] finding; severity 0 must be omitted")
-        graded = [s for s in found if s != "0"]
-        if len(graded) != summary["total"]:
+        if len(found) != summary["total"]:
             errors.append(
-                f"summary 'total' ({summary['total']}) != findings in body ({len(graded)})")
-        for sev_key in SEVERITY_KEYS:
-            n = sum(1 for s in graded if s == sev_key[-1])
-            if n != summary[sev_key]:
+                f"summary 'total' ({summary['total']}) != findings in body ({len(found)})")
+        for key in PRIORITY_KEYS:
+            n = sum(1 for level in found if level == key[-1])
+            if n != summary[key]:
                 errors.append(
-                    f"summary {sev_key!r} ({summary[sev_key]}) != [sev{sev_key[-1]}] "
-                    f"findings in body ({n})")
+                    f"summary {key!r} ({summary[key]}) != [{key.upper()}] findings in "
+                    f"body ({n})")
 
+    return errors
+
+
+def _check_health(fm: dict) -> list[str]:
+    """Validate the `health` scorecard (contract §4.1) against its own items.
+
+    `score`, `max`, `pct` and `band` are all DERIVED. Checking them against `items` is the
+    whole point: a headline number nobody can reconcile with its rows is exactly the kind
+    of unfalsifiable claim this suite exists to avoid.
+    """
+    errors: list[str] = []
+    health = fm.get("health")
+    if not isinstance(health, dict):
+        if "health" in fm:
+            errors.append("frontmatter 'health' must be a mapping")
+        return errors
+
+    items = health.get("items")
+    if not isinstance(items, list) or not items:
+        errors.append("health 'items' must be a non-empty list")
+        return errors
+
+    rubric = health.get("rubric")
+    frameworks = fm.get("frameworks") or []
+    if not (isinstance(rubric, str) and rubric.strip()):
+        errors.append("health 'rubric' must be a non-empty string")
+    elif isinstance(frameworks, list) and rubric not in frameworks:
+        errors.append(
+            f"health 'rubric' ({rubric!r}) is not in 'frameworks' {frameworks}; the "
+            f"scorecard cannot cite a lens the run did not apply")
+
+    score = maximum = 0
+    for idx, item in enumerate(items):
+        where = f"health item {idx}"
+        if not isinstance(item, dict) or not str(item.get("item", "")).strip():
+            errors.append(f"{where} must be a mapping with a non-empty 'item'")
+            continue
+        where = f"health item {item['item']!r}"
+        of = item.get("of", 4)
+        if not isinstance(of, int) or of <= 0:
+            errors.append(f"{where}: 'of' must be a positive integer")
+            continue
+        got = item.get("score", "missing")
+        note = str(item.get("note", "")).strip()
+        if got is None:                       # not applicable
+            if not note:
+                errors.append(f"{where}: an n/a item must carry a 'note' saying why")
+            continue
+        if not isinstance(got, int) or not 0 <= got <= of:
+            errors.append(f"{where}: 'score' must be null or an integer in 0..{of}")
+            continue
+        # A weak score is an assertion until it says what it is based on.
+        if got * 2 <= of and not note:
+            errors.append(
+                f"{where}: scored {got}/{of} and must carry a 'note' — an unexplained low "
+                f"score is an assertion, not a finding")
+        score += got
+        maximum += of
+
+    if maximum == 0:
+        # Every item n/a: the run inspected nothing it could grade. That is a real state —
+        # a static or all-skipped run — and it must be sayable WITHOUT inventing a number.
+        # 0% would read as catastrophic and 100% as a clean pass; both are lies. The honest
+        # record is an explicit "unscored", which the roll-up can then refuse to average in.
+        for key, want in (("score", 0), ("max", 0), ("pct", None), ("band", "Unscored")):
+            if health.get(key) != want:
+                errors.append(
+                    f"health has no applicable items, so {key!r} must be {want!r} "
+                    f"(got {health.get(key)!r}) — an unscored run says so rather than "
+                    f"reporting a percentage it did not earn")
+        return errors
+
+    if health.get("band") == "Unscored" or health.get("pct") is None:
+        errors.append(
+            f"health is marked unscored but {maximum // 1} point(s) were applicable; "
+            f"'Unscored' is only for a run with no gradable item")
+        return errors
+
+    pct = round(100 * score / maximum)
+    for key, want in (("score", score), ("max", maximum), ("pct", pct)):
+        if health.get(key) != want:
+            errors.append(
+                f"health {key!r} is {health.get(key)!r} but its items derive {want}")
+    if health.get("band") != band_for(pct):
+        errors.append(
+            f"health 'band' is {health.get('band')!r} but {pct}% is {band_for(pct)!r}")
     return errors
 
 
@@ -264,8 +372,8 @@ def _check_rollup_frontmatter(fm: dict) -> list[str]:
             f"rollup must carry 'kind: rollup'"
             + (f" (found the legacy discriminator {legacy[0]!r} instead)" if legacy else ""))
 
-    if fm.get("schema") != 2:
-        errors.append("rollup frontmatter 'schema' must equal 2")
+    if fm.get("schema") != 3:
+        errors.append("rollup frontmatter 'schema' must equal 3")
 
     date = fm.get("date")
     if isinstance(date, datetime):
@@ -329,22 +437,25 @@ def _check_rollup_summary(fm: dict) -> list[str]:
             errors.append("rollup 'summary' must be a mapping")
         return errors
 
-    if "sev0" in summary:
-        errors.append("rollup summary must not contain 'sev0'")
+    stale = [k for k in summary if re.fullmatch(r"sev\d", str(k), re.IGNORECASE)]
+    if stale:
+        errors.append(
+            f"rollup summary uses the superseded severity scale {sorted(stale)}; "
+            f"schema 3 counts are {PRIORITY_KEYS}")
 
-    for key in ["total"] + SEVERITY_KEYS:
+    for key in ["total"] + PRIORITY_KEYS:
         if key not in summary:
             errors.append(f"rollup summary missing required key: {key!r}")
         elif not isinstance(summary[key], int) or summary[key] < 0:
             errors.append(f"rollup summary {key!r} must be a non-negative integer")
 
-    if not all(isinstance(summary.get(k), int) for k in ["total"] + SEVERITY_KEYS):
+    if not all(isinstance(summary.get(k), int) for k in ["total"] + PRIORITY_KEYS):
         return errors
 
-    by_sev = sum(summary[k] for k in SEVERITY_KEYS)
-    if summary["total"] != by_sev:
+    by_pri = sum(summary[k] for k in PRIORITY_KEYS)
+    if summary["total"] != by_pri:
         errors.append(
-            f"rollup summary 'total' ({summary['total']}) != sum of sev1-4 ({by_sev})")
+            f"rollup summary 'total' ({summary['total']}) != sum of p0-p3 ({by_pri})")
 
     verdict = str(fm.get("verdict", "")).strip().upper()
     if verdict in ROLLUP_VERDICTS:
@@ -352,7 +463,64 @@ def _check_rollup_summary(fm: dict) -> list[str]:
         if verdict != expected:
             errors.append(
                 f"rollup 'verdict' is {verdict!r} but the counts derive {expected!r} "
-                f"(sev4={summary['sev4']}, sev3={summary['sev3']}); the gate is mechanical")
+                f"(p0={summary['p0']}, p1={summary['p1']}); the gate is mechanical")
+    return errors
+
+
+def _check_rollup_health(fm: dict) -> list[str]:
+    """The suite scorecard: a mean of its members, and a trend that may be empty.
+
+    `trend` holds PRIOR runs only. It is allowed to be `[]` — an authenticated run is
+    advised to gitignore `.ux/audits/` wholesale, so in those repos there is no history to
+    read, and an absent trend must degrade to "no prior runs" rather than look broken.
+    """
+    errors: list[str] = []
+    health = fm.get("health")
+    if not isinstance(health, dict):
+        if "health" in fm:
+            errors.append("rollup 'health' must be a mapping")
+        return errors
+
+    auditors = health.get("auditors")
+    if not isinstance(auditors, list) or not auditors:
+        errors.append("rollup health 'auditors' must be a non-empty list")
+        auditors = []
+
+    pcts = []
+    for entry in auditors:
+        if not isinstance(entry, dict) or not str(entry.get("auditor", "")).strip():
+            errors.append(f"rollup health auditor entry needs an 'auditor': {entry!r}")
+            continue
+        pct = entry.get("pct")
+        if not isinstance(pct, int) or not 0 <= pct <= 100:
+            errors.append(f"rollup health {entry['auditor']!r}: 'pct' must be 0..100")
+            continue
+        if entry.get("band") != band_for(pct):
+            errors.append(
+                f"rollup health {entry['auditor']!r}: band is {entry.get('band')!r} but "
+                f"{pct}% is {band_for(pct)!r}")
+        pcts.append(pct)
+
+    if pcts:
+        want = round(sum(pcts) / len(pcts))
+        if health.get("pct") != want:
+            errors.append(
+                f"rollup health 'pct' is {health.get('pct')!r} but its {len(pcts)} "
+                f"auditors mean {want}")
+        if isinstance(health.get("pct"), int) and health.get("band") != band_for(health["pct"]):
+            errors.append(
+                f"rollup health 'band' is {health.get('band')!r} but "
+                f"{health['pct']}% is {band_for(health['pct'])!r}")
+
+    trend = health.get("trend")
+    if not isinstance(trend, list):
+        errors.append("rollup health 'trend' must be a list ([] when there is no history)")
+    elif any(not isinstance(t, int) or not 0 <= t <= 100 for t in trend):
+        errors.append("rollup health 'trend' entries must be integers in 0..100")
+    elif trend and health.get("pct") in trend[-1:]:
+        errors.append(
+            "rollup health 'trend' ends with this run's own 'pct'; trend holds PRIOR runs "
+            "only, so the current score is not repeated in it")
     return errors
 
 
@@ -370,7 +538,8 @@ def validate_rollup(path: str | Path) -> list[str]:
     fm, body = _split_frontmatter(path.read_text(encoding="utf-8"))
     if fm is None:
         return [body]
-    return _check_rollup_frontmatter(fm) + _check_rollup_summary(fm)
+    return (_check_rollup_frontmatter(fm) + _check_rollup_summary(fm)
+            + _check_rollup_health(fm))
 
 
 def validate(path: str | Path) -> list[str]:
@@ -389,17 +558,19 @@ def validate(path: str | Path) -> list[str]:
         return [body]  # body holds the error message in the failure case
 
     if is_rollup(fm):
-        return _check_rollup_frontmatter(fm) + _check_rollup_summary(fm)
+        return (_check_rollup_frontmatter(fm) + _check_rollup_summary(fm)
+                + _check_rollup_health(fm))
 
     errors = _check_frontmatter(fm)
     errors += _check_summary(fm, body)
+    errors += _check_health(fm)
     errors += _check_finding_fields(body)
     errors += _check_coverage(body)
     errors += _check_walkthrough(body)
     return errors
 
 
-INDEX_COLUMNS = ["Date (UTC)", "Auditor", "Scope", "Sev4", "Sev3", "Sev2", "Sev1",
+INDEX_COLUMNS = ["Date (UTC)", "Auditor", "Scope", "P0", "P1", "P2", "P3", "Health",
                  "Report"]
 
 
@@ -438,9 +609,14 @@ def validate_index(path: str | Path) -> list[str]:
             errors.append(
                 f"index row has {len(cells)} columns, expected {len(INDEX_COLUMNS)}: {ln!r}")
             continue
-        for sev_cell in cells[3:7]:  # Sev4..Sev1
-            if not sev_cell.isdigit():
-                errors.append(f"index severity cell not an integer: {sev_cell!r} in {ln!r}")
+        for cell in cells[3:7]:  # P0..P3
+            if not cell.isdigit():
+                errors.append(f"index priority cell not an integer: {cell!r} in {ln!r}")
+        health = cells[7]
+        # A report with no scorecard writes an em dash; anything else must be a percentage.
+        if health != "\u2014" and not (health.isdigit() and 0 <= int(health) <= 100):
+            errors.append(
+                f"index health cell must be 0-100 or '\u2014': {health!r} in {ln!r}")
     return errors
 
 

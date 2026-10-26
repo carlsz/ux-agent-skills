@@ -23,7 +23,7 @@
       "expected_output": "A contract-valid report at Sprout/.ux/audits/cuj-<timestamp>.md with auditor: cuj and total: 0, whose executive summary leads with the journey and step counts, and whose Appendix enumerates every verified step.",
       "expectations": [
         "Writes ONE report per run (not per CUJ) to Sprout/.ux/audits/cuj-<timestamp>.md that validates against the shared report contract, plus an appended index row",
-        "A passing journey yields total: 0 with every passing step enumerated in the Appendix and NEVER emitted as a [sev0] finding",
+        "A passing journey yields total: 0 with every passing step enumerated in the Appendix, counted in the health scorecard, and NEVER emitted as a finding",
         "The executive summary leads with 'P/N journeys passed, S skipped, M of T steps verified', where N counts the journeys SELECTED rather than the journeys run",
         "frameworks claims only what the run proved: task-completion appears only because the run actually completed the journeys live",
         "Each journey's preconditions were established via a recorded ladder rung, and the Appendix names which rung established each one",
@@ -35,11 +35,11 @@
     {
       "id": 2,
       "prompt": "Break Sprout's add-task input so submitting does nothing, then run /ux-agent-skills:cuj-audit --cuj all against the running app.",
-      "expected_output": "A report containing a severity-4 finding naming CUJ-001 and the exact step whose expected outcome never occurred — detection, not narration.",
+      "expected_output": "A report containing a P0 finding naming CUJ-001 and the exact step whose expected outcome never occurred — detection, not narration.",
       "expectations": [
-        "Emits a [sev4] finding whose Framework Violation names CUJ-001 and the SPECIFIC step that broke, quoting that step's verbatim expect",
+        "Emits a [P0] finding whose Framework Violation names CUJ-001 and the SPECIFIC step that broke, quoting that step's verbatim expect",
         "Does NOT report CUJ-001 as skipped: its precondition ('at least one existing task') is only reachable through the add-task flow it exists to test, so it is self-referential and must be graded from a bare entry_point rather than alibied into a skip",
-        "The severity justification names both stages — the failure class, then the clamp against the journey's own criticality",
+        "The priority justification names both stages — the failure class, then the clamp against the journey's own criticality (a floor under P0-P3, not the ceiling the 0-4 scale used)",
         "A journey skipped because CUJ-001 broke does NOT open a second finding for the same bug; the blocker's finding carries an 'Also blocks:' line instead",
         "total: 0 does not appear — a verifier that only ever passes is the failure this eval exists to catch",
         "Does not edit or repair Sprout's application code, and does not soften .ux/cujs/ to make the journey pass"

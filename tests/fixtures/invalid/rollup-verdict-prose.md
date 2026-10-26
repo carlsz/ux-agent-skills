@@ -1,6 +1,6 @@
 ---
 kind: rollup
-schema: 2
+schema: 3
 version: 0.5.1
 date: 2026-07-16T17:10:00Z
 target: http://localhost:3000
@@ -11,10 +11,17 @@ auditors_ran: [usability]
 auditors_skipped: []
 summary:
   total: 1
-  sev4: 0
-  sev3: 0
-  sev2: 1
-  sev1: 0
+  p0: 0
+  p1: 0
+  p2: 1
+  p3: 0
+health:
+  pct: 83
+  band: Good
+  method: mean-of-auditors
+  trend: []
+  auditors:
+    - {auditor: usability, pct: 83, band: Good, unit: "Nielsen rubric"}
 ---
 
 # UX Audit Roll-up — demo app

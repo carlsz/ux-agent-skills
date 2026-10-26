@@ -34,7 +34,7 @@ EXTERNAL_RE = re.compile(r'(?:src|href)\s*=\s*"(?:https?:)?//', re.IGNORECASE)
 
 _ACC_REPORT = """---
 auditor: accessibility
-schema: 2
+schema: 3
 version: 0.5.0
 date: 2026-01-01T00:00:00Z
 target: http://localhost:3000
@@ -44,10 +44,24 @@ frameworks:
   - wcag-2.2
 summary:
   total: 1
-  sev4: 0
-  sev3: 0
-  sev2: 1
-  sev1: 0
+  p0: 0
+  p1: 0
+  p2: 1
+  p3: 0
+health:
+  rubric: wcag-2.2
+  score: 1
+  max: 2
+  pct: 50
+  band: Acceptable
+  items:
+    - item: "2.4.3 Focus order"
+      score: 0
+      of: 1
+      note: "focus jumps past the dialog"
+    - item: "1.1.1 Non-text content"
+      score: 1
+      of: 1
 ---
 
 # Accessibility Audit — temp
@@ -56,14 +70,14 @@ summary:
 One issue; the evidence screenshot is cited as a bare path.
 
 ## Prioritized fixes
-1. [sev2] A thing
+1. [P2] A thing
 
 ## Findings
 
-### [sev2] A thing is wrong
+### [P2] A thing is wrong
 - **Issue Description:** A thing.
 - **Framework Violation:** WCAG 2.2 — 2.4.3 Focus Order.
-- **Severity:** 2 — minor.
+- **Priority:** P2 Minor — fix in the next pass.
 - **Evidence:** live capture (./assets/shot.png).
 - **Recommended Fix:** fix it.
 
@@ -73,9 +87,9 @@ One issue; the evidence screenshot is cited as a bare path.
 
 _INDEX_MD = """# Audit index
 
-| Date (UTC) | Auditor | Scope | Sev4 | Sev3 | Sev2 | Sev1 | Report |
-|------------|---------|-------|------|------|------|------|--------|
-| 2026-01-01T00:00:00Z | usability | temp | 0 | 0 | 1 | 0 | [report](usability-20260101-000000.md) |
+| Date (UTC) | Auditor | Scope | P0 | P1 | P2 | P3 | Health | Report |
+|------------|---------|-------|----|----|----|----|--------|--------|
+| 2026-01-01T00:00:00Z | usability | temp | 0 | 0 | 1 | 0 | 50 | [report](usability-20260101-000000.md) |
 """
 
 
@@ -119,9 +133,38 @@ def main() -> int:
         md = (FIX / f"{name}.md").read_text(encoding="utf-8")
         fm, _ = _split_frontmatter(md)
         total = (fm.get("summary") or {}).get("total", 0)
-        cards = render(FIX / f"{name}.md").count('<article class="finding sev')
+        cards = render(FIX / f"{name}.md").count('<article class="finding p')
         if cards != total:
             failures.append(f"{name}: {cards} finding cards, summary.total is {total}")
+
+    # Every one of a finding's five labelled fields reaches its card. `Priority` was
+    # missing from FINDING_FIELD_RE after the rename from `Severity`, and the failure was
+    # not a blank row: the name is absent from the lookahead too, so the priority line was
+    # swallowed into `Framework Violation`'s value and every card lost its rationale while
+    # the card count — all this file asserted — stayed correct.
+    usab_cards = render(FIX / "usability-20260715-143000.md")
+    for dt in ("<dt>Issue</dt>", "<dt>Violation</dt>", "<dt>Priority</dt>",
+               "<dt>Evidence</dt>", "<dt>Fix</dt>"):
+        if usab_cards.count(dt) != 2:
+            failures.append(f"finding cards: {dt} should appear once per finding")
+    if "P1 Major — fix before release" not in usab_cards:
+        failures.append("finding card: the Priority rationale did not reach its own row")
+    # ...and it reached that row INSTEAD of the preceding one, not as well as it.
+    for dd in re.findall(r"<dt>Violation</dt><dd>(.*?)</dd>", usab_cards, re.DOTALL):
+        if "Priority" in dd:
+            failures.append("finding card: Priority was swallowed into Framework Violation")
+
+    # A schema-2 report labels that field `Severity`. It still renders — reports are
+    # append-only history — under the row title the scale carries now.
+    legacy_field = _ACC_REPORT.replace("**Priority:**", "**Severity:**")
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d)
+        (base / "acc.md").write_text(legacy_field, encoding="utf-8")
+        html = render(base / "acc.md")
+        if "<dt>Priority</dt>" not in html:
+            failures.append("legacy 'Severity:' field should render under Priority")
+        if "P2 Minor — fix in the next pass" not in html:
+            failures.append("legacy 'Severity:' field value was dropped")
 
     # Flipbook frame count tracks the `### ` frames under `## Walkthrough`.
     for name in ["usability-20260715-143000", "cuj-20260716-120000"]:
@@ -206,13 +249,29 @@ def main() -> int:
     # them), so this fixture lives under invalid/ and is rendered, not validated, here.
     contested = render(ROOT / "tests" / "fixtures" / "invalid" / "rollup-verdict-mismatch.md")
     if 'class="banner verdict warn"' not in contested:
-        failures.append("a GO over a sev3 should render contested (amber), not green")
+        failures.append("a GO over a P1 should render contested (amber), not green")
     if "derive" not in contested or "<code>NO-GO</code>" not in contested:
         failures.append("contested banner should name the verdict the counts derive")
     # ...and an honest verdict is never flagged.
     for name, cls in [("rollup-20260716-150000", "nogo"), ("rollup-20260716-160000", "go")]:
         if f'class="banner verdict {cls}"' not in render(FIX / f"{name}.md"):
             failures.append(f"{name}: an honest verdict was flagged as contested")
+
+    # --- the health scorecard (contract §4.1) ---------------------------------------------
+    # Rendered from FRONTMATTER, and the body's own `## Design health` section is skipped:
+    # printing the same numbers twice in one view is the duplication the contract rules out.
+    usab = render(FIX / "usability-20260715-143000.md")
+    if usab.count(">Design health<") != 1:
+        failures.append("scorecard should render exactly once (frontmatter, not the body)")
+    if "<b>83<small>%</small></b>" not in usab:
+        failures.append("scorecard headline missing its derived percentage")
+    # A run with nothing gradable says so rather than showing 0% or 100%.
+    unscored = render(FIX / "cuj-20260716-140000.md")
+    if "Unscored" not in unscored:
+        failures.append("an unscored run must render as Unscored, not as a percentage")
+    for bad in ("<b>0<small>%</small>", "<b>100<small>%</small>"):
+        if bad in unscored:
+            failures.append(f"unscored run rendered a percentage it did not earn: {bad}")
 
     # The index landing repoints run links from .md to .html and stays self-contained.
     with tempfile.TemporaryDirectory() as d:
@@ -228,7 +287,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — render_html (self-contained, deterministic, flipbook, findings, cuj banners, rollup dashboard)")
+    print("PASS — render_html (self-contained, deterministic, flipbook, findings, cuj banners, rollup dashboard, health)")
     return 0
 
 

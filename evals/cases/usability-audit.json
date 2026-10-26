@@ -20,10 +20,10 @@
     {
       "id": 1,
       "prompt": "Clone and run https://github.com/carlsz/sprout, then run a live usability audit of its add / edit / complete / delete task flows.",
-      "expected_output": "A contract-valid usability report under Sprout/.ux/audits/ with severity-scored, Nielsen-cited findings; live-observed runtime findings marked verified.",
+      "expected_output": "A contract-valid usability report under Sprout/.ux/audits/ with P0-P3 prioritized, Nielsen-cited findings and a health scorecard; live-observed runtime findings marked verified.",
       "expectations": [
         "Writes a report to Sprout/.ux/audits/usability-<timestamp>.md that validates against the shared report contract",
-        "Every finding cites a specific framework rule (e.g. Nielsen #1, #3, #6, #9) and carries a 0-4 severity, evidence, and a fix",
+        "Every finding cites a specific framework rule (e.g. Nielsen #1, #3, #6, #9) and carries a P0-P3 priority with its action, evidence, and a fix",
         "Runtime-perception findings are stated as verified in live mode, not 'potential — unverified'",
         "The appendix names in-scope areas that were not inspected (honest coverage)",
         "Does not edit any of Sprout's application code",

@@ -108,13 +108,18 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 4. **Normalize into the shared contract.** For each wrapped auditor, write a
    contract-conforming report at `.ux/audits/<auditor>-<YYYYMMDD>-<HHMMSS>.md` — same
    frontmatter schema, body layout, and appendix. **Map each tool's severity onto the
-   0–4 scale**:
+   `P0`-`P3` scale** (contract §4 — note the direction: `P0` is the worst):
    - **Accessibility (WCAG):** blocker on a core flow / Level A name-role-value failure →
-     3–4; Level AA (e.g. 1.4.3 contrast) → 3; minor/AAA or edge → 2; cosmetic → 1.
-   - **Web performance:** a Core Web Vital in the "poor" band (measured) → 3; "needs
-     improvement" → 2; a structural anti-pattern with only *potential* impact → 1–2,
-     labeled potential per the metric-honesty rule.
-   - **Omit severity 0** (non-problems), same as usability.
+     `P0`-`P1`; Level AA (e.g. 1.4.3 contrast) → `P1`; minor/AAA or edge → `P2`; cosmetic →
+     `P3`.
+   - **Web performance:** a Core Web Vital in the "poor" band (measured) → `P1`; "needs
+     improvement" → `P2`; a structural anti-pattern with only *potential* impact →
+     `P2`-`P3`, labeled potential per the metric-honesty rule.
+   - **Omit non-problems** (they get no tag), same as usability.
+   Each normalized report also carries a `health` scorecard in its own idiom (§4.1):
+   accessibility scores one item per WCAG criterion checked (`of: 1`), web performance
+   one per metric measured. An auditor that measured nothing gradable writes
+   `pct: null, band: Unscored` rather than a number it did not earn.
    Set `auditor` and `frameworks` per the table above; carry the tool's evidence
    (screenshots, `file:line`, measured metrics) into the Evidence field.
    The **native** auditors (usability, `cuj`) already emit contract reports — no external
@@ -148,23 +153,30 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
        reason: "opt-in; run with --only web-performance or --all"
    summary:                     # MERGED counts across every member report
      total: 5
-     sev4: 0
-     sev3: 0
-     sev2: 4
-     sev1: 1
+     p0: 0
+     p1: 0
+     p2: 4
+     p3: 1
+   health:                      # suite scorecard; trend holds PRIOR runs only
+     pct: 88
+     band: Good
+     method: mean-of-auditors
+     trend: []                  # [] when there is no history to read
+     auditors:
+       - {auditor: usability, pct: 83, band: Good, unit: "Nielsen rubric"}
    ---
    ```
 
-   **The verdict is derived, not judged: `NO-GO` if `sev4 > 0` or `sev3 > 0`, else `GO`.**
+   **The verdict is derived, not judged: `NO-GO` if `p0 > 0` or `p1 > 0`, else `GO`.**
    Apply the rule mechanically and put any nuance in `verdict_reason` — never invent a third
-   verdict value like "GO with required fixes". A CUJ sev4 is a blocked journey and forces
+   verdict value like "GO with required fixes". A CUJ `P0` is a blocked journey and forces
    no-go by the same rule. `validate_report.py` recomputes the verdict from `summary` and
    fails the run on a mismatch.
 
-   The body carries the lead verdict paragraph, a per-auditor severity table, the auditors
+   The body carries the lead verdict paragraph, a per-auditor priority-and-health table, the auditors
    that ran vs. were skipped (with reasons — including a CUJ run skipped for want of
    `.ux/cujs/`, and web performance skipped when not opted into), a merged top-issues list
-   ordered by severity across all auditors, the verdict rationale, and `## Notes`. A skipped
+   ordered by priority across all auditors, the verdict rationale, and `## Notes`. A skipped
    CUJ run, or a web-performance run not opted into, is disclosed, never scored as a pass.
    Link to each individual report.
 

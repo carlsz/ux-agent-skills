@@ -13,14 +13,16 @@ The contract governs **two document types**: the per-run **auditor report** (§1
 schema version, and the severity rubric; they differ in frontmatter, because a roll-up has
 no single auditor, mode, or framework.
 
-- **Schema version:** `2`
+- **Schema version:** `3`
 - **Machine-checked by:** [`scripts/validate_report.py`](../../../scripts/validate_report.py)
   (the executable form of this document — if the two ever disagree, reconcile them).
 
 > **Schema history.** `2` added the optional `## Walkthrough` section (§5) and the
-> `assets/` naming convention (§1). A report written by an older auditor at `schema: 1` is
-> not rewritten to `2` — `schema` records the contract the report was born under. Only
-> freshly emitted reports carry `2`.
+> `assets/` naming convention (§1). `3` replaced the 0–4 severity scale with **P0–P3**
+> (§4) and added the **`health` scorecard** (§4.1). A report written by an older auditor at
+> `schema: 1` or `2` is not rewritten — `schema` records the contract the report was born
+> under, and its `sev4..sev1` counts stay as that run wrote them. Only freshly emitted
+> reports carry `3`.
 
 ---
 
@@ -80,7 +82,7 @@ creates a new file — it never overwrites or deletes a prior report.
 ```yaml
 ---
 auditor: usability          # usability | accessibility | web-performance | …
-schema: 2                    # report-contract version — must be 2
+schema: 3                    # report-contract version — must be 3
 version: 0.1.0               # the EMITTING PLUGIN's version — read it at run time from
                              # .claude-plugin/plugin.json. Never copy this number.
 date: 2026-07-15T14:30:00Z   # ISO-8601, UTC, from the runtime clock
@@ -92,16 +94,29 @@ frameworks:                  # knowledge bases actually applied (non-empty)
   - shneiderman-8            #   ai-heuristics, npcis
 summary:                     # counts MUST reconcile (see §5)
   total: 2
-  sev4: 0                    # catastrophe
-  sev3: 1                    # major
-  sev2: 1                    # minor
-  sev1: 0                    # cosmetic
+  p0: 0                      # blocking
+  p1: 1                      # major
+  p2: 1                      # minor
+  p3: 0                      # polish
+health:                      # the scorecard — see §4.1
+  rubric: nielsen-10
+  score: 30
+  max: 36
+  pct: 83
+  band: Good
+  items:
+    - item: "Visibility of system status"
+      score: 4
+      note: "aria-live task count; immediate feedback on every action"
+    - item: "Help and documentation"
+      score: null
+      note: "n/a — single-screen app, no help surface"
 ---
 ```
 
 **Rules**
-- All nine keys are required.
-- `schema` must equal `2`.
+- All ten keys are required.
+- `schema` must equal `3`.
 - **`version` is read from `.claude-plugin/plugin.json` at run time, never copied from this
   document or from a fixture.** It records *what emitted this report*, which is why no
   validator checks it: a report written by 0.1.0 says `0.1.0` forever, and rewriting that
@@ -115,50 +130,131 @@ summary:                     # counts MUST reconcile (see §5)
   requested.
 - `date` must be ISO-8601 (a trailing `Z` is accepted).
 - `frameworks` is a non-empty list drawn from the known set for that auditor.
-- `summary` contains `total`, `sev4`, `sev3`, `sev2`, `sev1` — all non-negative integers.
-  **`sev0` must NOT appear** (see §4).
+- `summary` contains `total`, `p0`, `p1`, `p2`, `p3` — all non-negative integers. A level
+  outside `P0..P3` must not appear (see §4).
+- `health` is the scorecard (§4.1). Its `score`, `max` and `pct` are **derived from `items`
+  and validated against them**, so the headline number can never drift from what it is
+  made of.
 
-## 4. Severity rubric (0–4)
+## 4. Priority rubric (P0–P3)
 
-Based on [Nielsen's severity ratings for usability problems](https://www.nngroup.com/articles/how-to-rate-the-severity-of-usability-problems/).
+Every finding carries a priority that says **what to do about it**, not merely how bad it
+is. The action column is the point: a reader should not have to infer the next step from an
+adjective.
 
-| Score | Meaning | Appears in report? |
-|-------|---------|--------------------|
-| 0 | Not a usability problem | **No — omit entirely.** Not counted, not listed. |
-| 1 | Cosmetic issue only | Yes |
-| 2 | Minor usability problem | Yes |
-| 3 | Major (high priority) | Yes |
-| 4 | Catastrophe — must fix before release | Yes, top of the fix list |
+| Tag | Name | Meaning | Action |
+|-----|------|---------|--------|
+| `P0` | Blocking | Prevents the task entirely | Fix immediately |
+| `P1` | Major | Causes significant difficulty | Fix before release |
+| `P2` | Minor | Irritating, but a workaround exists | Fix in the next pass |
+| `P3` | Polish | Little real user impact | Fix if time allows |
 
-Severity 0 is a *non-finding*: never emit a `[sev0]` heading and never add a `sev0`
-summary key. Reporting non-problems dilutes the report.
+A non-problem is a *non-finding*: it is never emitted, never counted, and has no tag.
+Reporting non-problems dilutes the report. What a run did well belongs in `health` (§4.1),
+which is where positive observations become legible without inflating the finding count.
+
+### Keeping the scale reproducible
+
+A scale applied by judgment alone drifts between runs — the same app, audited twice, gets
+two different answers. These rules are tie-breakers, applied in order, and exist to make a
+re-run land in the same place:
+
+1. **If a user would contact support about it, it is at least P1.**
+2. **If the user cannot complete the task at all — no workaround, no way around it — it is
+   P0.** Difficulty is P1; impossibility is P0.
+3. **If it affects a journey in `.ux/cujs/`, raise it one level** (to a maximum of P0). A
+   defect on a path the host has declared critical is not a minor defect.
+4. **If it is only visible to the auditor** — found by reading source, never surfaced to a
+   user — it is at most P2, and the Evidence field says so.
+
+Where two rules disagree, the higher priority wins and the Priority field says which rule
+decided it.
+
+### Migrating from schema 2
+
+`sev4 → P0`, `sev3 → P1`, `sev2 → P2`, `sev1 → P3`. Reports already written at `schema: 2`
+keep their `sevN` vocabulary — they are historical records, not drafts (see the schema
+history note above).
+
+## 4.1 The `health` scorecard
+
+A findings list says what is broken and is silent about everything else, so a clean run has
+nothing to show. `health` is the other half: a graded pass over the auditor's own framework,
+which makes a good result legible and a trend possible.
+
+```yaml
+health:
+  rubric: nielsen-10        # which framework the items come from; must appear in `frameworks`
+  score: 30                 # sum of item scores
+  max: 36                   # sum of item `of` values; n/a items excluded from BOTH
+  pct: 83                   # round(100 * score / max)
+  band: Good                # see the band table below
+  items:
+    - item: "Visibility of system status"
+      score: 4              # null = not applicable
+      of: 4                 # optional; defaults to 4
+      note: "aria-live task count; immediate feedback on every action"
+```
+
+| `pct` | Band |
+|-------|------|
+| ≥ 90 | Excellent |
+| ≥ 70 | Good |
+| ≥ 50 | Acceptable |
+| ≥ 30 | Poor |
+| < 30 | Critical |
+
+**`of` is what lets one block serve four auditors without pretending they share a scale.**
+Usability grades 0–4 against Nielsen's ten heuristics (`of: 4`, the default). Accessibility
+emits one item per WCAG criterion it checked, `score: 0 | 1, of: 1`. CUJ emits one item per
+journey step verified. Web performance emits one per metric measured. Each auditor scores in
+its own idiom and the percentage is comparable across all of them.
+
+**Rules**
+- `score` = sum of non-null item scores; `max` = sum of `of` for non-null items; `pct` =
+  `round(100 * score / max)`; `band` follows the table. **All four are validated against
+  `items`** — a hand-written headline that disagrees with its own rows is rejected.
+- `score: null` means *not applicable*: excluded from both `score` and `max`, so marking an
+  item n/a never silently penalises the result.
+- **An item scoring at or below half its `of`, or marked n/a, MUST carry a `note`.** An
+  unexplained low score is an assertion, not a finding. (This mirrors §9's rule that a
+  skipped auditor must carry a reason.)
+- `rubric` names a framework that appears in `frameworks`, so the scorecard cannot cite a
+  lens the run did not apply.
+- `health` covers what was **inspected**, not what exists: items the run could not reach are
+  `null` with a note, and the gap is repeated in `Coverage / not inspected` (§5).
 
 ## 5. Body layout
 
 After the frontmatter, in order:
 
 1. **`# <Auditor> Audit — <scope>`** — title.
-2. **`## Executive summary`** — 2–4 sentences plus a severity-count table.
-3. **`## Prioritized fixes`** — findings listed severity-high → low, each line linking to
-   its finding below.
-4. **`## Findings`** — one finding per **level-3 heading tagged with its severity**:
+2. **`## Executive summary`** — 2–4 sentences plus a priority-count table.
+3. **`## Design health`** — the scorecard (§4.1) as a readable table: one row per item with
+   its score and note, then the `score / max · pct · band` line. This section is **for the
+   Markdown reader**; the HTML companion renders the scorecard from frontmatter and skips
+   this section, so the same numbers are never printed twice in the same view.
+4. **`## Prioritized fixes`** — findings listed P0 → P3, each line linking to its finding
+   below.
+5. **`## Findings`** — one finding per **level-3 heading tagged with its priority**:
 
    ```markdown
-   ### [sevN] <short title>          # N ∈ 1..4
+   ### [PN] <short title>           # N ∈ 0..3
    ```
 
    Each finding block MUST contain these five labelled fields:
    - **Issue Description:** what is broken or confusing.
    - **Framework Violation:** the exact heuristic / rule / dimension (e.g. "Nielsen #1 —
      Visibility of System Status").
-   - **Severity:** the 0–4 score with a one-line justification.
+   - **Priority:** the P-level, its action, and a one-line justification — naming the
+     tie-breaker rule (§4) when one decided it.
    - **Evidence:** a screenshot path under `./assets/…`, a `file:line`, and/or repro
      steps. See the honesty rule in §6.
    - **Recommended Fix:** specific, actionable guidance.
 
-5. **`## Walkthrough`** *(optional; live/hybrid only)* — a rendered visual sequence of the
+6. **`## Walkthrough`** *(optional; live/hybrid only)* — a rendered visual sequence of the
    captured screenshots. See below.
-6. **`## Appendix`** — `mode`, `frameworks applied`, **`Coverage / not inspected`**, and —
+7. **`## Appendix`** — `mode`, `frameworks applied`, **`Coverage / not inspected`**, and —
    when the run met a login wall — one **`Access:`** line.
 
    `Coverage / not inspected` names everything in scope that was NOT audited (unreachable
@@ -185,7 +281,7 @@ After the frontmatter, in order:
 A visual walk-through of the run, built from the screenshots captured in **live/hybrid**
 mode. It is **optional and omitted in static mode** — with no running app there is nothing
 to capture, so its absence there is correct, not a coverage gap. Each image is an inline
-embed under `./assets/` (see §1 naming). The section carries no severity headings, so it
+embed under `./assets/` (see §1 naming). The section carries no priority headings, so it
 does not affect finding counts (§ Count reconciliation).
 
 Two shapes, by auditor:
@@ -221,8 +317,8 @@ rejects `http(s)://`, absolute, or `../`-escaping paths. It does **not** require
 to exist, nor that the file is present on disk.
 
 ### Count reconciliation
-The number of `[sevN]` findings in the body must exactly equal `summary.total`, and the
-per-severity body counts must match `summary.sev1..4`. The validator enforces this.
+The number of `[PN]` findings in the body must exactly equal `summary.total`, and the
+per-priority body counts must match `summary.p0..p3`. The validator enforces this.
 
 ## 6. Render-vs-source honesty rule
 
@@ -245,10 +341,13 @@ rows):
 ```markdown
 # Audit index
 
-| Date (UTC) | Auditor | Scope | Sev4 | Sev3 | Sev2 | Sev1 | Report |
-|------------|---------|-------|------|------|------|------|--------|
-| 2026-07-15T14:30:00Z | usability | checkout flow | 0 | 1 | 1 | 0 | [report](usability-20260715-143000.md) |
+| Date (UTC) | Auditor | Scope | P0 | P1 | P2 | P3 | Health | Report |
+|------------|---------|-------|----|----|----|----|--------|--------|
+| 2026-07-15T14:30:00Z | usability | checkout flow | 0 | 1 | 1 | 0 | 83 | [report](usability-20260715-143000.md) |
 ```
+
+`Health` is the report's `health.pct` as a bare integer, so the index carries the trend the
+roll-up reads (§9). A report with no scorecard writes `—`.
 
 ## 8. Extending the contract for a new auditor
 
@@ -257,7 +356,9 @@ A new suite member (e.g. accessibility) reuses everything above and only:
 2. defines its own `frameworks` vocabulary — register it in `FRAMEWORKS_BY_AUDITOR` in
    [`scripts/validate_report.py`](../../../scripts/validate_report.py) (an unregistered
    auditor still validates, but its frameworks are only checked for non-emptiness),
-3. keeps the same severity rubric, body layout, and `index.md` row shape.
+3. keeps the same priority rubric, body layout, and `index.md` row shape,
+4. scores its own framework into `health` (§4.1) using `of` to declare its native scale —
+   it does not have to grade 0–4.
 
 Auditors share one `.ux/audits/` directory and one `index.md`; reports from different
 auditors coexist and are distinguished by the `auditor` field. If a change to this
@@ -279,29 +380,37 @@ rollup-<YYYYMMDD>-<HHMMSS>.md
 ```yaml
 ---
 kind: rollup                 # the discriminator — REQUIRED, exactly this spelling
-schema: 2
+schema: 3
 version: 0.5.1               # the emitting plugin's version (§3 rules apply)
 date: 2026-07-19T04:39:28Z
 target: http://localhost:3000
 scope: "Sprout — full UX auditor suite"
 verdict: GO                  # GO | NO-GO — a bare token, nothing else
-verdict_reason: "all 3 critical journeys pass live; 5 minor issues, no sev3+ blockers"
+verdict_reason: "all 3 critical journeys pass live; 5 minor issues, no P0 or P1"
 auditors_ran: [cuj, usability, accessibility, web-performance]
 auditors_skipped:            # [] when none; every entry carries its reason
   - auditor: web-performance
     reason: "opt-in; run with --only web-performance or --all"
 summary:                     # the MERGED counts across every member report
   total: 5
-  sev4: 0
-  sev3: 0
-  sev2: 4
-  sev1: 1
+  p0: 0
+  p1: 0
+  p2: 4
+  p3: 1
+health:                      # the suite scorecard
+  pct: 88
+  band: Good
+  method: mean-of-auditors
+  trend: [71, 76, 79, 81, 83]   # PRIOR runs, oldest → newest; [] when no history
+  auditors:
+    - {auditor: cuj, pct: 100, band: Excellent, unit: "steps verified"}
+    - {auditor: usability, pct: 83, band: Good, unit: "Nielsen rubric"}
 ---
 ```
 
 **Rules**
 
-- All eleven keys are required. A roll-up carries **no** `auditor`, `mode`, or `frameworks`
+- All twelve keys are required. A roll-up carries **no** `auditor`, `mode`, or `frameworks`
   key — it has no single value for any of them.
 - `kind` must be exactly `rollup`. Two other spellings — `report: rollup`, and `rollup: true`
   — are *read* by the renderer and `is_rollup()` so that roll-ups written before this
@@ -310,11 +419,17 @@ summary:                     # the MERGED counts across every member report
 - **`verdict` is a bare token: `GO` or `NO-GO`.** The justification goes in
   `verdict_reason`. This is not stylistic — the HTML renderer tests this value to colour
   the go/no-go banner, so `verdict: "GO — all journeys pass"` is not a `GO` to a machine.
-- **The verdict is derived, not judged:** `NO-GO` if `sev4 > 0` or `sev3 > 0`, else `GO`.
-  The validator recomputes it from `summary` and rejects a mismatch. Nuance belongs in
-  `verdict_reason` — never in a third verdict value.
+- **The verdict is derived, not judged:** `NO-GO` if `p0 > 0` or `p1 > 0`, else `GO`. The
+  validator recomputes it from `summary` and rejects a mismatch. Nuance belongs in
+  `verdict_reason` — never in a third verdict value. (The gate reads straight off the
+  rubric: P0 is *fix immediately* and P1 is *fix before release*, so either one blocks.)
 - `summary` holds the **merged** counts across all members and reconciles the same way as
-  §3: `total` equals the sum of `sev4..sev1`. `sev0` must not appear.
+  §3: `total` equals the sum of `p0..p3`.
+- `health.pct` is the mean of the member `health.pct` values, rounded; `band` follows §4.1's
+  table; `auditors` carries one entry per member that ran. **`trend` holds PRIOR runs only**
+  — the current run's score is `pct`, not the last element — and it **must degrade to `[]`**
+  rather than to a broken chart: an authenticated run is advised to gitignore `.ux/audits/`
+  wholesale (see `auth-handoff.md` §6), so in those repos there is no history to read.
 - `auditors_skipped` is required even when empty, and **every entry carries a `reason`**.
   The suite's rule is that a skipped auditor never reads as a clean pass; making the
   reason structural is what enforces it.
@@ -336,11 +451,12 @@ summary:                     # the MERGED counts across every member report
 2. A lead paragraph stating the verdict in prose. *(The HTML renderer shows everything
    between the title and the first `## ` heading, so this paragraph is the dashboard's
    opening line — do not omit it.)*
-3. **`## Per-auditor results`** — one row per member: auditor, mode, per-severity counts,
-   total, and a one-line result. Link each auditor name to its report.
+3. **`## Per-auditor results`** — one row per member: auditor, mode, per-priority counts,
+   total, health percentage and band, and a one-line result. Link each auditor name to its
+   report.
 4. **`## Auditors that ran vs. skipped`** — prose mirroring `auditors_ran` /
    `auditors_skipped`, with the reason for every skip.
-5. **`## Merged top issues`** — findings across all members, severity-high → low, each
+5. **`## Merged top issues`** — findings across all members, `P0` → `P3`, each
    linking to its finding anchor in the member report.
 6. **`## Verdict rationale`** — why the gate landed where it did.
 7. **`## Notes`** — provenance, target caveats, and links to the member reports. A roll-up
@@ -349,6 +465,6 @@ summary:                     # the MERGED counts across every member report
 
 ### What a roll-up is not
 
-It is not validated as an auditor report: no `[sevN]` finding blocks, no five-field
+It is not validated as an auditor report: no `[PN]` finding blocks, no five-field
 finding bodies, no `## Appendix` coverage check. `validate_report.py` dispatches on the
 discriminator and applies `validate_rollup` instead.

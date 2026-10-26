@@ -69,7 +69,7 @@ schema: 1                    # cuj-contract version — must be 1
 title: Add a task to the list
 actor: "Returning user with 3-10 existing tasks, opens the app daily to capture new ones"
 goal: "Capture a new task from the list view without navigating away"   # outcome, not features
-criticality: critical        # critical | high | medium | low — drives severity capping (§6)
+criticality: critical        # critical | high | medium | low — clamps finding priority (§6)
 entry_point: "/"             # route, URL, or named screen where the journey starts
 preconditions:               # non-empty; what must already be TRUE (not what you do — §5)
   - "App loaded at / with at least one existing task"
@@ -91,7 +91,7 @@ success_criteria:            # evaluated AFTER the steps complete (§5)
   block at all** (§8).
 - `schema` must equal `1`.
 - `criticality` ∈ {`critical`, `high`, `medium`, `low`}. Not decoration — `audit-cuj` caps
-  finding severity by it (§6), so an unknown level has no defined cap.
+  finding priority by it (§6), so an unknown level has no defined clamp.
 - `preconditions`, `steps`, and `success_criteria` are non-empty lists.
 - Each step is a mapping with `n`, `action`, and `expect`, all non-empty. **`n` must be
   contiguous `1..N` in order** — findings cite `step <n>` by number, so the numbering has to
@@ -133,12 +133,12 @@ visible:
 
 **Why `preconditions` isn't just step 0.** If setup folds into the steps, then *failing to
 establish the starting state* becomes indistinguishable from *the journey being broken* — and
-`audit-cuj` would report a severity 4 catastrophe for what is really "couldn't run this".
+`audit-cuj` would report a `P0` blocker for what is really "couldn't run this".
 Keeping them apart is what lets a run say "skipped, precondition unmet" honestly.
 
 **Why `success_criteria` isn't just the last step.** A journey can pass every step and still
 fail its criteria: the row appears, the user believes they succeeded, and it's gone after a
-reload. `audit-cuj` grades that at severity 3 rather than 2 for exactly that reason (§6). If
+reload. `audit-cuj` grades that at `P1` rather than `P2` for exactly that reason (§6). If
 `success_criteria` merely restated the last step's `expect`, this entire class of silent data
 loss would be invisible.
 

@@ -64,7 +64,7 @@ the shape from [`agents/usability-auditor.md`](agents/usability-auditor.md):
 
 ```yaml
 description: Senior UX auditor that runs expert heuristic evaluation of a host app and writes a
-  severity-scored report to .ux/audits. Trigger phrases include "usability audit", "heuristic
+  priority-scored report to .ux/audits. Trigger phrases include "usability audit", "heuristic
   evaluation", "UX audit", "usability review".
 ```
 
@@ -78,7 +78,8 @@ The suite is deliberately uniform: every auditor emits the same
 conformance work. In order:
 
 1. **`agents/<x>-auditor.md`** — the persona. Body must state the findings-only boundary, the
-   render-vs-source honesty rule, the 0–4 severity format, and point at its frameworks.
+   render-vs-source honesty rule, the `P0`-`P3` priority format with its action column,
+   the `health` scorecard it must grade, and point at its frameworks.
 2. **`skills/<x>-audit/SKILL.md`** — the workflow. Numbered steps with **explicit exit criteria**.
    Must cover static/live/hybrid modes, writing under `.ux/audits/`, and the coverage-gap rule.
 3. **`skills/<x>-audit/references/`** — the framework lenses, self-contained. Personas point here;

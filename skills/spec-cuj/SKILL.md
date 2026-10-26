@@ -72,7 +72,7 @@ works" parses fine and verifies never.
    three fields `audit-cuj` grades against — each step's `expect`, the `success_criteria`, and
    `criticality` — **take the interview open and refuse a bare "yes"**: a guessed `expect`
    confirmed with "…right?" becomes a step that may not exist in a `critical` journey, and a
-   guessed `criticality` becomes a severity clamp nobody earned. See the persona's "guess the
+   guessed `criticality` becomes a priority clamp nobody earned. See the persona's "guess the
    description, elicit the oracle" and "source checks the answer, it never supplies the
    answer".
 

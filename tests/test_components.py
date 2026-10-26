@@ -127,9 +127,19 @@ def check_persona() -> list[str]:
     # Render-vs-source honesty rule.
     _require("unverified" in low or "render" in low,
              "persona: must state the render-vs-source honesty rule", errs)
-    # Output format = 0-4 severity report.
-    _require("severity" in low and "0" in body and "4" in body,
-             "persona: must define the 0-4 severity output format", errs)
+    # Output format = P0-P3 priority report. Checking for the word "severity" plus a "0"
+    # and a "4" somewhere in the body is what this used to do, and it kept passing through
+    # the schema-3 rewrite purely because the migration note mentions the old scale. Assert
+    # the whole vocabulary instead: every tag, and the action column that is the point of it.
+    for tag in ("p0", "p1", "p2", "p3"):
+        _require(tag in low, f"persona: must define the {tag.upper()} priority level", errs)
+    _require("fix immediately" in low and "fix before release" in low,
+             "persona: the priority scale must carry its action column", errs)
+    _require("severity" not in low.replace("severity scale this replaced", ""),
+             "persona: must not still describe findings in severity terms", errs)
+    # The scorecard: what a clean run has to show for itself.
+    _require("health" in low and "rubric" in low,
+             "persona: must grade the health rubric alongside the findings", errs)
     # All four frameworks (Phase 3), applied — not deferred.
     for fw in ("nielsen", "shneiderman", "npcis"):
         _require(fw in low, f"persona: must reference the {fw} framework", errs)
@@ -255,7 +265,10 @@ def check_rollup_skill() -> list[str]:
     _require("report-contract" in low or "shared contract" in low,
              "rollup skill: must normalize into the shared report contract", errs)
     _require("normaliz" in low or "map" in low,
-             "rollup skill: must map external findings to the 0-4 severity scale", errs)
+             "rollup skill: must map external findings onto the P0-P3 scale", errs)
+    for tag in ("p0", "p1"):
+        _require(tag in low,
+                 f"rollup skill: the go/no-go gate must name {tag.upper()}", errs)
     _require(".ux/audits" in low,
              "rollup skill: must write into .ux/audits", errs)
     # The auth handoff is a PRE-FLIGHT here, not a lazy trigger, and the ordering is the
@@ -295,6 +308,13 @@ def check_rollup_skill() -> list[str]:
     # Produces a combined roll-up / verdict.
     _require("roll-up" in low or "rollup" in low or "go/no-go" in low or "verdict" in low,
              "rollup skill: must produce a combined roll-up / verdict", errs)
+    # It maps each wrapped tool's own scale onto this suite's. The targets must be named
+    # as P-tags: written as bare numbers they read as the 0-4 scale, where the ordering is
+    # reversed and "blocker -> 3-4" silently becomes "blocker -> P3".
+    for tag in ("`p0`", "`p1`", "`p2`", "`p3`"):
+        _require(tag in low,
+                 f"rollup skill: the normalization map must name {tag.upper()[1:-1]} as a "
+                 "tag, not a bare 0-4 number", errs)
     # Safety boundary restated.
     _require("never" in low and "outside" in low,
              "rollup skill: must forbid writing outside .ux/audits", errs)
@@ -463,17 +483,28 @@ def check_cuj_auditor_persona() -> list[str]:
     # proves nothing. Assert the MECHANISM: classify first, then clamp by the journey's
     # own rating.
     _require("clamp" in low,
-             "cuj-auditor: severity must be clamped by the journey's criticality", errs)
-    _require("severity" in low and "0" in body and "4" in body,
-             "cuj-auditor: must state the 0-4 severity scale", errs)
+             "cuj-auditor: priority must be clamped by the journey's criticality", errs)
+    for tag in ("p0", "p1", "p2", "p3"):
+        _require(tag in low, f"cuj-auditor: must state the {tag.upper()} level", errs)
+    # The clamp INVERTED with the scale: under 0-4 it was a ceiling ("medium -> max 3"),
+    # under P0-P3 the worst value is the lowest number, so the same rule is a floor. A
+    # persona that still says "max" has carried the old direction across and will clamp
+    # backwards -- the one migration error that silently inverts behaviour.
+    _require("never `p0`" in low or "never p0" in low,
+             "cuj-auditor: the criticality clamp must read as a floor (never P0), not a "
+             "ceiling carried over from the 0-4 scale", errs)
     # A passing step is severity 0, and severity 0 is a non-finding. If passing steps ever
     # leak into the findings list, `total: 0` stops meaning "passed" and the whole
     # report-shape contract for this auditor collapses.
     _require("appendix" in low,
              "cuj-auditor: passing steps must go in the Appendix", errs)
-    _require("never as a finding" in low,
-             "cuj-auditor: a passing step is sev0 and must never be emitted as a finding",
-             errs)
+    _require("never emitted as findings" in low or "never as a finding" in low,
+             "cuj-auditor: a passing step carries no tag and must never be emitted as a "
+             "finding", errs)
+    # A run that verified nothing must not borrow the clean pass's score.
+    _require("unscored" in low,
+             "cuj-auditor: a run with nothing gradable must report Unscored, not a "
+             "percentage it did not earn", errs)
     # `total: 0` is this auditor's SUCCESS state — unique in the suite. The counts are the
     # only thing distinguishing it from a run that checked nothing.
     _require("total: 0" in low,
@@ -633,7 +664,7 @@ def check_audit_cuj_skill() -> list[str]:
              "audit-cuj: must forbid injecting state the UI cannot reach", errs)
     # The no-alibi rule — this is what saves Checkpoint F. CUJ-001's precondition ("at
     # least one existing task") is reachable only via the add-task flow CUJ-001 exists to
-    # test. Naive ladder => breaking add-task makes CUJ-001 SKIP and the sev4 vanishes,
+    # test. Naive ladder => breaking add-task makes CUJ-001 SKIP and the P0 vanishes,
     # failing SPEC §9.8's detection criterion exactly when it matters most.
     _require("no-alibi" in low,
              "audit-cuj: a precondition failure must never alibi the journey it belongs to",
@@ -646,7 +677,7 @@ def check_audit_cuj_skill() -> list[str]:
     _require("precondition unmet" in low,
              "audit-cuj: must report an unestablishable precondition as skipped", errs)
     _require("a skip is not a finding" in low,
-             "audit-cuj: a skip carries no severity — it is not a sev4", errs)
+             "audit-cuj: a skip carries no priority — it is not a P0", errs)
     _require("do not open a second finding" in low,
              "audit-cuj: a cascade must not double-count one bug as two findings", errs)
     _require("also blocks" in low,
@@ -654,7 +685,15 @@ def check_audit_cuj_skill() -> list[str]:
 
     # --- Grading and report shape. ---
     _require("clamp" in low,
-             "audit-cuj: severity must be clamped by the journey's criticality", errs)
+             "audit-cuj: priority must be clamped by the journey's criticality", errs)
+    # The same floor-not-ceiling assertion the cuj-auditor persona carries. It is here
+    # because the persona had it and the skill did not, and the 0-4 ceiling ("medium max
+    # 3") survived the P0-P3 migration in the skill alone — green suite, inverted clamp.
+    _require("never `p0`" in low or "never p0" in low,
+             "audit-cuj: the criticality clamp must read as a floor (never P0), not a "
+             "ceiling carried over from the 0-4 scale", errs)
+    for tag in ("p0", "p1", "p2", "p3"):
+        _require(tag in low, f"audit-cuj: must classify against {tag.upper()}", errs)
     _require("verbatim" in low,
              "audit-cuj: must grade against the verbatim expect, never a paraphrase", errs)
     _require("one report per run" in low,

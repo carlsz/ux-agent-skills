@@ -32,13 +32,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from validate_report import (  # noqa: E402
-    _split_frontmatter, FINDING_RE, is_rollup, SEVERITY_KEYS, derive_verdict,
+    _split_frontmatter, FINDING_RE, is_rollup, PRIORITY_KEYS, derive_verdict,
 )
 
-# --- severity vocabulary (mirrors the report contract §4) --------------------------------
+# --- priority vocabulary (mirrors the report contract §4) --------------------------------
 
-SEV_LABELS = {4: "Catastrophe", 3: "Major", 2: "Minor", 1: "Cosmetic"}
-SEV_ORDER = [4, 3, 2, 1]
+PRI_LABELS = {0: "Blocking", 1: "Major", 2: "Minor", 3: "Polish"}
+PRI_ACTIONS = {0: "Fix immediately", 1: "Fix before release",
+               2: "Fix in the next pass", 3: "Fix if time allows"}
+PRI_ORDER = [0, 1, 2, 3]
 
 # --- inline markdown ---------------------------------------------------------------------
 
@@ -52,11 +54,16 @@ IMAGE_MIME = {
     ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
 }
 
-# The five labelled fields of a finding block (report contract §5).
+# The five labelled fields of a finding block (report contract §5). `Severity` is the
+# schema-2 spelling of the field schema 3 renamed to `Priority`: it stays in the pattern
+# because reports are append-only history, and it must stay in BOTH alternations — a name
+# missing from the lookahead does not merely go unrendered, it gets swallowed into the
+# preceding field's value, which is how `Priority` silently vanished from every card.
 FINDING_FIELD_RE = re.compile(
-    r"-\s+\*\*(Issue Description|Framework Violation|Severity|Evidence|Recommended Fix):\*\*"
-    r"\s*(.*?)(?=\n-\s+\*\*(?:Issue Description|Framework Violation|Severity|Evidence|"
-    r"Recommended Fix):\*\*|\Z)",
+    r"-\s+\*\*(Issue Description|Framework Violation|Priority|Severity|Evidence|"
+    r"Recommended Fix):\*\*"
+    r"\s*(.*?)(?=\n-\s+\*\*(?:Issue Description|Framework Violation|Priority|Severity|"
+    r"Evidence|Recommended Fix):\*\*|\Z)",
     re.DOTALL,
 )
 
@@ -210,9 +217,9 @@ def _parse_findings(body: str) -> list[dict]:
         block = body[start:end]
         newline = block.find("\n")
         heading = block[:newline] if newline != -1 else block
-        title = re.sub(r"^###\s+\[sev[0-4]\]\s*", "", heading).strip()
+        title = re.sub(r"^###\s+\[P[0-3]\]\s*", "", heading).strip()
         fields = {name: val.strip() for name, val in FINDING_FIELD_RE.findall(block)}
-        findings.append({"sev": int(m.group(1)), "title": title, "fields": fields})
+        findings.append({"p": int(m.group(1)), "title": title, "fields": fields})
     return findings
 
 
@@ -222,21 +229,24 @@ def _render_findings(body: str, report_dir: Path) -> str:
         return '<p class="none">No findings.</p>'
     cards: list[str] = []
     for f in findings:
-        sev = f["sev"]
+        n = f["p"]
         rows = []
-        for key, dt in (
-            ("Issue Description", "Issue"),
-            ("Framework Violation", "Violation"),
-            ("Severity", "Severity"),
-            ("Evidence", "Evidence"),
-            ("Recommended Fix", "Fix"),
+        for keys, dt in (
+            (("Issue Description",), "Issue"),
+            (("Framework Violation",), "Violation"),
+            (("Priority", "Severity"), "Priority"),
+            (("Evidence",), "Evidence"),
+            (("Recommended Fix",), "Fix"),
         ):
-            if key in f["fields"]:
+            # A schema-2 report labels this field `Severity`; the row is titled by what the
+            # scale is now, not by what the source document happened to call it.
+            key = next((k for k in keys if k in f["fields"]), None)
+            if key:
                 rows.append(
                     f"<dt>{dt}</dt><dd>{_render_blocks(f['fields'][key], report_dir)}</dd>")
         cards.append(
-            f'<article class="finding sev{sev}">'
-            f'<header><span class="badge sev{sev}">sev{sev}</span>'
+            f'<article class="finding p{n}">'
+            f'<header><span class="badge p{n}">P{n} {PRI_LABELS[n]}</span>'
             f"<h3>{_inline(f['title'], report_dir)}</h3></header>"
             f"<dl>{''.join(rows)}</dl></article>"
         )
@@ -378,30 +388,76 @@ def _summary_of(fm: dict) -> dict:
 
 
 def _severity_bar(fm: dict) -> str:
-    """Minimal inline severity summary — `sev4 0  sev3 1 …  N findings`.
+    """Inline priority summary — `N findings · P0 0 · P1 1 …`.
 
-    Severity is the only colour on the page: the count numbers carry the ramp, dimmed when
-    zero. No cells, no bar — the badges on the cards do the heavy visual lifting.
+    Priority is the only colour on the page: the count numbers carry the ramp, dimmed when
+    zero. The badges on the cards do the heavy visual lifting.
     """
     summary = _summary_of(fm)
     # No counts at all → no bar. A roll-up written before §9 may carry none, and a row of
     # zeros is not a neutral default: it asserts "nothing found" over a document listing
     # five issues. Silence is the honest render; the body still carries the numbers.
-    if not any(k in summary for k in SEVERITY_KEYS):
+    if not any(k in summary for k in PRIORITY_KEYS):
         return ""
     # Derive `total` when absent rather than defaulting to 0, for the same reason.
     total = summary.get("total")
     if not isinstance(total, int):
-        total = sum(v for k in SEVERITY_KEYS if isinstance(v := summary.get(k), int))
+        total = sum(v for k in PRIORITY_KEYS if isinstance(v := summary.get(k), int))
     cells = [f'<div class="scell total"><b>{total}</b><span>findings</span></div>']
-    for n in SEV_ORDER:
-        count = summary.get(f"sev{n}", 0)
+    for n in PRI_ORDER:
+        count = summary.get(f"p{n}", 0)
         off = "" if count else " off"
         cells.append(
-            f'<div class="scell sev{n}{off}"><b>{count}</b>'
-            f"<span>sev{n} · {SEV_LABELS[n]}</span></div>"
+            f'<div class="scell p{n}{off}"><b>{count}</b>'
+            f"<span>P{n} · {PRI_LABELS[n]}</span></div>"
         )
     return f'<section class="sevrow">{"".join(cells)}</section>'
+
+
+def _health_section(fm: dict) -> str:
+    """Render the `health` scorecard (contract §4.1) from FRONTMATTER.
+
+    The Markdown also carries a `## Design health` section for its own readers, and
+    `render()` skips that section deliberately: printing the same numbers twice in one view
+    is the "says everything three times" problem the contract now rules out. Frontmatter is
+    the source here because it is the validated form — the body table is prose.
+    """
+    health = fm.get("health") or {}
+    items = health.get("items")
+    if not isinstance(items, list) or not items:
+        return ""
+
+    pct, band = health.get("pct"), health.get("band", "")
+    if pct is None:
+        headline = (f'<div class="hband"><b>Unscored</b>'
+                    f"<span>nothing gradable was reached &mdash; this run reports no "
+                    f"percentage rather than one it did not earn</span></div>")
+    else:
+        headline = (f'<div class="hband"><b>{pct}<small>%</small></b>'
+                    f'<span>{html.escape(str(band))} &middot; '
+                    f'{health.get("score")} of {health.get("max")} '
+                    f'&middot; {html.escape(str(health.get("rubric", "")))}</span></div>')
+
+    rows = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        score, of = it.get("score"), it.get("of", 4)
+        if score is None:
+            meter, cls = '<em class="na">n/a</em>', " na"
+        else:
+            cls = " weak" if isinstance(score, int) and score * 2 <= of else ""
+            meter = "".join(
+                f'<i class="{"on" if j < score else ""}"></i>' for j in range(of)
+            ) if of <= 8 else f"<em>{score}/{of}</em>"
+            meter = f'<span class="pips">{meter}</span>'
+        rows.append(
+            f'<tr class="hrow{cls}"><td>{html.escape(str(it.get("item", "")))}</td>'
+            f"<td>{meter}</td>"
+            f'<td class="hnote">{html.escape(str(it.get("note", "") or ""))}</td></tr>')
+
+    return ('<section class="md"><h2>Design health</h2>' + headline +
+            f'<table class="health">{"".join(rows)}</table></section>')
 
 
 # --- banners (cuj verified-pass, provenance) ---------------------------------------------
@@ -494,12 +550,14 @@ STYLE = """
 :root{color-scheme:light dark;
 --bg:#fbfbfc;--fg:#16161a;--mut:#6b7076;--card:#ffffff;--line:#e8e8ec;--link:#2563eb;
 --shadow:0 1px 2px rgba(18,18,28,.04),0 2px 6px rgba(18,18,28,.06);
---s4:#ef4444;--s3:#f97316;--s2:#eab308;--s2ink:#1a1a1a;--s1:#94a3b8;--s1ink:#1a1a1a;
---c4:#dc2626;--c3:#ea580c;--c2:#a16207;--c1:#64748b;}
+/* Badge backgrounds carry WHITE text, so each is dark enough to clear 4.5:1 — the old
+   ramp failed at 3.76:1 (sev4) and 2.80:1 (sev3), on an accessibility auditing tool. */
+--b0:#A61B1B;--b1:#B5541C;--b2:#8A6D1F;--b3:#5A6472;
+--c0:#A61B1B;--c1:#B5541C;--c2:#8A6D1F;--c3:#5A6472;}
 @media(prefers-color-scheme:dark){:root{
 --bg:#0f0f12;--fg:#e9e9ec;--mut:#9a9aa2;--card:#17181c;--line:#2a2b31;--link:#7aa2f7;
 --shadow:0 1px 2px rgba(0,0,0,.3),0 2px 8px rgba(0,0,0,.35);
---c4:#f87171;--c3:#fb923c;--c2:#eab308;--c1:#94a3b8;}}
+--c0:#f87171;--c1:#fb923c;--c2:#d7ba5c;--c3:#94a3b8;}}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--fg);
 font:16px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
@@ -519,10 +577,10 @@ display:flex;flex-direction:column;gap:.25rem}
 .scell b{font-size:1.85rem;line-height:1;font-weight:800;font-variant-numeric:tabular-nums}
 .scell span{font-size:.65rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);font-weight:700}
 .scell.off{opacity:.5}.scell.total{border-top-color:var(--fg)}
-.scell.sev4{border-top-color:var(--s4)}.scell.sev4 b{color:var(--c4)}
-.scell.sev3{border-top-color:var(--s3)}.scell.sev3 b{color:var(--c3)}
-.scell.sev2{border-top-color:var(--s2)}.scell.sev2 b{color:var(--c2)}
-.scell.sev1{border-top-color:var(--s1)}.scell.sev1 b{color:var(--c1)}
+.scell.p0{border-top-color:var(--b0)}.scell.p0 b{color:var(--c0)}
+.scell.p1{border-top-color:var(--b1)}.scell.p1 b{color:var(--c1)}
+.scell.p2{border-top-color:var(--b2)}.scell.p2 b{color:var(--c2)}
+.scell.p3{border-top-color:var(--b3)}.scell.p3 b{color:var(--c3)}
 section.md{margin:0 0 1.6rem}
 h2{font-size:1.2rem;font-weight:750;margin:2.5rem 0 .9rem;letter-spacing:-.01em}
 h3{font-size:1rem;margin:1.2rem 0 .5rem}h4{font-size:.9rem;margin:1rem 0 .4rem;color:var(--mut)}
@@ -543,8 +601,8 @@ padding:1.1rem 1.3rem;margin:1rem 0;box-shadow:var(--shadow)}
 .finding h3{margin:0;font-size:1.02rem;font-weight:680}
 .badge{font-size:.7rem;font-weight:800;letter-spacing:.02em;color:#fff;border-radius:6px;
 padding:.16rem .5rem;white-space:nowrap;text-transform:uppercase}
-.badge.sev4{background:var(--s4)}.badge.sev3{background:var(--s3)}
-.badge.sev2{background:var(--s2);color:var(--s2ink)}.badge.sev1{background:var(--s1);color:var(--s1ink)}
+.badge.p0{background:var(--b0)}.badge.p1{background:var(--b1)}
+.badge.p2{background:var(--b2)}.badge.p3{background:var(--b3)}
 .finding dl{margin:.85rem 0 0;display:grid;grid-template-columns:5.5rem 1fr;gap:.4rem .9rem}
 .finding dt{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);
 font-weight:700;padding-top:.15rem}
@@ -556,6 +614,23 @@ border-radius:10px;box-shadow:var(--shadow);display:inline-block}
 .missing{display:inline-block;font-size:.78rem;color:var(--mut);background:var(--card);
 border:1px dashed var(--line);border-radius:6px;padding:.15rem .5rem}
 .none{color:var(--mut)}
+/* design health scorecard */
+.hband{display:flex;align-items:baseline;gap:.7rem;flex-wrap:wrap;margin:.2rem 0 .9rem}
+.hband b{font-size:1.9rem;font-weight:800;line-height:1;letter-spacing:-.02em}
+.hband b small{font-size:.95rem;font-weight:600;color:var(--mut);margin-left:.1rem}
+.hband span{color:var(--mut);font-size:.86rem}
+table.health{font-size:.88rem}
+table.health td{border-bottom:1px solid var(--line);padding:.42rem .7rem;vertical-align:middle}
+table.health tr:last-child td{border-bottom:0}
+.hrow.weak td:first-child{font-weight:650}
+.hrow.na td{color:var(--mut)}
+.hnote{color:var(--mut);font-size:.84rem}
+.pips{display:inline-flex;gap:3px}
+.pips i{width:15px;height:8px;border-radius:2px;background:var(--line)}
+.pips i.on{background:var(--link)}
+.hrow.weak .pips i.on{background:var(--b2)}
+.pips em{font-style:normal;color:var(--mut);font-size:.84rem}
+em.na{font-style:normal;color:var(--mut);font-size:.82rem}
 /* walkthrough flipbook */
 .flip{background:var(--card);border:1px solid var(--line);border-radius:14px;
 box-shadow:var(--shadow);padding:.85rem;margin:1.1rem 0}
@@ -682,7 +757,7 @@ def _render_rollup(fm: dict, body: str, report_dir: Path) -> str:
     # claim as settled either: a contested verdict renders amber, never green, so a glance
     # cannot mislead. Fresh roll-ups cannot reach this state — validate_rollup rejects them.
     summary = _summary_of(fm)
-    derived = derive_verdict(summary) if any(k in summary for k in SEVERITY_KEYS) else verdict
+    derived = derive_verdict(summary) if any(k in summary for k in PRIORITY_KEYS) else verdict
     contested = derived != verdict
     kind = "warn" if contested else ("go" if verdict == "GO" else "nogo")
     icon = "⚠" if contested else ("✅" if verdict == "GO" else "🔴")
@@ -696,7 +771,7 @@ def _render_rollup(fm: dict, body: str, report_dir: Path) -> str:
               f'<div class="chips">{"".join(_chip(v) for v in chip_vals)}</div></header>')
     detail = html.escape(reason) if reason else "suite verdict; detail below."
     if contested:
-        counts = ", ".join(f"{k} {summary.get(k, 0)}" for k in SEVERITY_KEYS
+        counts = ", ".join(f"{k.upper()} {summary.get(k, 0)}" for k in PRIORITY_KEYS
                            if summary.get(k))
         detail += (f' <em>Contested: the merged counts ({counts}) derive '
                    f'<code>{derived}</code>. This roll-up states its verdict in prose '
@@ -741,6 +816,9 @@ def render(md_path: str | Path) -> str:
         start = m.end()
         end = matches[idx + 1].start() if idx + 1 < len(matches) else len(body)
         content = body[start:end]
+        if name.lower() == "design health":
+            # Rendered from frontmatter instead; see _health_section.
+            continue
         if name.lower() == "findings":
             inner = _render_findings(content, report_dir)
         elif name.lower() == "walkthrough":
@@ -760,12 +838,20 @@ def render(md_path: str | Path) -> str:
 
     parts: list[str] = [_render_header(fm), _pass_banner(fm, body),
                         _provenance_banner(fm, body), _severity_bar(fm)]
+    health_html = _health_section(fm)
     injected = False
+    scored = False
     for nlow, shtml in sections:
         if nlow == "appendix" and gallery and not injected:
             parts.append(gallery)
             injected = True
         parts.append(shtml)
+        # The scorecard follows the executive summary, where the body section used to sit.
+        if nlow == "executive summary" and health_html and not scored:
+            parts.append(health_html)
+            scored = True
+    if health_html and not scored:
+        parts.append(health_html)
     if gallery and not injected:
         parts.append(gallery)
 

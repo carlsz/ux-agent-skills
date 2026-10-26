@@ -2,7 +2,7 @@
 
 > A usability-focused auditor for the **ux-agent-skills** plugin. It inspects a host
 > app (live or from source), evaluates it against four usability frameworks, and writes
-> a severity-scored report to `.ux/audits/` in the host repo. Findings only — it never
+> a priority-scored report to `.ux/audits/` in the host repo. Findings only — it never
 > edits host application code.
 >
 > This is the **first of a suite** of auditors (accessibility, web performance, …). It
@@ -26,7 +26,7 @@ impossible to compare or track over time.
 
 ### Goal
 Deliver a **usability-auditor** that any host app can invoke on demand to produce a
-rigorous, framework-grounded, severity-scored usability report — and establish the
+rigorous, framework-grounded, priority-scored usability report — and establish the
 **report contract** the rest of the auditor suite will inherit.
 
 ### Target users
@@ -44,7 +44,7 @@ rigorous, framework-grounded, severity-scored usability report — and establish
 
 ### Success criteria
 1. Running the command against a host app produces a valid report in `.ux/audits/`.
-2. Every finding cites a specific framework heuristic, carries a 0–4 severity, is backed
+2. Every finding cites a specific framework heuristic, carries a `P0`–`P3` priority, is backed
    by concrete evidence (screenshot path, `file:line`, or repro steps), and gives an
    actionable fix.
 3. No host application file outside `.ux/audits/` is created or modified.
@@ -60,7 +60,7 @@ command) plus the shared report contract.
 
 | Layer | Path | Role |
 |-------|------|------|
-| Persona | `agents/usability-auditor.md` | *The who* — senior UX auditor voice, four-framework knowledge base, severity-report output format. |
+| Persona | `agents/usability-auditor.md` | *The who* — senior UX auditor voice, four-framework knowledge base, priority-report output format. |
 | Skill | `skills/usability-audit/SKILL.md` | *The how* — evidence-gathering → evaluation → report workflow with exit criteria. |
 | Command | `commands/usability-audit.md` | *The when* — user-facing entry point. |
 
@@ -121,13 +121,16 @@ ux-agent-skills/
 Each run writes `.ux/audits/usability-<YYYYMMDD-HHMMSS>.md`:
 
 1. **YAML frontmatter** — shared schema (§3.4).
-2. **Executive summary** — 2–4 sentences + severity counts table.
-3. **Prioritized fix list** — findings sorted by severity (4 → 1), each linking to its
+2. **Executive summary** — 2–4 sentences + priority counts table.
+2a. **Design health** — the `health` scorecard (§4.1) as a readable table. The HTML
+   companion renders this from frontmatter and skips the body section, so the same
+   numbers never print twice in one view.
+3. **Prioritized fix list** — findings sorted by priority (`P0` → `P3`), each linking to its
    detail below.
-4. **Findings** — one section per finding, using the reference's Severity Report format:
+4. **Findings** — one section per finding, using the reference's priority report format:
    - **Issue Description** — what is broken or confusing.
    - **Framework Violation** — the specific heuristic / rule / NPCIS dimension.
-   - **Severity (0–4)** — per the rubric in §4.
+   - **Priority (`P0`–`P3`)** — the tag, its action, and the justification, per §4.
    - **Evidence** — an inline screenshot embed (`![alt](./assets/…)`), `file:line`, or repro
      steps.
    - **Recommended Fix** — actionable design guidance.
@@ -143,7 +146,7 @@ frontmatter schema. Only `auditor` and `frameworks` differ between auditors.
 ```yaml
 ---
 auditor: usability          # usability | accessibility | web-performance | …
-schema: 2                    # report-contract version (2 added the Walkthrough section — §10)
+schema: 3                    # report-contract version (3: P0–P3 + the health scorecard)
 version: 0.1.0               # emitting auditor version
 date: 2026-07-15T14:30:00Z   # ISO-8601, from runtime clock
 target: https://localhost:3000/checkout   # URL or repo path
@@ -154,18 +157,18 @@ frameworks:                  # which knowledge bases were applied
   - shneiderman-8
   - ai-heuristics
   - npcis
-summary:                     # counts MUST equal the number of findings by severity
+summary:                     # counts MUST equal the number of findings by priority
   total: 12
-  sev4: 1                    # catastrophe
-  sev3: 4                    # major
-  sev2: 5                    # minor
-  sev1: 2                    # cosmetic
+  p0: 1                      # blocking
+  p1: 4                      # major
+  p2: 5                      # minor
+  p3: 2                      # polish
 ---
 ```
 
 **`index.md`** — appended (never rewritten) with one row per run:
 ```
-| Date (UTC) | Auditor | Scope | Sev4 | Sev3 | Sev2 | Sev1 | Report |
+| Date (UTC) | Auditor | Scope | P0 | P1 | P2 | P3 | Health | Report |
 ```
 
 ---
@@ -193,14 +196,32 @@ Because the deliverables are Markdown persona/skill/command files plus generated
 | AI Design Heuristics (PAIR / Amershi) | Non-deterministic / generative-AI UI: expectation-setting, explainability, correction pathways. |
 | NPCIS | Holistic: Navigation, Presentation, Content, Interaction, Strategy. |
 
-### Severity rubric (0–4, Nielsen's severity ratings)
-| Score | Meaning | In report? |
-|-------|---------|-----------|
-| 0 | Not a usability problem | No — omit |
-| 1 | Cosmetic only | Yes |
-| 2 | Minor usability problem | Yes |
-| 3 | Major (high priority) | Yes |
-| 4 | Catastrophe — fix before release | Yes, top of list |
+### Priority rubric (`P0`–`P3`)
+Every finding says what to **do** about it, not only how bad it is.
+
+| Tag | Name | Meaning | Action |
+|-----|------|---------|--------|
+| `P0` | Blocking | Prevents the task entirely | Fix immediately |
+| `P1` | Major | Causes significant difficulty | Fix before release |
+| `P2` | Minor | Irritating, but a workaround exists | Fix in the next pass |
+| `P3` | Polish | Little real user impact | Fix if time allows |
+
+A non-problem is a non-finding: no tag, not counted, not listed. Tie-breakers keep the
+scale reproducible across runs (support contact → at least `P1`; no workaround → `P0`; on a
+journey in `.ux/cujs/` → raise one level; source-only, never user-visible → at most `P2`).
+
+**Direction matters:** `P0` is the worst, the reverse of the 0–4 scale this replaced
+(`sev4 → P0` … `sev1 → P3`). Any rule that was a *ceiling* under the old numbering is a
+*floor* under this one.
+
+### Health scorecard (§4.1 of the contract)
+A findings list is silent about what works, so a clean audit has nothing to show. Each
+report also grades its own framework into `health`: `score`, `max`, `pct`, `band`
+(Excellent / Good / Acceptable / Poor / Critical) and one `items` row per graded item.
+`of` lets each auditor score in its native idiom — Nielsen 0–4, a WCAG criterion 0–1, a
+journey step 0–1 — while the percentage stays comparable. `score`, `max`, `pct` and `band`
+are **derived and validated against `items`**, and a run with nothing gradable reports
+`band: Unscored` rather than a percentage it did not earn.
 
 ### Report output rules
 - **Grounded** — every finding needs concrete evidence; no unverifiable claims.
@@ -231,10 +252,10 @@ Since outputs are agent-generated artifacts, validation focuses on the report co
 and safety invariants:
 
 1. **Schema validation** — generated frontmatter parses as YAML; all required keys
-   present; `summary` counts exactly equal findings by severity.
+   present; `summary` counts exactly equal findings by priority; `health` reconciles with its items.
 2. **Groundedness spot-check** — sample findings; each must have evidence + a valid
    framework citation + a fix. Reject fabricated or generic findings.
-3. **Severity calibration** — apply the rubric to a fixed set of known issues and confirm
+3. **Priority calibration** — apply the rubric to a fixed set of known issues and confirm
    consistent scoring across runs.
 4. **Safety invariant (critical)** — after a run, **both** halves must hold: `changes_confined_to()`
    reports nothing changed outside `.ux/audits/` (any other modified/created file is a failure),
@@ -288,7 +309,7 @@ and safety invariants:
 ### Always (no need to ask)
 - Read host source, markup, routes, and copy freely.
 - Create `.ux/` and `.ux/audits/` in the host repo root if absent, and write reports there.
-- Produce only severity-scored, evidence-backed, framework-cited findings.
+- Produce only priority-scored, evidence-backed, framework-cited findings.
 - Record actual mode, scope, and coverage gaps in every report.
 
 ### Ask first
@@ -333,7 +354,7 @@ and safety invariants:
 
 - [ ] `agents/usability-auditor.md`, `skills/usability-audit/SKILL.md`, and
       `commands/usability-audit.md` exist and are wired per the composition rule.
-- [ ] The skill loads all four framework references and applies the 0–4 rubric.
+- [ ] The skill loads all four framework references and applies the `P0`–`P3` rubric.
 - [ ] `/ux-agent-skills:usability-audit <url>` runs live mode end-to-end and writes a
       valid report to `.ux/audits/`.
 - [ ] Static-mode fallback works with no running app.
@@ -342,7 +363,7 @@ and safety invariants:
       outside `.ux/audits/`, and the run's own writes inside it were observed. A bare
       `git status` is not the check — an ignored `.ux/audits/` (§11.6) makes it
       trivially true.
-- [ ] Every finding: cites a framework, carries a 0–4 severity, has evidence, has a fix.
+- [ ] Every finding: cites a framework, carries a `P0`–`P3` priority, has evidence, has a fix.
 - [ ] README/CHANGELOG updated to reflect the auditor and the shared report contract.
 
 ---
@@ -411,7 +432,7 @@ well-designed?"* (heuristics) and *"does the thing users came for still work?"* 
    surrounding prose — and is only ever written after asking.
 3. `/cuj-audit` replays a stored journey and emits a report valid against the §3.4 contract with
    `auditor: cuj`, each finding naming the CUJ id and the step that broke.
-4. Breaking a journey in a real app produces a severity-4 finding that names the right step. Detection,
+4. Breaking a journey in a real app produces a `P0` finding that names the right step. Detection,
    not narration.
 5. The audit safety invariant is **unchanged**: an audit run that touches anything outside
    `.ux/audits/` — including `.ux/cujs/` — is still a violation.
@@ -475,7 +496,7 @@ breaks) and `## Out of scope` (what this journey deliberately does not cover).
 
 **Why `preconditions` survives** the same cut: if setup folds into step 1, then *failing to
 establish the starting state* becomes indistinguishable from *the journey being broken*, and
-`/cuj-audit` would report a severity-4 catastrophe for what is really "couldn't run this".
+`/cuj-audit` would report a `P0` blocker for what is really "couldn't run this".
 
 **`expect` is the load-bearing field.** It must be *observable*: a visible element, a specific string,
 a URL change, a persisted value. "It works", "the state updates", "it saves" are not expected outcomes
@@ -530,23 +551,28 @@ Rules:
   in the **Appendix**, not in new frontmatter keys. The frontmatter stays at the shared nine. Adding
   auditor-specific keys to a *shared* contract is how comparability erodes.
 
-### Severity mapping (0–4)
+### Priority mapping (`P0`–`P3`)
 
 Two stages: classify the failure, then clamp by the journey's own `criticality`.
 
-| Score | Class |
-|-------|-------|
-| **4** | **Journey blocked** — the expected outcome never occurs and the actor cannot reach `goal` by any route. No workaround. |
-| **3** | **Workaround required, or success criteria fail while the flow appears to succeed** — includes the silent-data-loss class: every step passed, then the task didn't persist. Rated 3 rather than 2 because the user *believes* they succeeded. |
-| **2** | **Observable mismatch, journey unaffected** — the goal is met, but `expect` is not what happened. |
-| **1** | **Cosmetic divergence** — label, copy, or ordering of a non-load-bearing element differs. |
-| **0** | **Match — omit.** Passing steps are listed in the Appendix, never as findings. |
+| Tag | Class |
+|-----|-------|
+| **`P0`** | **Journey blocked** — the expected outcome never occurs and the actor cannot reach `goal` by any route. No workaround. |
+| **`P1`** | **Workaround required, or success criteria fail while the flow appears to succeed** — includes the silent-data-loss class: every step passed, then the task didn't persist. Rated `P1` rather than `P2` because the user *believes* they succeeded. |
+| **`P2`** | **Observable mismatch, journey unaffected** — the goal is met, but `expect` is not what happened. |
+| **`P3`** | **Cosmetic divergence** — label, copy, or ordering of a non-load-bearing element differs. |
+| — | **Match — omit.** Passing steps are listed in the Appendix and counted in `health`, never as findings. |
 
-Then cap by `criticality`: `critical` / `high` → uncapped; `medium` → max 3; `low` → max 2. A blocked
-journey is only a *catastrophe* if the journey matters, and the author already ranked that — reusing
-their ranking is why `criticality` is mandatory. Each finding's justification names both stages.
+Then clamp by `criticality`: `critical` / `high` → uncapped; `medium` → **never `P0`**;
+`low` → **never `P0` or `P1`**. A blocked journey is only *blocking* if the journey matters,
+and the author already ranked that — reusing their ranking is why `criticality` is
+mandatory. Each finding's justification names both stages.
 
-Severity 0 stays a non-finding, exactly as §4 requires. **A passing journey is `total: 0`** — unique
+**The clamp inverted with the scale.** Under 0–4 this was a ceiling (`medium → max 3`);
+under `P0`–`P3` the worst value is the lowest number, so it is now a floor. A persona or
+skill that still says "max" has carried the old direction across and will clamp backwards.
+
+A match stays a non-finding, exactly as §4 requires. **A passing journey is `total: 0`** — unique
 in the suite, where empty normally means "found nothing". The executive summary must therefore lead
 with the counts, because the schema has no way to distinguish a clean pass from a run that checked
 nothing:
@@ -577,7 +603,7 @@ standard *is* the host's own journey files. So this vocabulary names which lens 
 | Value | Meaning |
 |-------|---------|
 | `cuj-contract` | The journey file is the rubric. Always present; a report without it isn't a CUJ verification. |
-| `task-completion` | The goal-reachability lens — did the actor reach `goal`, with or without a workaround? Separates sev4 from sev3. **Only claimable when the run actually completed (or failed to complete) the journey — live/hybrid only.** |
+| `task-completion` | The goal-reachability lens — did the actor reach `goal`, with or without a workaround? Separates `P0` from `P1`. **Only claimable when the run actually completed (or failed to complete) the journey — live/hybrid only.** |
 | `success-criteria` | The post-steps check. Separable because a journey can pass every step and still fail its criteria. |
 
 This makes the list a machine-readable statement of *how much the run could prove*: a static run
@@ -623,7 +649,7 @@ auto-installing, and says so in its summary. It is not added to `plugin.json`
 **Guessing is scoped, not banned.** `interview-me`'s method is a guess attached to each question,
 and its own documented risk is a polite user agreeing to be agreeable. That risk is only costly on
 the fields something downstream is **graded** against — each step's `expect` and the
-`success_criteria` (`audit-cuj`'s pass/fail oracle) and `criticality` (the severity clamp). So the
+`success_criteria` (`audit-cuj`'s pass/fail oracle) and `criticality` (the priority clamp). So the
 persona **guesses the description and elicits the oracle**: it leads with a guess on the seven
 descriptive fields (`actor`, `goal`, `title`, `entry_point`, `preconditions`, each step's `action`,
 narrative), and asks the three graded fields **open**, refusing a bare "yes". A blanket no-guess
@@ -651,12 +677,12 @@ Extends §5.2; the invariants there continue to hold unchanged.
 3. **No PII** — a CUJ carrying `author` / `authored` / `by` / `email` is **rejected**, so the rule in
    §9.7 is executable rather than merely documented. Deleting the field from the schema is not the
    guarantee; nothing stops someone adding it back by hand.
-4. **Report portability** — `auditor: cuj` fixtures (a sev3 report, and a `total: 0` clean pass)
+4. **Report portability** — `auditor: cuj` fixtures (a `P1` report, and a `total: 0` clean pass)
    validate against the §3.4 contract; a `cuj` report citing `nielsen-10` is rejected.
 5. **The audit invariant does not weaken (critical)** — after an audit run, `.ux/cujs/` and `SPEC.md`
    changes are **still violations**. The allowlist below is opt-in and applies to authoring only.
 6. **Detection, not narration** — the end-to-end test breaks a journey deliberately in a real app and
-   requires a sev4 naming the correct step. A tool that only ever passes is not a verifier.
+   requires a `P0` naming the correct step. A tool that only ever passes is not a verifier.
 
 ### The safety allowlist
 `scripts/audit_safety.py` grows a keyword-only `allow` parameter and two profiles:
@@ -717,7 +743,7 @@ reconciliation must be stated plainly rather than left implicit:
 - [ ] `/cuj-audit` emits a §3.4-valid report with `auditor: cuj`, each finding naming the CUJ id and
       broken step; a passing journey yields `total: 0` with steps listed in the Appendix.
 - [ ] Static mode labels findings `potential — unverified` and emits `frameworks: [cuj-contract]` only.
-- [ ] A deliberately broken journey produces a sev4 naming the correct step.
+- [ ] A deliberately broken journey produces a `P0` naming the correct step.
 - [ ] `audit_safety.py` still flags `.ux/cujs/` and `SPEC.md` under the default `audit` profile.
 - [ ] `audit-cuj` appears in the `/ux-audit` roll-up, and is skipped **with a reason** when no CUJs
       exist.
@@ -786,22 +812,23 @@ of truth; the image is a best-effort current view. Every reference is an inline 
 ## 10.4 Enforcement — instruct + light validation
 
 The skills mandate the capture and assembly; `validate_report.py` adds only light checks
-(`schema == 2`, and — *if* a `## Walkthrough` section exists — every image path is relative
+(`schema == 3`, and — *if* a `## Walkthrough` section exists — every image path is relative
 and under `./assets/`). It does **not** require the section to exist, nor that a file is on
 disk: a missing PNG never fails a run. This matches the suite's "no silent gaps" ethic without
 being brittle against the fixtures, which carry no real images.
 
 ## 10.5 Acceptance criteria (Definition of Done)
 
-- [ ] The report contract (§3.4 / `report-contract.md`) is at `schema: 2` with the
+- [ ] The report contract (§3.4 / `report-contract.md`) is at `schema: 3` with the
       `## Walkthrough` section and asset-naming rule documented; `validate_report.py` requires
-      `schema == 2` and light-checks walkthrough image paths.
+      `schema == 3`, validates the `health` scorecard against its items, and light-checks
+      walkthrough image paths.
 - [ ] `audit-cuj` captures every replayed step in live/hybrid mode with the stable name and
       assembles a `## Walkthrough`; static runs emit none.
 - [ ] `usability-audit` names its key-state captures by the convention, embeds them inline,
       and assembles a `## Walkthrough` in live/hybrid mode.
 - [ ] Both personas describe inline-embed + walk-through assembly.
-- [ ] Fixtures validate at `schema: 2`; at least one cuj and one usability fixture carry a
+- [ ] Fixtures validate at `schema: 3`; at least one cuj and one usability fixture carry a
       `## Walkthrough`; a walkthrough with a non-`./assets/` image path is rejected.
 - [ ] `audit_safety.py` is unchanged and still confines writes to `.ux/audits/`.
 - [ ] README / AGENTS / CHANGELOG updated; `plugin.json` at 0.4.0.
@@ -814,10 +841,10 @@ being brittle against the fixtures, which carry no real images.
 > command + skill.
 
 **What it produces.** For each `.ux/audits/*.md`, a self-contained `<stem>.html` beside it:
-a frontmatter header, a severity-cell summary, findings as severity-badged cards, and — for a
+a frontmatter header, a priority-cell summary, the health scorecard, findings as priority-badged cards, and — for a
 report with a `## Walkthrough` — an **interactive flipbook** (prev/next, keyboard, dots),
 grouped per CUJ journey. A `rollup-*.md` renders as a **go/no-go dashboard** (verdict banner +
-per-auditor severity matrix, links repointed to the `.html` views); `index.md` renders as a
+per-auditor priority-and-health matrix, links repointed to the `.html` views); `index.md` renders as a
 stable `index.html` landing page. Special cases: a cuj `total: 0` renders a verified-pass (or
 "nothing verified") banner; dev-lab/static runs get a provenance banner; a report with no
 walkthrough surfaces its Evidence screenshots (embeds **and** bare `(./assets/…)` paths) as a
