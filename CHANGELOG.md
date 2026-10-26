@@ -6,6 +6,54 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- **The suite roll-up dashboard, which had never rendered.** `render_report_html.py`
+  dispatched on a `rollup` frontmatter key that no roll-up ever wrote, so every roll-up fell
+  through to the generic auditor-report path. One missed branch produced four visible
+  symptoms: the go/no-go banner was absent (its CSS had never been exercised), the lead
+  verdict paragraph was dropped entirely (the generic path emits only `## ` sections), the
+  eyebrow and browser title read "report audit", and the header announced **`0 findings`**
+  above a table totalling five — because the generic severity bar reads `summary.total`, a
+  key the roll-up did not carry. Dispatch now goes through a shared
+  `is_rollup()` in [`validate_report.py`](scripts/validate_report.py).
+- **A second bug that would have survived fixing the first.** The verdict test was
+  `verdict.lower() == "go"`, but every real roll-up wrote the token and its justification as
+  one string — `verdict: "GO — all 3 journeys pass"`. That equals neither verdict, so every
+  passing run would have rendered as a **red NO-GO** the moment the dashboard came back.
+  The renderer now splits the leading token, and the contract moves the prose into
+  `verdict_reason`.
+- **A severity bar of zeros over a document listing issues.** The bar now derives `total`
+  from the per-severity counts when absent, reads the legacy `totals:` spelling, and renders
+  **nothing at all** when a report carries no counts — a row of zeros is not a neutral
+  default, it asserts "nothing found".
+
+### Added
+- **Roll-up frontmatter is now specified** — [report contract](skills/usability-audit/references/report-contract.md)
+  §9, the schema's second document type. It was unspecified until now, and the agent
+  improvised it per run: five consecutive runs of the same app produced three different
+  discriminators (`kind:`, `report:`, none), three different count keys (`summary:`,
+  `totals:`, none), and verdict strings that mixed the token with its prose. `kind: rollup`
+  is the spelling; the other two are **read** so append-only history keeps rendering, and
+  **rejected on write** so the drift cannot re-accumulate.
+- **The go/no-go verdict is derived, not judged:** `NO-GO` if `sev4 > 0` or `sev3 > 0`, else
+  `GO`. `validate_report.py` recomputes it from the merged counts and fails a mismatch. The
+  gate previously lived in prose — *"any auditor reports a sev3 blocker"* — leaving the
+  auditor to decide what counted as a blocker; two runs reached **opposite verdicts from
+  identical counts**, and a third invented "GO with required fixes" as a third value.
+- **`validate_rollup()`** — roll-ups validate through their own path instead of being
+  rejected for the `auditor`, `mode`, and `frameworks` keys they correctly lack. Every
+  entry in `auditors_skipped` must carry a `reason`, making the suite's "a skipped auditor
+  never reads as a clean pass" rule structural rather than advisory.
+- **A contested verdict renders amber.** A roll-up predating the derived gate can state a
+  verdict its own counts do not support — a `GO` over a `sev3`. The renderer does not
+  overrule the document (it is an append-only record of what that run concluded), but it no
+  longer presents the claim as settled: the banner turns amber, names the verdict the counts
+  derive, and says the roll-up stated rather than derived its verdict. Green is reserved for
+  a `GO` the numbers agree with.
+- **Six roll-up fixtures and the tests that use them** — the dashboard had no fixture in
+  `tests/test_render_html.py`, which is why a dead code path stayed green. Coverage now
+  includes the read-tolerant/write-strict asymmetry and the legacy prose verdict.
+
 ## [0.6.0] - 2026-08-24
 
 ### Added

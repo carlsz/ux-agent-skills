@@ -31,7 +31,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from validate_report import _split_frontmatter, FINDING_RE  # noqa: E402
+from validate_report import (  # noqa: E402
+    _split_frontmatter, FINDING_RE, is_rollup, SEVERITY_KEYS, derive_verdict,
+)
 
 # --- severity vocabulary (mirrors the report contract §4) --------------------------------
 
@@ -362,14 +364,35 @@ def _render_header(fm: dict) -> str:
     )
 
 
+def _summary_of(fm: dict) -> dict:
+    """The per-severity counts, reading the contract key and the one legacy spelling.
+
+    §9 specifies `summary:`. Roll-ups written before it also used `totals:`; both are read
+    here so a historical roll-up renders its real numbers instead of a row of zeros.
+    """
+    for key in ("summary", "totals"):
+        value = fm.get(key)
+        if isinstance(value, dict) and value:
+            return value
+    return {}
+
+
 def _severity_bar(fm: dict) -> str:
     """Minimal inline severity summary — `sev4 0  sev3 1 …  N findings`.
 
     Severity is the only colour on the page: the count numbers carry the ramp, dimmed when
     zero. No cells, no bar — the badges on the cards do the heavy visual lifting.
     """
-    summary = fm.get("summary") or {}
-    total = summary.get("total", 0)
+    summary = _summary_of(fm)
+    # No counts at all → no bar. A roll-up written before §9 may carry none, and a row of
+    # zeros is not a neutral default: it asserts "nothing found" over a document listing
+    # five issues. Silence is the honest render; the body still carries the numbers.
+    if not any(k in summary for k in SEVERITY_KEYS):
+        return ""
+    # Derive `total` when absent rather than defaulting to 0, for the same reason.
+    total = summary.get("total")
+    if not isinstance(total, int):
+        total = sum(v for k in SEVERITY_KEYS if isinstance(v := summary.get(k), int))
     cells = [f'<div class="scell total"><b>{total}</b><span>findings</span></div>']
     for n in SEV_ORDER:
         count = summary.get(f"sev{n}", 0)
@@ -625,6 +648,25 @@ def _link_md_to_html(text: str) -> str:
     return MD_LINK_RE.sub(r"](\1.html\2", text)
 
 
+# A roll-up's verdict should be the bare token `GO` / `NO-GO` (contract §9), but roll-ups
+# written before §9 jam the token and its justification into one string — "GO — all three
+# journeys pass". Those read as neither GO nor NO-GO to an equality test, which is why every
+# such roll-up would have rendered as a red NO-GO. Split the leading token off instead.
+VERDICT_RE = re.compile(r"^\s*(NO[-\s]?GO|GO)\b[\s—:.-]*(.*)$", re.IGNORECASE | re.DOTALL)
+
+
+def _verdict_parts(fm: dict) -> tuple[str, str]:
+    """Return (token, reason) for a roll-up, tolerating the legacy single-string form."""
+    raw = str(fm.get("verdict", "")).strip()
+    reason = str(fm.get("verdict_reason", "")).strip()
+    m = VERDICT_RE.match(raw)
+    if not m:
+        # Unparseable verdict: the honest render is no-go, never a green pass by default.
+        return ("NO-GO", reason or raw)
+    token = "GO" if m.group(1).upper().startswith("GO") else "NO-GO"
+    return (token, reason or m.group(2).strip())
+
+
 def _render_rollup(fm: dict, body: str, report_dir: Path) -> str:
     """Render a `rollup-*.md` suite report as a verdict dashboard.
 
@@ -633,9 +675,17 @@ def _render_rollup(fm: dict, body: str, report_dir: Path) -> str:
     go/no-go verdict, then the roll-up's sections (auditor table, per-auditor severity matrix,
     merged issues) generically — with report links repointed to their `.html` views.
     """
-    verdict = str(fm.get("verdict", "")).strip()
-    kind = "go" if verdict.lower() == "go" else "nogo"
-    icon = "✅" if verdict.lower() == "go" else "🔴"
+    verdict, reason = _verdict_parts(fm)
+    # A roll-up written before the gate was mechanical can state a verdict its own counts
+    # do not support — a `GO` over a sev3. The renderer does not overrule the document (it
+    # is an append-only record of what that run concluded), but it must not present the
+    # claim as settled either: a contested verdict renders amber, never green, so a glance
+    # cannot mislead. Fresh roll-ups cannot reach this state — validate_rollup rejects them.
+    summary = _summary_of(fm)
+    derived = derive_verdict(summary) if any(k in summary for k in SEVERITY_KEYS) else verdict
+    contested = derived != verdict
+    kind = "warn" if contested else ("go" if verdict == "GO" else "nogo")
+    icon = "⚠" if contested else ("✅" if verdict == "GO" else "🔴")
     date, target = fm.get("date", ""), fm.get("target", "")
     runs = fm.get("auditors_run") or []
     chip_vals = ([str(date)] if date else []) + ([f"{len(runs)} auditors"] if runs else [])
@@ -644,15 +694,21 @@ def _render_rollup(fm: dict, body: str, report_dir: Path) -> str:
     header = (f'<header class="report-head"><div class="eyebrow">UX audit roll-up</div>'
               f'<h1>{html.escape(str(fm.get("scope", "")))}</h1>{target_html}'
               f'<div class="chips">{"".join(_chip(v) for v in chip_vals)}</div></header>')
+    detail = html.escape(reason) if reason else "suite verdict; detail below."
+    if contested:
+        counts = ", ".join(f"{k} {summary.get(k, 0)}" for k in SEVERITY_KEYS
+                           if summary.get(k))
+        detail += (f' <em>Contested: the merged counts ({counts}) derive '
+                   f'<code>{derived}</code>. This roll-up states its verdict in prose '
+                   f'rather than deriving it, so treat it as unverified.</em>')
     verdict_banner = _banner(
-        f"verdict {kind}", icon,
-        f'<b>{html.escape(verdict.upper())}</b> — suite verdict; detail below.')
+        f"verdict {kind}", icon, f"<b>{html.escape(verdict)}</b> — {detail}")
 
     body = _link_md_to_html(body)
     matches = list(SECTION_RE.finditer(body))
     pre = body[:matches[0].start()] if matches else body
     pre = re.sub(r"^\s*#\s+.*\n", "", pre, count=1)  # drop the redundant H1 title line
-    parts = [header, verdict_banner]
+    parts = [header, verdict_banner, _severity_bar(fm)]
     if pre.strip():
         parts.append(f'<section class="md">{_render_blocks(pre, report_dir)}</section>')
     for idx, m in enumerate(matches):
@@ -673,7 +729,7 @@ def render(md_path: str | Path) -> str:
     if fm is None:
         raise ValueError(f"{md_path.name}: {body}")
 
-    if fm.get("rollup"):
+    if is_rollup(fm):
         title = f"UX audit roll-up — {fm.get('scope', '')}".strip(" —")
         return _page(title, _render_rollup(fm, body, report_dir))
 

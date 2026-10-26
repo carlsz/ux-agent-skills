@@ -8,6 +8,11 @@ one index, and consumable by a future fan-out meta-command.
 Only two things differ between auditors: the `auditor` frontmatter value and the
 `frameworks` list. Everything else here is fixed.
 
+The contract governs **two document types**: the per-run **auditor report** (§1-§6), and the
+**suite roll-up** a fan-out writes to combine them (§9). They share the directory, the
+schema version, and the severity rubric; they differ in frontmatter, because a roll-up has
+no single auditor, mode, or framework.
+
 - **Schema version:** `2`
 - **Machine-checked by:** [`scripts/validate_report.py`](../../../scripts/validate_report.py)
   (the executable form of this document — if the two ever disagree, reconcile them).
@@ -258,3 +263,92 @@ Auditors share one `.ux/audits/` directory and one `index.md`; reports from diff
 auditors coexist and are distinguished by the `auditor` field. If a change to this
 contract is needed, bump `schema` and update `scripts/validate_report.py` in the same
 change.
+
+## 9. The suite roll-up (`rollup-*.md`)
+
+A fan-out (`/ux-audit`) writes one roll-up beside the member reports it summarizes. It is a
+**sibling document type**, not an auditor report: it owns no findings — it links to the
+member reports that do.
+
+```
+rollup-<YYYYMMDD>-<HHMMSS>.md
+```
+
+### Frontmatter
+
+```yaml
+---
+kind: rollup                 # the discriminator — REQUIRED, exactly this spelling
+schema: 2
+version: 0.5.1               # the emitting plugin's version (§3 rules apply)
+date: 2026-07-19T04:39:28Z
+target: http://localhost:3000
+scope: "Sprout — full UX auditor suite"
+verdict: GO                  # GO | NO-GO — a bare token, nothing else
+verdict_reason: "all 3 critical journeys pass live; 5 minor issues, no sev3+ blockers"
+auditors_ran: [cuj, usability, accessibility, web-performance]
+auditors_skipped:            # [] when none; every entry carries its reason
+  - auditor: web-performance
+    reason: "opt-in; run with --only web-performance or --all"
+summary:                     # the MERGED counts across every member report
+  total: 5
+  sev4: 0
+  sev3: 0
+  sev2: 4
+  sev1: 1
+---
+```
+
+**Rules**
+
+- All eleven keys are required. A roll-up carries **no** `auditor`, `mode`, or `frameworks`
+  key — it has no single value for any of them.
+- `kind` must be exactly `rollup`. Two other spellings — `report: rollup`, and `rollup: true`
+  — are *read* by the renderer and `is_rollup()` so that roll-ups written before this
+  section keep rendering, but writing either is a violation. Tolerated on read, never
+  blessed on write.
+- **`verdict` is a bare token: `GO` or `NO-GO`.** The justification goes in
+  `verdict_reason`. This is not stylistic — the HTML renderer tests this value to colour
+  the go/no-go banner, so `verdict: "GO — all journeys pass"` is not a `GO` to a machine.
+- **The verdict is derived, not judged:** `NO-GO` if `sev4 > 0` or `sev3 > 0`, else `GO`.
+  The validator recomputes it from `summary` and rejects a mismatch. Nuance belongs in
+  `verdict_reason` — never in a third verdict value.
+- `summary` holds the **merged** counts across all members and reconciles the same way as
+  §3: `total` equals the sum of `sev4..sev1`. `sev0` must not appear.
+- `auditors_skipped` is required even when empty, and **every entry carries a `reason`**.
+  The suite's rule is that a skipped auditor never reads as a clean pass; making the
+  reason structural is what enforces it.
+
+> **Why this section exists.** The roll-up's frontmatter was unspecified until now, and the
+> agent improvised it per run. Five consecutive runs of the same app produced five different
+> shapes — three different discriminators (`kind:`, `report:`, none), three different count
+> keys (`summary:`, `totals:`, none), and verdict strings that mixed the token with its prose.
+> The HTML renderer looked for a key none of them wrote, so **the roll-up dashboard never
+> rendered once**: every run fell through to the generic report path and published a header
+> reading `0 findings` above a table of five. Two of those runs reached opposite verdicts
+> from identical counts, because the gate lived in prose and left "is this sev3 a blocker?"
+> to the auditor. An unspecified contract is not a flexible one — it is a broken one that
+> fails quietly.
+
+### Body layout
+
+1. **`# UX Audit Roll-up — <scope>`** — title.
+2. A lead paragraph stating the verdict in prose. *(The HTML renderer shows everything
+   between the title and the first `## ` heading, so this paragraph is the dashboard's
+   opening line — do not omit it.)*
+3. **`## Per-auditor results`** — one row per member: auditor, mode, per-severity counts,
+   total, and a one-line result. Link each auditor name to its report.
+4. **`## Auditors that ran vs. skipped`** — prose mirroring `auditors_ran` /
+   `auditors_skipped`, with the reason for every skip.
+5. **`## Merged top issues`** — findings across all members, severity-high → low, each
+   linking to its finding anchor in the member report.
+6. **`## Verdict rationale`** — why the gate landed where it did.
+7. **`## Notes`** — provenance, target caveats, and links to the member reports. A roll-up
+   has **no `## Appendix`**: coverage honesty is each member report's own obligation
+   (§5), and the roll-up inherits it by linking to them.
+
+### What a roll-up is not
+
+It is not validated as an auditor report: no `[sevN]` finding blocks, no five-field
+finding bodies, no `## Appendix` coverage check. `validate_report.py` dispatches on the
+discriminator and applies `validate_rollup` instead.

@@ -127,17 +127,51 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 5. **Append the index.** Add one `.ux/audits/index.md` row per auditor run (append-only),
    exactly as a single-auditor run does.
 
-6. **Write the roll-up.** Create `.ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md`: a per-auditor
-   severity table, the auditors that ran vs. were skipped (with reasons — including a
-   CUJ run skipped for want of `.ux/cujs/`, and web performance skipped when not opted into,
-   with its opt-in reason), a merged top-issues list ordered by severity across all
-   auditors, and an overall **go/no-go verdict** (e.g. no-go if any sev4, or any auditor
-   reports a sev3 blocker — a CUJ sev4 is a blocked journey and forces no-go). A skipped CUJ
-   run, or a web-performance run not opted into, is disclosed, never scored as a pass. Link
-   to each individual report.
+6. **Write the roll-up.** Create `.ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md` to the
+   **roll-up frontmatter and body layout in
+   [report-contract.md §9](../usability-audit/references/report-contract.md#9-the-suite-roll-up-rollup-md)**
+   — read it before writing, and copy the key names exactly:
 
-7. **Self-check.** Validate every report and the index with
-   [`scripts/validate_report.py`](../../scripts/validate_report.py), and confirm the safety
+   ```yaml
+   ---
+   kind: rollup                 # exactly this — not `report:`, not `rollup: true`
+   schema: 2
+   version: <from .claude-plugin/plugin.json>
+   date: <ISO-8601 UTC>
+   target: <same target the auditors ran against>
+   scope: "<what the suite covered>"
+   verdict: GO                  # GO | NO-GO — a BARE TOKEN; prose goes below
+   verdict_reason: "<one line: why this verdict>"
+   auditors_ran: [usability, accessibility, cuj]
+   auditors_skipped:            # [] when none; every entry needs its reason
+     - auditor: web-performance
+       reason: "opt-in; run with --only web-performance or --all"
+   summary:                     # MERGED counts across every member report
+     total: 5
+     sev4: 0
+     sev3: 0
+     sev2: 4
+     sev1: 1
+   ---
+   ```
+
+   **The verdict is derived, not judged: `NO-GO` if `sev4 > 0` or `sev3 > 0`, else `GO`.**
+   Apply the rule mechanically and put any nuance in `verdict_reason` — never invent a third
+   verdict value like "GO with required fixes". A CUJ sev4 is a blocked journey and forces
+   no-go by the same rule. `validate_report.py` recomputes the verdict from `summary` and
+   fails the run on a mismatch.
+
+   The body carries the lead verdict paragraph, a per-auditor severity table, the auditors
+   that ran vs. were skipped (with reasons — including a CUJ run skipped for want of
+   `.ux/cujs/`, and web performance skipped when not opted into), a merged top-issues list
+   ordered by severity across all auditors, the verdict rationale, and `## Notes`. A skipped
+   CUJ run, or a web-performance run not opted into, is disclosed, never scored as a pass.
+   Link to each individual report.
+
+7. **Self-check.** Validate every report, **the roll-up**, and the index with
+   [`scripts/validate_report.py`](../../scripts/validate_report.py) — it dispatches on
+   `kind: rollup` and checks the roll-up against §9, including recomputing the verdict from
+   the merged counts — and confirm the safety
    invariant with [`scripts/audit_safety.py`](../../scripts/audit_safety.py) `<host-repo>`.
    It checks **both halves** of the invariant (SPEC §5.2) and exits 0 only if both
    hold: nothing changed outside `.ux/audits/`, **and** the writes you just made inside it
@@ -170,7 +204,8 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 
 - Each selected, available auditor produced a contract-valid report under `.ux/audits/`,
   with one appended index row apiece.
-- A `rollup-<timestamp>.md` exists with the per-auditor table, skipped auditors (with
-  reasons), merged issues, and a go/no-go verdict.
+- A `rollup-<timestamp>.md` exists, conforming to §9: `kind: rollup`, a bare `GO`/`NO-GO`
+  `verdict` that matches what the merged counts derive, every skipped auditor carrying its
+  reason, plus the per-auditor table and merged issues in the body.
 - Every report validates; `audit_safety.py` exits 0 on **both** halves: nothing changed
   outside `.ux/audits/`, **and** the reports this run wrote inside it were observed.

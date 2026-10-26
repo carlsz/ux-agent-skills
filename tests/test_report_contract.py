@@ -91,6 +91,32 @@ def main() -> int:
     failures += _expect_invalid(FIXTURES / "invalid" / "walkthrough-bad-path.md",
                                 "walkthrough image path")
 
+    # --- the suite roll-up (§9) ----------------------------------------------------------
+    # A roll-up is a SIBLING document type, not an auditor report: no `auditor`, no `mode`,
+    # no `frameworks`, no finding blocks, `## Notes` instead of `## Appendix`. It must
+    # validate through its own path rather than being rejected for the keys it correctly
+    # lacks — `validate()` dispatches on the `kind: rollup` discriminator.
+    failures += _expect_valid(FIXTURES / "valid" / "rollup-20260716-150000.md")
+    # ...and the GO case, which also carries three skipped auditors each with its reason.
+    failures += _expect_valid(FIXTURES / "valid" / "rollup-20260716-160000.md")
+
+    # The discriminator is `kind: rollup` and nothing else. `report: rollup` is READ as a
+    # roll-up so historical files still render (see test_render_html), but writing one is a
+    # violation — this fixture is what keeps "tolerated on read" from becoming "allowed".
+    failures += _expect_invalid(FIXTURES / "invalid" / "rollup-legacy-kind.md",
+                                "kind: rollup")
+    # `verdict` is a bare token; prose belongs in `verdict_reason`. This is the shape that
+    # made every real roll-up render as a red NO-GO: the renderer tests this value, and
+    # "GO — all journeys pass" equals neither verdict.
+    failures += _expect_invalid(FIXTURES / "invalid" / "rollup-verdict-prose.md", "verdict")
+    # The gate is mechanical: NO-GO iff sev4 or sev3 is non-zero. A roll-up that declares GO
+    # over a sev3 is rejected rather than left to the auditor's judgment — two real runs
+    # reached opposite verdicts from identical counts before this rule existed.
+    failures += _expect_invalid(FIXTURES / "invalid" / "rollup-verdict-mismatch.md",
+                                "derive")
+    # A skipped auditor without a reason reads as a clean pass; the reason is structural.
+    failures += _expect_invalid(FIXTURES / "invalid" / "rollup-skip-no-reason.md", "reason")
+
     # index.md: a conforming index passes; a malformed one is rejected.
     failures += _expect_valid_index(FIXTURES / "valid" / "index.md")
     failures += _expect_invalid_index(FIXTURES / "invalid" / "index-badcols.md", "column")
@@ -100,7 +126,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (12 checks)")
+    print("PASS — report contract (18 checks)")
     return 0
 
 

@@ -155,6 +155,65 @@ def main() -> int:
             failures.append("no-walkthrough report should surface an evidence gallery")
         failures += [f"temp report: {e}" for e in _self_contained(html)]
 
+    # --- the suite roll-up dashboard (contract §9) ----------------------------------------
+    # This whole block exists because the dashboard never rendered once. `render()` looked
+    # for a `rollup` frontmatter key that no roll-up ever wrote, so every real roll-up fell
+    # through to the generic report path and published a header reading "0 findings" above a
+    # table of five, with the verdict paragraph silently dropped. Nothing caught it: there
+    # was no roll-up fixture in this file to catch it with.
+    ROLLUPS = {"rollup-20260716-150000": "nogo", "rollup-20260716-160000": "go"}
+    for name, want in ROLLUPS.items():
+        path = FIX / f"{name}.md"
+        first, second = render(path), render(path)
+        if first != second:
+            failures.append(f"{name}: render is not deterministic")
+        failures += [f"{name}: {e}" for e in _self_contained(first)]
+        # It routes to the roll-up renderer, not the generic report path.
+        if "UX audit roll-up" not in first:
+            failures.append(f"{name}: did not route to the roll-up renderer")
+        # The verdict banner exists and carries the right colour.
+        if f'class="banner verdict {want}"' not in first:
+            failures.append(f"{name}: missing the '{want}' verdict banner")
+        # The lead paragraph between the H1 and the first `## ` must survive — the generic
+        # path drops it, and it is the dashboard's opening line.
+        if "Verdict:" not in first:
+            failures.append(f"{name}: lead verdict paragraph was dropped")
+        # Member links are repointed to their .html companions.
+        if '.md"' in first.split("</header>")[-1]:
+            failures.append(f"{name}: a member link still points at .md")
+
+    # The counts come from `summary`, not from a default of 0.
+    nogo = render(FIX / "rollup-20260716-150000.md")
+    if '<div class="scell total"><b>5</b>' not in nogo:
+        failures.append("rollup: severity bar does not show the merged total of 5")
+
+    # Legacy tolerance, asserted in the direction that matters: `report: rollup` still
+    # RENDERS as a roll-up (reports are append-only history), while test_report_contract
+    # asserts the same fixture fails validation. Read-tolerant, write-strict.
+    legacy = render(ROOT / "tests" / "fixtures" / "invalid" / "rollup-legacy-kind.md")
+    if "UX audit roll-up" not in legacy:
+        failures.append("legacy 'report: rollup' no longer renders as a roll-up")
+
+    # A legacy verdict that jams the token into its prose renders GO, not a red NO-GO.
+    # Equality against "go" was the second bug: it would have survived the dispatch fix.
+    prose = render(ROOT / "tests" / "fixtures" / "invalid" / "rollup-verdict-prose.md")
+    if 'class="banner verdict go"' not in prose:
+        failures.append("legacy prose verdict 'GO — …' should render GO, not NO-GO")
+
+    # A legacy roll-up whose stated verdict its own counts do not support renders AMBER —
+    # neither a green GO that misleads at a glance, nor the renderer overruling an
+    # append-only record. Fresh roll-ups cannot reach this state (validate_rollup rejects
+    # them), so this fixture lives under invalid/ and is rendered, not validated, here.
+    contested = render(ROOT / "tests" / "fixtures" / "invalid" / "rollup-verdict-mismatch.md")
+    if 'class="banner verdict warn"' not in contested:
+        failures.append("a GO over a sev3 should render contested (amber), not green")
+    if "derive" not in contested or "<code>NO-GO</code>" not in contested:
+        failures.append("contested banner should name the verdict the counts derive")
+    # ...and an honest verdict is never flagged.
+    for name, cls in [("rollup-20260716-150000", "nogo"), ("rollup-20260716-160000", "go")]:
+        if f'class="banner verdict {cls}"' not in render(FIX / f"{name}.md"):
+            failures.append(f"{name}: an honest verdict was flagged as contested")
+
     # The index landing repoints run links from .md to .html and stays self-contained.
     with tempfile.TemporaryDirectory() as d:
         base = Path(d)
@@ -169,7 +228,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — render_html (self-contained, deterministic, flipbook, findings, cuj banners)")
+    print("PASS — render_html (self-contained, deterministic, flipbook, findings, cuj banners, rollup dashboard)")
     return 0
 
 
