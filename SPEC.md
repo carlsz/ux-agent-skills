@@ -841,9 +841,9 @@ being brittle against the fixtures, which carry no real images.
 > command + skill.
 
 **What it produces.** For each `.ux/audits/*.md`, a self-contained `<stem>.html` beside it:
-a frontmatter header, a priority-cell summary, the health scorecard, findings as priority-badged cards, and — for a
-report with a `## Walkthrough` — an **interactive flipbook** (prev/next, keyboard, dots),
-grouped per CUJ journey. A `rollup-*.md` renders as a **go/no-go dashboard** (verdict banner +
+the **brief** (§10.7), the health scorecard, findings as cards with a permanent apparatus
+rail, and — for a report with a `## Walkthrough` — an **interactive flipbook** (prev/next,
+keyboard, dots), grouped per CUJ journey. A `rollup-*.md` renders as a **go/no-go dashboard** (verdict banner +
 per-auditor priority-and-health matrix, links repointed to the `.html` views); `index.md` renders as a
 stable `index.html` landing page. Special cases: a cuj `total: 0` renders a verified-pass (or
 "nothing verified") banner; dev-lab/static runs get a provenance banner; a report with no
@@ -860,6 +860,60 @@ under `.ux/audits/`, so `audit_safety.py` is untouched.
 as their final step). The on-demand path: `/ux-review` command → `render-report` skill (no
 persona — a mechanical transform holds no point of view), with `evals/cases/render-report.json`
 and hand-wired `check_render_report_skill` / `check_ux_review_command` in `tests/test_components.py`.
+
+## 10.7 The brief and the apparatus rail (delivered, 0.7.0)
+
+> The companion rendered everything the Markdown said, in the order the Markdown said it.
+> That is a faithful transform and a poor document: the verdict, the counts and the score
+> each appeared two or three times on one screen, and the expert apparatus — the framework
+> citation and the `file:line` evidence that make a finding checkable rather than merely
+> asserted — was buried inside the prose. This pass is **presentation only**: no schema
+> change, no contract change, no new component.
+
+**The brief.** The top of every page is one shareable screen, complete on its own, so a
+screenshot of it is a defensible summary:
+
+- A **lockup** — the roll-up's `GO` / `NO-GO`, or, for a single auditor report, the worst
+  priority it found with the action that priority prescribes (`P1` · *fix before release*).
+  An auditor report never shows a go/no-go: **the gate is the suite's**, derived across
+  auditors, and one auditor must not appear to issue it.
+- The **health dial** — `pct` as an arc with the band beside it, plus a sparkline when the
+  roll-up carries a `trend`. A run with `band: Unscored` draws **no dial at all**, because
+  an arc at 0 and an arc at 100 both read as claims this run cannot make.
+- The **executive summary** as the brief's prose, and the **non-zero counts** as chips.
+  Zeros are suppressed, not dimmed: four cells reading `0` crowd out the one reading `2`.
+
+Because the brief carries them, the body **skips `## Executive summary` and
+`## Design health`** — the same rule, for the same reason, as §4.1's existing skip. The
+Markdown still carries both in full; it has a different reader.
+
+**The apparatus rail.** Every finding card is a two-column grid: a fixed 204px rail holding
+*Framework* / *Source* / *Why this grade*, and the prose beside it. The apparatus is
+prominent by **position**, not by colour or weight — which is what lets it stay at full
+strength without shouting over the finding. An `Evidence` field holding both a screenshot
+and a citation is split: the citation stays in the rail, the screenshot renders beside the
+prose. Below 700px the rail becomes a band above the prose rather than a squeezed column.
+
+**Read tolerance, restated for the renderer.** The validator is write-strict and the
+renderer is read-tolerant, and the renderer's half had gaps: a pre-schema-3 report tags its
+findings `[sev4]`..`[sev1]` and counts them `sevN:`. Both are now translated on read
+(`sev4 → P0` …), because a renderer that cannot see a historical report's findings
+publishes it with the words *"No findings"* over a full document.
+
+### 10.7 Acceptance criteria (Definition of Done)
+
+- [ ] Every page leads with the brief; the lockup is the verdict for a roll-up and the worst
+      priority for an auditor report, and an unscored run shows no dial and no percentage.
+- [ ] `## Executive summary` and `## Design health` appear exactly once in the rendered page,
+      from the brief and the scorecard respectively.
+- [ ] Every finding card carries *Framework*, *Source* and *Why this grade* in its rail, with
+      Evidence images moved out of the rail; `tests/test_render_html.py` asserts all of it
+      per card.
+- [ ] A schema-2 report renders its `[sevN]` findings as `P` cards and its `sevN:` counts in
+      the brief.
+- [ ] Contrast clears 4.5:1 (3:1 for large text) in both colour schemes; no horizontal scroll
+      at 375px; output stays self-contained and deterministic.
+- [ ] CHANGELOG / AGENTS updated; `plugin.json` at **0.7.0**.
 
 ### 10.6 Acceptance criteria (Definition of Done)
 

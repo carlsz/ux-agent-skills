@@ -132,11 +132,20 @@ shape. Know both before you touch reporting.
   image paths are relative and under `./assets/`. Full spec: [SPEC.md](SPEC.md) §10.1–10.5.
 
 - **The HTML companion (`scripts/render_report_html.py`).** A **deterministic, derived** view:
-  it renders any report `.md` into a self-contained `.html` beside it (findings as cards, the
-  walkthrough as an interactive flipbook, a `rollup-*.md` as a go/no-go dashboard, `index.md` as
-  a landing page) — everything inlined, opens offline. The audit skills call it as their final
-  step; `/ux-review` → the `render-report` skill render on demand. **The Markdown stays the
-  source of truth**; the `.html` is never validated against or in place of it. Full spec: §10.6.
+  it renders any report `.md` into a self-contained `.html` beside it (a brief, findings as
+  cards with an apparatus rail, the walkthrough as an interactive flipbook, a `rollup-*.md` as
+  a go/no-go dashboard, `index.md` as a landing page) — everything inlined, opens offline. The
+  audit skills call it as their final step; `/ux-review` → the `render-report` skill render on
+  demand. **The Markdown stays the source of truth**; the `.html` is never validated against or
+  in place of it. Full spec: §10.6–10.7.
+
+  Two things about it are easy to break. **The brief absorbs `## Executive summary` and
+  `## Design health`**, so those sections render from frontmatter and are skipped in the body —
+  un-skip either and the page states the same numbers twice. And **the renderer is read-tolerant
+  where the validator is write-strict**: it reads `[sevN]` finding tags, `sevN:` counts, the
+  `Severity:` field name, `totals:`, and `report: rollup`, none of which validate on write. Every
+  one of those exists because a report is append-only history; drop one and the suite's own
+  back-catalogue renders as empty.
 
 **`render-report` is the suite's one non-auditor skill** — so the "adding an auditor" recipe
 above does *not* apply to it: no persona (a mechanical transform holds no point of view), no

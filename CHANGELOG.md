@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+
 ### Changed
 - **Severity `sev4`–`sev1` is now priority `P0`–`P3`, everywhere — report contract
   `schema: 3`.** The old scale said how bad a finding was; the new one says **what to do
@@ -35,6 +36,31 @@ All notable changes to this project are documented here. The format is based on
   A report with no scorecard writes an em dash.
 
 ### Added
+- **The report page now opens with a brief that stands on its own.** The companion used to
+  render the Markdown in the Markdown's own order, which is a faithful transform and a poor
+  document: the counts, the verdict and the score each appeared two or three times on one
+  screen. The top of every page is now a single shareable summary — a lockup (the roll-up's
+  `GO`/`NO-GO`, or for one auditor the worst priority it found and the action that priority
+  prescribes), the health score as a dial with the band beside it, the executive summary as
+  its prose, and the non-zero counts as chips. **An auditor report never shows a go/no-go**:
+  that gate is the suite's, derived across auditors, and one auditor must not appear to
+  issue it.
+- **A permanent apparatus rail on every finding.** The framework citation, the source
+  location and the grading rationale get their own 204px column beside the prose, so the
+  apparatus is prominent by *position* rather than by colour — which is what lets it stay at
+  full strength without shouting over the finding it supports. An `Evidence` field carrying
+  both a screenshot and a `file:line` is split: the citation stays in the rail, the
+  screenshot renders beside the prose. Below 700px the rail becomes a band above it.
+- **Zeros are suppressed rather than dimmed.** Four cells reading `0` crowd out the one
+  reading `2`. The brief shows only the levels actually found; the index, which cannot drop
+  a column, dims its zero cells instead.
+- **A binary scorecard item reads `pass` / `fail`.** A WCAG criterion and a journey step
+  are pass/fail, not a grade, and one filled dot out of one was a weak way to say so — and
+  left the state encoded in colour alone.
+- **The brief absorbs `## Executive summary` as well as `## Design health`.** Same rule as
+  before, extended: the HTML builds both from frontmatter and the body skips them, so one
+  screen never states the same numbers twice. The Markdown still carries both in full — it
+  has a different reader.
 - **The `health` scorecard (contract §4.1) — every auditor, in its own idiom.** A findings
   list is silent about everything that works, so a clean audit had nothing to show and the
   suite looked best when the app was broken. Each report now grades its own framework into
@@ -62,8 +88,46 @@ All notable changes to this project are documented here. The format is based on
   (3.76:1) and `#f97316` (2.80:1) — the two badges meaning *this is serious* were the two
   that failed, on an accessibility auditing tool. The `P0`–`P3` ramp clears 4.5:1
   throughout.
+- **Roll-up frontmatter is now specified** — [report contract](skills/usability-audit/references/report-contract.md)
+  §9, the schema's second document type. It was unspecified until now, and the agent
+  improvised it per run: five consecutive runs of the same app produced three different
+  discriminators (`kind:`, `report:`, none), three different count keys (`summary:`,
+  `totals:`, none), and verdict strings that mixed the token with its prose. `kind: rollup`
+  is the spelling; the other two are **read** so append-only history keeps rendering, and
+  **rejected on write** so the drift cannot re-accumulate.
+- **The go/no-go verdict is derived, not judged:** `NO-GO` if `sev4 > 0` or `sev3 > 0`, else
+  `GO`. `validate_report.py` recomputes it from the merged counts and fails a mismatch. The
+  gate previously lived in prose — *"any auditor reports a sev3 blocker"* — leaving the
+  auditor to decide what counted as a blocker; two runs reached **opposite verdicts from
+  identical counts**, and a third invented "GO with required fixes" as a third value.
+- **`validate_rollup()`** — roll-ups validate through their own path instead of being
+  rejected for the `auditor`, `mode`, and `frameworks` keys they correctly lack. Every
+  entry in `auditors_skipped` must carry a `reason`, making the suite's "a skipped auditor
+  never reads as a clean pass" rule structural rather than advisory.
+- **A contested verdict renders amber.** A roll-up predating the derived gate can state a
+  verdict its own counts do not support — a `GO` over a `sev3`. The renderer does not
+  overrule the document (it is an append-only record of what that run concluded), but it no
+  longer presents the claim as settled: the banner turns amber, names the verdict the counts
+  derive, and says the roll-up stated rather than derived its verdict. Green is reserved for
+  a `GO` the numbers agree with.
+- **Six roll-up fixtures and the tests that use them** — the dashboard had no fixture in
+  `tests/test_render_html.py`, which is why a dead code path stayed green. Coverage now
+  includes the read-tolerant/write-strict asymmetry and the legacy prose verdict.
 
 ### Fixed
+- **A report written before schema 3 rendered as having no findings at all.** Its findings
+  are tagged `[sev4]`..`[sev1]` and its counts keyed `sevN:`; the renderer read neither, so
+  every report the suite produced before the migration published the words *"No findings"*
+  over a full document, with an empty brief above it. Both are translated on read now
+  (`sev4 → P0` …), joining the `Severity:` field name, `totals:` and `report: rollup` on the
+  read-tolerant side of the line the validator keeps write-strict.
+- **The roll-up dashboard reported `0 ran` however much of the suite had run.** It read
+  `auditors_run`, a spelling that appears nowhere in the contract, the validator or any
+  fixture — the key is `auditors_ran`.
+- **A hard-wrapped list item rendered as several.** These reports wrap at ~95 columns, so
+  most list items span two or three source lines; treating each line as its own item split
+  one list into several, each restarting at `1.`, with the wrapped remainder stranded as a
+  paragraph between them. Continuation lines now fold into the item they belong to.
 - **Every finding card had lost its Priority row — and not to a blank.** The HTML
   renderer's field pattern still listed the schema-2 name `Severity` and not `Priority`,
   and a field name absent from that pattern is absent from its lookahead too, so the
@@ -100,33 +164,6 @@ All notable changes to this project are documented here. The format is based on
   from the per-severity counts when absent, reads the legacy `totals:` spelling, and renders
   **nothing at all** when a report carries no counts — a row of zeros is not a neutral
   default, it asserts "nothing found".
-
-### Added
-- **Roll-up frontmatter is now specified** — [report contract](skills/usability-audit/references/report-contract.md)
-  §9, the schema's second document type. It was unspecified until now, and the agent
-  improvised it per run: five consecutive runs of the same app produced three different
-  discriminators (`kind:`, `report:`, none), three different count keys (`summary:`,
-  `totals:`, none), and verdict strings that mixed the token with its prose. `kind: rollup`
-  is the spelling; the other two are **read** so append-only history keeps rendering, and
-  **rejected on write** so the drift cannot re-accumulate.
-- **The go/no-go verdict is derived, not judged:** `NO-GO` if `sev4 > 0` or `sev3 > 0`, else
-  `GO`. `validate_report.py` recomputes it from the merged counts and fails a mismatch. The
-  gate previously lived in prose — *"any auditor reports a sev3 blocker"* — leaving the
-  auditor to decide what counted as a blocker; two runs reached **opposite verdicts from
-  identical counts**, and a third invented "GO with required fixes" as a third value.
-- **`validate_rollup()`** — roll-ups validate through their own path instead of being
-  rejected for the `auditor`, `mode`, and `frameworks` keys they correctly lack. Every
-  entry in `auditors_skipped` must carry a `reason`, making the suite's "a skipped auditor
-  never reads as a clean pass" rule structural rather than advisory.
-- **A contested verdict renders amber.** A roll-up predating the derived gate can state a
-  verdict its own counts do not support — a `GO` over a `sev3`. The renderer does not
-  overrule the document (it is an append-only record of what that run concluded), but it no
-  longer presents the claim as settled: the banner turns amber, names the verdict the counts
-  derive, and says the roll-up stated rather than derived its verdict. Green is reserved for
-  a `GO` the numbers agree with.
-- **Six roll-up fixtures and the tests that use them** — the dashboard had no fixture in
-  `tests/test_render_html.py`, which is why a dead code path stayed green. Coverage now
-  includes the read-tolerant/write-strict asymmetry and the legacy prose verdict.
 
 ## [0.6.0] - 2026-08-24
 

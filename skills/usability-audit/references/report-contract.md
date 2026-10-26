@@ -231,9 +231,14 @@ After the frontmatter, in order:
 1. **`# <Auditor> Audit — <scope>`** — title.
 2. **`## Executive summary`** — 2–4 sentences plus a priority-count table.
 3. **`## Design health`** — the scorecard (§4.1) as a readable table: one row per item with
-   its score and note, then the `score / max · pct · band` line. This section is **for the
-   Markdown reader**; the HTML companion renders the scorecard from frontmatter and skips
-   this section, so the same numbers are never printed twice in the same view.
+   its score and note, then the `score / max · pct · band` line.
+
+> **Both of these sections are for the Markdown reader.** The HTML companion builds its
+> brief from frontmatter — the counts as chips, the score as a dial, the executive summary
+> as the brief's prose — and therefore **skips `## Executive summary` and `## Design
+> health` in the body**, so the same numbers are never printed twice in one view. Write
+> both sections in full regardless: the Markdown is the canonical artifact and the agent
+> reading it has no brief.
 4. **`## Prioritized fixes`** — findings listed P0 → P3, each line linking to its finding
    below.
 5. **`## Findings`** — one finding per **level-3 heading tagged with its priority**:

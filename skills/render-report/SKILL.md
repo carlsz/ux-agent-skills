@@ -6,7 +6,9 @@ description: Render existing .ux/audits reports into self-contained, offline HTM
 # Render report — a self-contained HTML view of an audit
 
 Turn the Markdown reports under a host's `.ux/audits/` into **self-contained HTML** you can
-open in a browser or share: findings as priority-badged cards, the live screenshots as an
+open in a browser or share: a **brief** that stands on its own (the verdict or worst
+priority, the health dial, the counts), findings as cards with a permanent **apparatus
+rail** carrying the framework citation and `file:line` evidence, the live screenshots as an
 interactive **walk-through flipbook**, the roll-up as a go/no-go **dashboard**, and an
 `index.html` landing page. The transform is
 [`scripts/render_report_html.py`](../../scripts/render_report_html.py).

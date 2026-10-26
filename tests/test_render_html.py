@@ -137,34 +137,67 @@ def main() -> int:
         if cards != total:
             failures.append(f"{name}: {cards} finding cards, summary.total is {total}")
 
-    # Every one of a finding's five labelled fields reaches its card. `Priority` was
-    # missing from FINDING_FIELD_RE after the rename from `Severity`, and the failure was
-    # not a blank row: the name is absent from the lookahead too, so the priority line was
-    # swallowed into `Framework Violation`'s value and every card lost its rationale while
-    # the card count — all this file asserted — stayed correct.
+    # --- the apparatus rail (SPEC §10.7) ----------------------------------------------
+    # Every finding keeps its framework citation, source location and grading rationale in
+    # a column of their own. This is the design's one structural promise, so it is asserted
+    # per card rather than per page: a rail that silently drops a field still looks right.
     usab_cards = render(FIX / "usability-20260715-143000.md")
-    for dt in ("<dt>Issue</dt>", "<dt>Violation</dt>", "<dt>Priority</dt>",
-               "<dt>Evidence</dt>", "<dt>Fix</dt>"):
+    for dt in ("<dt>Framework</dt>", "<dt>Source</dt>", "<dt>Why this grade</dt>"):
         if usab_cards.count(dt) != 2:
-            failures.append(f"finding cards: {dt} should appear once per finding")
+            failures.append(f"apparatus rail: {dt} should appear once per finding")
+    if usab_cards.count('class="fix"') != 2:
+        failures.append("finding cards: each should carry its Recommended fix block")
     if "P1 Major — fix before release" not in usab_cards:
-        failures.append("finding card: the Priority rationale did not reach its own row")
-    # ...and it reached that row INSTEAD of the preceding one, not as well as it.
-    for dd in re.findall(r"<dt>Violation</dt><dd>(.*?)</dd>", usab_cards, re.DOTALL):
+        failures.append("finding card: the grading rationale did not reach the rail")
+    # `Priority` was once missing from FINDING_FIELD_RE, and the failure was not a blank
+    # row: a name absent from the pattern is absent from its lookahead too, so the priority
+    # line was swallowed into the preceding field's value. Both halves are asserted.
+    for dd in re.findall(r"<dt>Framework</dt><dd>(.*?)</dd>", usab_cards, re.DOTALL):
         if "Priority" in dd:
             failures.append("finding card: Priority was swallowed into Framework Violation")
+    # The Evidence screenshot does not belong in a 204px column; it is split out of the
+    # rail and rendered beside the prose, while the `file:line` citation stays.
+    for dd in re.findall(r"<dt>Source</dt><dd>(.*?)</dd>", usab_cards, re.DOTALL):
+        if "<img" in dd or "class=\"missing\"" in dd:
+            failures.append("apparatus rail: an Evidence image was left in the rail")
+        if "PlaceOrderButton" not in dd and "PromoField" not in dd:
+            failures.append("apparatus rail: the file:line citation was lost with the image")
 
     # A schema-2 report labels that field `Severity`. It still renders — reports are
-    # append-only history — under the row title the scale carries now.
+    # append-only history — in the row the scale carries now.
     legacy_field = _ACC_REPORT.replace("**Priority:**", "**Severity:**")
     with tempfile.TemporaryDirectory() as d:
         base = Path(d)
         (base / "acc.md").write_text(legacy_field, encoding="utf-8")
         html = render(base / "acc.md")
-        if "<dt>Priority</dt>" not in html:
-            failures.append("legacy 'Severity:' field should render under Priority")
+        if "<dt>Why this grade</dt>" not in html:
+            failures.append("legacy 'Severity:' field should render in the rail")
         if "P2 Minor — fix in the next pass" not in html:
             failures.append("legacy 'Severity:' field value was dropped")
+
+    # --- read tolerance: a report written before schema 3 ------------------------------
+    # Its findings are tagged `[sev4]`..`[sev1]` and its counts are keyed `sevN`. The
+    # validator rejects both on write; the RENDERER has to read them, or every report the
+    # suite produced before the migration publishes as "No findings" over a full document.
+    legacy_scale = (_ACC_REPORT
+                    .replace("schema: 3", "schema: 2")
+                    .replace("  p2: 1", "  sev2: 1")
+                    .replace("  total: 1", "  total: 1")
+                    .replace("1. [P2] A thing", "1. [sev2] A thing")
+                    .replace("### [P2] A thing is wrong", "### [sev2] A thing is wrong"))
+    for key in ("  p0: 0", "  p1: 0", "  p3: 0"):
+        legacy_scale = legacy_scale.replace(key, key.replace("p", "sev"))
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d)
+        (base / "legacy.md").write_text(legacy_scale, encoding="utf-8")
+        html = render(base / "legacy.md")
+        if html.count('<article class="finding p2"') != 1:
+            failures.append("legacy [sev2] finding did not render as a P2 card")
+        if "No findings." in html:
+            failures.append("legacy report rendered as having no findings")
+        # sev2 -> p2, so the brief's chips and lockup are built from the old counts.
+        if '1 &times; P2 Minor' not in html:
+            failures.append("legacy sevN summary counts did not reach the brief")
 
     # Flipbook frame count tracks the `### ` frames under `## Walkthrough`.
     for name in ["usability-20260715-143000", "cuj-20260716-120000"]:
@@ -225,10 +258,21 @@ def main() -> int:
         if '.md"' in first.split("</header>")[-1]:
             failures.append(f"{name}: a member link still points at .md")
 
-    # The counts come from `summary`, not from a default of 0.
+    # The counts come from `summary`, not from a default of 0, and the brief suppresses
+    # the zeros instead of dimming them — four cells reading 0 crowd out the one that does
+    # not. The merged total and every non-zero level must survive that.
     nogo = render(FIX / "rollup-20260716-150000.md")
-    if '<div class="scell total"><b>5</b>' not in nogo:
-        failures.append("rollup: severity bar does not show the merged total of 5")
+    if '<span class="chip total">5 findings</span>' not in nogo:
+        failures.append("rollup: the brief does not show the merged total of 5")
+    for chip in ("1 &times; P0 Blocking", "2 &times; P1 Major", "2 &times; P2 Minor"):
+        if chip not in nogo:
+            failures.append(f"rollup: the brief is missing its {chip} chip")
+    if "P3 Polish" in nogo:
+        failures.append("rollup: a zero count was rendered instead of suppressed")
+    # How much of the suite ran is read from `auditors_ran` — the contract's spelling, and
+    # the only one any fixture uses. Reading `auditors_run` reported 0 ran, every time.
+    if "3 ran, 1 skipped" not in nogo:
+        failures.append("rollup: the auditors-ran count is wrong (key spelling?)")
 
     # Legacy tolerance, asserted in the direction that matters: `report: rollup` still
     # RENDERS as a roll-up (reports are append-only history), while test_report_contract
@@ -263,15 +307,36 @@ def main() -> int:
     usab = render(FIX / "usability-20260715-143000.md")
     if usab.count(">Design health<") != 1:
         failures.append("scorecard should render exactly once (frontmatter, not the body)")
-    if "<b>83<small>%</small></b>" not in usab:
-        failures.append("scorecard headline missing its derived percentage")
+    # The score is the brief's dial. It carries a text label as well as the arc, so it is
+    # not encoded in geometry alone.
+    if 'aria-label="Health score 83 out of 100, Good"' not in usab:
+        failures.append("health dial missing its derived percentage / accessible label")
+    if ">83</text>" not in usab:
+        failures.append("health dial missing its visible percentage")
+    # The executive summary is the brief's prose and must not also appear as a body
+    # section: one screen stating the same thing twice is what this design removed.
+    if usab.count(">Executive summary<") != 0:
+        failures.append("the executive summary should be absorbed into the brief")
+    if usab.count("The checkout flow completes") != 1:
+        failures.append("the executive summary was rendered twice")
     # A run with nothing gradable says so rather than showing 0% or 100%.
     unscored = render(FIX / "cuj-20260716-140000.md")
     if "Unscored" not in unscored:
         failures.append("an unscored run must render as Unscored, not as a percentage")
-    for bad in ("<b>0<small>%</small>", "<b>100<small>%</small>"):
-        if bad in unscored:
-            failures.append(f"unscored run rendered a percentage it did not earn: {bad}")
+    if "<text" in unscored:
+        failures.append("an unscored run must not draw a score dial at all")
+    if "UNVERIFIED" not in unscored:
+        failures.append("a cuj run that verified nothing must say so in the brief")
+    if "nothing met the bar" in unscored:
+        failures.append("a run that verified nothing must not read as a clean sweep")
+
+    # A hard-wrapped list item is one item, not one per source line. These reports wrap at
+    # ~95 columns, so treating every line as an item split one list into several, each
+    # restarting at 1., with the wrapped remainder stranded as a paragraph between them.
+    if unscored.count("<ol>") != 1:
+        failures.append("a hard-wrapped ordered list was split into several lists")
+    if "<li>" in unscored and "cannot quietly leave the report" not in unscored:
+        failures.append("a list item's continuation line was dropped or stranded")
 
     # The index landing repoints run links from .md to .html and stays self-contained.
     with tempfile.TemporaryDirectory() as d:
