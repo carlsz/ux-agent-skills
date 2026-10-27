@@ -348,6 +348,177 @@ def _check_conformance_grading(flat: str, who: str, errs: list[str]) -> None:
                  f"{who}: the flat Level-AA-to-P1 lookup is back", errs)
 
 
+
+def _check_conformance_wiring(low: str, who: str, errs: list[str]) -> None:
+    """An accessibility component must grade by impact and cite the level as evidence.
+
+    This is the silent trap in the shape that already cost the suite a verdict. Before this
+    auditor existed, `ux-audit` wrapped `web-quality-skills:accessibility` — a remediation
+    guide with no findings, no priorities and no report shape — so the grading rule lived
+    nowhere, and the roll-up's own normalization table filled the gap with a level lookup
+    (`Level AA -> P1`) that made `GO` unreachable. Drop these two instructions from either
+    component and the rule has no owner again, with every other check green.
+    """
+    low = _flatten(low)
+    _require("conformance level is not a priority" in low,
+             f"{who}: must cite \u00a74's rule that a conformance level is not a priority", errs)
+    _require("evidence" in low,
+             f"{who}: must say the WCAG level is evidence, not the priority", errs)
+    # The clause that keeps the rule from reading as a blanket softening: the grade follows
+    # the user the defect affects, for whom an unlabeled control is impossible, not merely
+    # difficult. Without it, "grade by impact" is read against the median user and a
+    # blocker is filed as polish.
+    _require("impact on the user" in low,
+             f"{who}: must grade by impact on the user the defect affects", errs)
+    _require("impossible" in low,
+             f"{who}: must say an unreachable control is impossible for that user, not "
+             f"merely difficult", errs)
+    # And the half that stops a lower grade becoming a way to publish less.
+    _require("always a finding" in low or "is still a finding" in low
+             or "every failed criterion is present as a finding" in low,
+             f"{who}: a failed criterion must stay a finding at any priority", errs)
+
+
+def _check_tool_honesty(low: str, who: str, errs: list[str]) -> None:
+    """Automated tooling must never be reported as a conformance claim.
+
+    axe-core and Lighthouse detect a minority of WCAG failures and almost none of the
+    judgement-bound ones, so a clean tool run over an unexamined surface is the most
+    confident-sounding false pass this suite can produce — and the only auditor that can
+    produce it is this one.
+    """
+    low = _flatten(low)
+    _require("axe" in low or "lighthouse" in low or "automated" in low,
+             f"{who}: must address automated tooling", errs)
+    _require("0 automated violations" in low or "0 violations" in low
+             or "automated pass is not a conformance claim" in low,
+             f"{who}: must forbid reporting a clean automated run as 'accessible'", errs)
+
+
+def check_accessibility_persona() -> list[str]:
+    """The accessibility auditor persona — the suite's third native auditor.
+
+    Hand-wired, like every other check in this file. The suite called accessibility a
+    default member of the `/ux-audit` bundle for its whole life while shipping no persona,
+    no skill, no lens and no command for it; the fan-out wrapped a remediation skill and
+    the agent improvised the rest per run. That is why the same criterion, 1.4.3, came out
+    `P1`, `P2` and `P3` across five real runs.
+    """
+    errs: list[str] = []
+    path = ROOT / "agents" / "accessibility-auditor.md"
+    if not path.exists():
+        return [f"missing {path.relative_to(ROOT)}"]
+    fm, body = _frontmatter(path)
+    _require(isinstance(fm, dict),
+             "a11y persona: frontmatter must parse to a mapping", errs)
+    if isinstance(fm, dict):
+        _require(fm.get("name") == "accessibility-auditor",
+                 "a11y persona: frontmatter 'name' must be 'accessibility-auditor'", errs)
+        desc = str(fm.get("description", "")).lower()
+        _require(bool(desc.strip()),
+                 "a11y persona: frontmatter needs a non-empty 'description'", errs)
+        _require(any(t in desc for t in ("accessibility audit", "a11y", "wcag")),
+                 "a11y persona: description should carry a trigger phrase "
+                 "(accessibility audit / a11y / WCAG)", errs)
+    low = body.lower()
+    _require("never" in low and ("edit" in low or "modif" in low) and "host" in low,
+             "a11y persona: must state the never-edit-host-code boundary", errs)
+    _require("unverified" in low or "render" in low,
+             "a11y persona: must state the render-vs-source honesty rule", errs)
+    for tag in ("p0", "p1", "p2", "p3"):
+        _require(tag in low,
+                 f"a11y persona: must define the {tag.upper()} priority level", errs)
+    _require("fix immediately" in low and "fix before release" in low,
+             "a11y persona: the priority scale must carry its action column", errs)
+    _require("wcag" in low, "a11y persona: must name WCAG as its framework", errs)
+    _require("health" in low and "rubric" in low,
+             "a11y persona: must grade the health rubric alongside the findings", errs)
+    # The scorecard honesty rule unique to this lens: enumerate what was CHECKED. Listing
+    # fifty-six criteria after examining nine is a false coverage claim that reads as
+    # thoroughness, and no other auditor can make it — their rubrics are fixed.
+    _require("criterion you actually checked" in _flatten(low)
+             or "criteria you actually checked" in _flatten(low),
+             "a11y persona: health must enumerate the criteria actually checked", errs)
+    _check_conformance_wiring(low, "a11y persona", errs)
+    _check_tool_honesty(low, "a11y persona", errs)
+    _check_auth_wiring(low, "a11y persona", errs)
+    _check_asset_wiring(low, "a11y persona", errs)
+    return errs
+
+
+def check_accessibility_skill() -> list[str]:
+    """The accessibility workflow: numbered steps with exit criteria, writes under .ux/audits."""
+    errs: list[str] = []
+    path = ROOT / "skills" / "accessibility-audit" / "SKILL.md"
+    if not path.exists():
+        return [f"missing {path.relative_to(ROOT)}"]
+    fm, body = _frontmatter(path)
+    _require(isinstance(fm, dict), "a11y skill: frontmatter must parse to a mapping", errs)
+    if isinstance(fm, dict):
+        _require(fm.get("name") == "accessibility-audit",
+                 "a11y skill: frontmatter 'name' must match its directory", errs)
+        _require(bool(str(fm.get("description", "")).strip()),
+                 "a11y skill: frontmatter needs a non-empty 'description'", errs)
+    low = body.lower()
+    steps = _numbered_steps(body)
+    _require(len(steps) >= 6,
+             f"a11y skill: workflow needs numbered steps (found {len(steps)})", errs)
+    _require("exit criteria" in low, "a11y skill: must state exit criteria", errs)
+    for mode in ("static", "live", "hybrid"):
+        _require(mode in low, f"a11y skill: must cover {mode} mode", errs)
+    _require(".ux/audits" in low, "a11y skill: must write under .ux/audits", errs)
+    _require("report-contract" in low or "report contract" in low,
+             "a11y skill: must conform to the shared report contract", errs)
+    _require("accessibility-auditor" in low,
+             "a11y skill: must drive the accessibility-auditor persona", errs)
+    _require("wcag-2.2.md" in low or "wcag 2.2" in low,
+             "a11y skill: must load the WCAG lens from its reference", errs)
+    # The coverage-gap rule, and the mode consequence that is specific to this lens: most
+    # of WCAG is a runtime property, so a static run cannot establish conformance and has
+    # to say so rather than publishing a quiet pass.
+    _require("coverage" in low, "a11y skill: must carry the coverage-gap rule", errs)
+    _require("cannot establish conformance" in _flatten(low),
+             "a11y skill: a static run must state that it cannot establish conformance",
+             errs)
+    # The scorecard must not enumerate criteria that were never evaluated.
+    _require("and no others" in _flatten(low),
+             "a11y skill: health must carry one item per criterion checked AND NO OTHERS "
+             "- an unevaluated criterion belongs in the coverage list", errs)
+    _check_conformance_wiring(low, "a11y skill", errs)
+    _check_tool_honesty(low, "a11y skill", errs)
+    _check_auth_wiring(low, "a11y skill", errs)
+    _check_asset_wiring(low, "a11y skill", errs)
+    return errs
+
+
+def check_accessibility_command() -> list[str]:
+    """Thin entry point: documents target / scope / mode and the findings-only guarantee."""
+    errs: list[str] = []
+    path = ROOT / "commands" / "accessibility-audit.md"
+    if not path.exists():
+        return [f"missing {path.relative_to(ROOT)}"]
+    fm, body = _frontmatter(path)
+    _require(isinstance(fm, dict), "a11y command: frontmatter must parse to a mapping", errs)
+    if isinstance(fm, dict):
+        _require(fm.get("name") == "accessibility-audit",
+                 "a11y command: frontmatter 'name' must be 'accessibility-audit'", errs)
+        _require(bool(str(fm.get("description", "")).strip()),
+                 "a11y command: frontmatter needs a non-empty 'description'", errs)
+        _require(bool(str(fm.get("argument-hint", "")).strip()),
+                 "a11y command: frontmatter needs an 'argument-hint'", errs)
+    low = body.lower()
+    for arg in ("target", "--scope", "--mode"):
+        _require(arg in low, f"a11y command: must document {arg}", errs)
+    _require("$arguments" in low, "a11y command: must parse $ARGUMENTS", errs)
+    _require(".ux/audits" in low, "a11y command: must state where the report is written",
+             errs)
+    _require("findings only" in low,
+             "a11y command: must state the findings-only guarantee", errs)
+    # A thin command invokes; it does not hold the workflow.
+    _require("accessibility-audit/skill.md" in low or "accessibility-audit`" in low,
+             "a11y command: must invoke the accessibility-audit skill", errs)
+    return errs
+
 def check_rollup_skill() -> list[str]:
     """The suite roll-up skill fans out to auditors and normalizes into the contract."""
     errs: list[str] = []
@@ -1195,14 +1366,67 @@ def check_references() -> list[str]:
 # A component whose check isn't listed here is a component nothing verifies, and the suite
 # stays green while it goes unchecked — the quiet failure AGENTS.md calls the silent trap.
 # Adding a component means adding its check HERE, in the same commit.
+
+def check_wiring() -> list[str]:
+    """Nothing globs the checks in this file. This one does — in both directions.
+
+    The suite's documented silent trap: every `check_*` here is hand-written and composed by
+    name in `CHECKS`, so a component with no check goes unverified while the suite stays
+    green. That is not hypothetical. `accessibility` was named a default member of the
+    `/ux-audit` bundle from the start and shipped with no persona, no skill, no lens and no
+    command for months — the roll-up wrapped a remediation skill, and nothing in this file
+    had an opinion about it, because nothing in this file enumerates what *should* exist.
+
+    So two sweeps, and they fail differently:
+
+    1. **Every `check_*` defined here is in `CHECKS`.** Catches the half where the check was
+       written and the composition forgotten — the author believes it runs; it never does.
+    2. **Every component file is named somewhere in this file's own source.** Catches the
+       half where the component exists and the check was never written at all. A path in a
+       string literal is the weakest possible evidence that somebody looked at it, which is
+       exactly why it is the right bar: it cannot pass by accident, and it cannot be
+       satisfied by adding a component alone.
+
+    Neither sweep says a check is *good*. They say one exists and runs, which is the thing
+    that was missing.
+    """
+    errs: list[str] = []
+    here = Path(__file__).read_text(encoding="utf-8")
+
+    wired = {fn.__name__ for fn in CHECKS}
+    for name, obj in sorted(globals().items()):
+        if name.startswith("check_") and callable(obj) and name != "check_wiring":
+            _require(name in wired,
+                     f"wiring: {name}() is defined but not composed into CHECKS - it has "
+                     f"never run", errs)
+
+    components = sorted(
+        [p for p in (ROOT / "agents").glob("*.md") if p.name != "README.md"]
+        + [p for p in (ROOT / "commands").glob("*.md") if p.name != "README.md"]
+        + list((ROOT / "skills").glob("*/SKILL.md")))
+    _require(bool(components), "wiring: found no components to check", errs)
+    for path in components:
+        rel = path.relative_to(ROOT).as_posix()
+        # How this file names a component: a skill by its directory, a persona or command
+        # by its filename.
+        needle = (path.parent.name if path.name == "SKILL.md" else path.stem)
+        _require(f'"{needle}"' in here or f"'{needle}'" in here or f"/ {needle!r}" in here
+                 or f'"{needle}.md"' in here,
+                 f"wiring: {rel} has no check in this file - nothing verifies it (see the "
+                 f"silent trap in AGENTS.md)", errs)
+    return errs
+
 CHECKS = (
     check_persona, check_skill, check_command, check_references,
+    check_accessibility_persona, check_accessibility_skill, check_accessibility_command,
     check_auth_handoff_reference,
     check_rollup_skill, check_rollup_command,
     check_cuj_author_persona, check_spec_cuj_skill, check_ux_spec_command,
     check_cuj_references,
     check_cuj_auditor_persona, check_audit_cuj_skill, check_cuj_audit_command,
     check_render_report_skill, check_ux_review_command,
+    # Last on purpose: it reports on everything above it.
+    check_wiring,
 )
 
 

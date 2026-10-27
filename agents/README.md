@@ -14,6 +14,10 @@ that skill self-contained.
 - [`usability-auditor.md`](usability-auditor.md) — senior UX auditor; evaluates against
   Nielsen / Shneiderman / AI-heuristics / NPCIS and emits a `P0`-`P3` priority report. Driven by
   the [`usability-audit`](../skills/usability-audit/SKILL.md) skill.
+- [`accessibility-auditor.md`](accessibility-auditor.md) — audits against WCAG 2.2 and
+  grades each failure by **impact on the user it affects**, citing the conformance level as
+  evidence rather than using it as the priority. Driven by the
+  [`accessibility-audit`](../skills/accessibility-audit/SKILL.md) skill.
 - [`cuj-author.md`](cuj-author.md) — UX researcher who defines critical user journeys by
   interview, and **refuses vague ones** (no "the user", no unobservable outcomes, no invented
   steps). Driven by the [`spec-cuj`](../skills/spec-cuj/SKILL.md) skill.

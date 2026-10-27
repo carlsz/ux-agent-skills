@@ -28,9 +28,10 @@ ux-agent-skills/
 ├── .claude-plugin/
 │   ├── plugin.json         # plugin manifest — metadata only, no component lists
 │   └── marketplace.json    # marketplace catalog (self-lists this plugin)
-├── agents/                 # personas — the who (usability-auditor, cuj-author, cuj-auditor)
+├── agents/                 # personas — the who (usability-, accessibility-, cuj-auditor, cuj-author)
 ├── skills/                 # skills — the how
 │   ├── usability-audit/        # usability audit workflow + framework lenses & report contract
+│   ├── accessibility-audit/    # WCAG 2.2 audit workflow + the WCAG audit lens
 │   ├── ux-audit/               # the suite roll-up (fan-out + normalize + verdict)
 │   ├── spec-cuj/               # author critical user journeys by interview (+ cuj-contract)
 │   ├── audit-cuj/              # replay journeys, report the step that broke
@@ -95,6 +96,52 @@ conformance work. In order:
    auditor list in `check_rollup_skill()`.
 8. **Docs** — add the file to `DOC_FILES` in `tests/test_docs.py` so its links get checked, and
    update the catalog in the relevant subdirectory README.
+
+## The accessibility auditor — the recipe's first worked instance
+
+`accessibility-auditor` / `accessibility-audit` / `/accessibility-audit` is what the
+eight-step recipe above produces, and it was added late, which is the interesting part.
+The suite named accessibility a **default member of the `/ux-audit` bundle** for its whole
+life while shipping no persona, no skill, no lens and no command for it — the fan-out
+wrapped `web-quality-skills:accessibility` and called that an auditor.
+
+It is not one. That skill contains no occurrence of *finding*, *report*, *priority* or
+`.ux/`: it is a **remediation guide**, pairing each rule with the corrected markup in a
+❌/✅ idiom meant to be applied. So the roll-up was asking an agent to improvise an entire
+auditor per run — the point of view, the grading, the coverage rule, the report shape —
+and the improvisation showed. Across five real runs the same criterion, `1.4.3`, was
+graded `P1`, `P2` and `P3`, twice within one report. Three severity vocabularies were in
+play at once: the contract's `P0`–`P3`, the roll-up's own `Level AA → P1` lookup, and the
+wrapped skill's *Critical / Serious / Moderate* list, which files contrast under
+**Critical**. None of them agreed.
+
+Three things to keep straight when you touch it:
+
+- **It reads the external skill and rejects its posture.** The remediation wording is
+  genuinely useful and belongs in the Recommended Fix field. The ❌/✅ idiom is a work
+  order, and this is a findings-only suite — the boundary is under more pressure here than
+  anywhere else, because an accessibility defect usually has an obvious three-line fix
+  sitting next to it.
+- **Its rubric is the only one that is not fixed.** Usability grades ten Nielsen
+  heuristics, `cuj` grades the journey's steps; both enumerations are known before the run.
+  Accessibility grades **the criteria it actually checked**, so the scorecard can lie by
+  getting longer — fifty-six rows after examining nine reads as thoroughness. Hence
+  `check_accessibility_skill()`'s probe for *and no others*, and the rule that an
+  unevaluated criterion belongs in the appendix's coverage list, never in `health`.
+- **Mode is not cosmetic here.** Most of WCAG is a runtime property — contrast against the
+  computed background, focus order, focus visibility, target size, live-region timing — so
+  a static run finds markup that looks wrong and **cannot establish conformance**. It has
+  to say that in its own appendix. The same goes for automated tooling: axe and Lighthouse
+  cover a minority of criteria and almost none of the judgement-bound ones, so
+  *"0 violations"* is a statement about the tool, never about the app. `_check_tool_honesty()`
+  is wired into both components for that one sentence.
+
+**It trips both test traps, and that is the whole lesson.** `evals/cases/accessibility-audit.json`
+had to exist the moment `SKILL.md` did (the loud one), and `check_accessibility_persona()`,
+`check_accessibility_skill()` and `check_accessibility_command()` had to be hand-written
+into `CHECKS` (the silent one). Nothing globs them. A fourth auditor added by wrapping
+somebody's guide and skipping both would look exactly as finished as this one did for
+months.
 
 ## The CUJ family (a second triad)
 
@@ -223,18 +270,33 @@ the continuation carries a `> ` as well. Match content, never the wrap.
 ## The two test traps
 
 The authoring rules aren't written down anywhere except the tests — and the two most important ones
-fail in **opposite** directions. Know both before you add a skill.
+fail in **opposite** directions. Know both before you add a skill — and note that the
+second one only started failing loudly once an auditor had already gone missing for months.
 
 **`test_evals.py` globs, and fails loud.** It computes `skills/*/SKILL.md` against the eval cases on
 disk and requires the set difference to be empty. The moment a new `SKILL.md` exists without a
 matching `evals/cases/<name>.json`, **CI goes red** — before you've written a line of the workflow.
 Author the eval case alongside the skill, not after.
 
-**`test_components.py` does not glob, and fails silent.** Every check is a hardcoded function —
-`check_persona()`, `check_skill()`, `check_command()`, `check_references()`, `check_rollup_skill()`,
-`check_rollup_command()` — composed by name in `main()`. A new auditor is **not** covered until you
-hand-write its `check_*()` and add it there. Nothing warns you; the suite just passes while your
-component goes unverified. This is the quieter and more dangerous of the two.
+**`test_components.py` does not glob — it used to fail silent, and now it tells you.** Every
+check is still a hardcoded function — `check_persona()`, `check_skill()`, `check_command()`,
+`check_references()`, `check_rollup_skill()`, `check_rollup_command()` — composed by name in
+`CHECKS`. A new auditor is **not** covered until you hand-write its `check_*()` and add it
+there, and the hand-writing is the point: these checks assert what a component *means*, which
+no glob can.
+
+What changed is that forgetting now fails. `check_wiring()` sweeps both halves: every
+`check_*` defined in the file must appear in `CHECKS` (the check you wrote but never
+composed), and **every component file must be named somewhere in the file's own source**
+(the check you never wrote at all). A path in a string literal is the weakest possible
+evidence that somebody looked at a component — which is exactly the right bar, because it
+cannot be satisfied by accident or by adding the component alone.
+
+It took the accessibility auditor to make that worth building. `accessibility` was a
+default member of the `/ux-audit` bundle from the beginning and had no persona, no skill,
+no lens and no command; the suite was green the whole time, because nothing in this file
+enumerated what *should* exist. Treat `check_wiring()` as a smoke alarm, not a safety net:
+it tells you a check is missing, never that the one you wrote is any good.
 
 The same shape shows up in `test_docs.py`: `DOC_FILES` is a hardcoded list, and a path that doesn't
 exist is silently skipped rather than flagged. It link-checks what it's told about — no more.

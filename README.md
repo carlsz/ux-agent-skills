@@ -12,6 +12,7 @@ Slash commands that map to the UX design and software development lifecycle. Eac
 |-------------------|---------|---------------|
 | Define critical user journeys | `/ux-spec` | Author CUJs by interview |
 | Audit your UX | `/usability-audit` | Expert usability heuristic audit |
+| Audit accessibility | `/accessibility-audit` | WCAG 2.2, graded by impact on the user affected |
 | Verify critical user journeys | `/cuj-audit` | Replay journeys using live browser sessions, report the step that broke |
 | End-to-end UX audit | `/ux-audit` | Usability + accessibility + web perf + CUJs |
 | View reports in a browser | `/ux-review` | Self-contained HTML — findings + screenshot walk-through flipbook |

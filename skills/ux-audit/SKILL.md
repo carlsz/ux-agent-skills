@@ -12,13 +12,13 @@ usability, accessibility, and cuj; web performance is opt-in (add `--only web-pe
 auditor writes the same schema into `.ux/audits/`, so their reports are comparable and can be
 rolled up into a single verdict.
 
-Two native auditors plus two wrapped from **[web-quality-skills](https://github.com/addyosmani/web-quality-skills)**
+Three native auditors plus one wrapped from **[web-quality-skills](https://github.com/addyosmani/web-quality-skills)**
 (the same-author companion to `agent-skills`, a coherent suite of web-quality checks):
 
 | Auditor | Source | Frameworks | Report `auditor` |
 |---------|--------|------------|------------------|
 | Usability | native `skills/usability-audit` | Nielsen / Shneiderman / AI / NPCIS | `usability` |
-| Accessibility | wrap `web-quality-skills:accessibility` | WCAG 2.2 | `accessibility` |
+| Accessibility | native `skills/accessibility-audit` | WCAG 2.2 | `accessibility` |
 | Web performance | wrap `web-quality-skills:performance` (+ `core-web-vitals`) **(opt-in — excluded from the default bundle; add via `--only web-performance` or `--all`)** | Core Web Vitals | `web-performance` |
 | Critical user journeys | native `skills/audit-cuj` **(conditional — needs `.ux/cujs/`)** | the host's own CUJ files | `cuj` |
 
@@ -96,8 +96,11 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 3. **Fan out.** Run each selected auditor against the same `target`/`--scope`:
    - **Usability** — invoke the native `usability-audit` skill; it already writes a
      contract report.
-   - **Accessibility** — invoke `web-quality-skills:accessibility`; capture its WCAG
-     findings.
+   - **Accessibility** — invoke the native `accessibility-audit` skill; it already writes
+     a contract report. (It reads `web-quality-skills:accessibility` for remediation
+     wording, but that skill is a *maker's* guide with no findings, no priorities and no
+     report shape — wrapping it directly is what this suite did until the auditor existed,
+     and it left the roll-up to improvise a persona per run.)
    - **Web performance** *(only when opted in via `--only web-performance` or `--all`)* —
      invoke `web-quality-skills:performance` (and `core-web-vitals`); capture its findings,
      respecting its metric-honesty rule (unmeasured = potential, never fabricated).
@@ -109,16 +112,15 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
    contract-conforming report at `.ux/audits/<auditor>-<YYYYMMDD>-<HHMMSS>.md` — same
    frontmatter schema, body layout, and appendix. **Map each tool's severity onto the
    `P0`-`P3` scale** (contract §4 — note the direction: `P0` is the worst):
-   - **Accessibility (WCAG):** grade by **impact on the user the defect affects**, per
+   - **Accessibility (WCAG):** nothing to remap — the native
+     [`accessibility-audit`](../accessibility-audit/SKILL.md) skill grades at source, by
+     **impact on the user the defect affects**, per
      [§4's *A conformance level is not a priority*](../usability-audit/references/report-contract.md#a-conformance-level-is-not-a-priority).
-     The `A`/`AA`/`AAA` level is evidence — put it in the Framework Violation field with
-     the criterion number — never the priority. So: a control a screen-reader user cannot
-     identify or operate is `P0` (impossible *for them*, rule 2), not a level lookup; a
-     defect that makes the task significantly harder for that user is `P1`; a secondary
-     caption a little under the contrast minimum is `P2`; cosmetic is `P3`. **Do not map
-     a level straight onto the scale** — `Level AA → P1` puts every real app past the
-     `P1` gate and makes `GO` unreachable, and every failed criterion is still a finding
-     at whatever priority it earns.
+     Merge its counts as written. **Never re-grade its findings off their `A`/`AA`/`AAA`
+     level** on the way into the roll-up: the level is evidence, and mapping it onto the
+     scale — `Level AA → P1` — puts every real app past the `P1` gate and makes `GO`
+     unreachable. That mapping lived here, and this is where it has to stay gone. Every
+     failed criterion is still a finding at whatever priority it earned.
    - **Web performance:** a Core Web Vital in the "poor" band (measured) → `P1`; "needs
      improvement" → `P2`; a structural anti-pattern with only *potential* impact →
      `P2`-`P3`, labeled potential per the metric-honesty rule.
@@ -137,8 +139,9 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
    rather than a number it did not earn.
    Set `auditor` and `frameworks` per the table above; carry the tool's evidence
    (screenshots, `file:line`, measured metrics) into the Evidence field.
-   The **native** auditors (usability, `cuj`) already emit contract reports — no external
-   remapping. **CUJ carries one exception the roll-up must respect: `total: 0` is a *pass*
+   The **native** auditors (usability, accessibility, `cuj`) already emit contract reports
+   — no external remapping; the mapping note above applies to the wrapped web-performance
+   findings and to any future wrapped member. **CUJ carries one exception the roll-up must respect: `total: 0` is a *pass*
    (every journey verified clean), not "found nothing".** Read the CUJ report's
    executive-summary counts and `frameworks` list to tell a clean pass from a run that
    verified nothing (`frameworks: [cuj-contract]` alone signals the latter), and never
