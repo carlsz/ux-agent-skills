@@ -267,6 +267,17 @@ Three things to keep straight when you touch it:
   `snapshot()` sweeps the write prefixes with `writes_under()` so ignored prior reports are
   digested rather than mistaken for the current run's output.
 
+- **The baseline's path is derived, never named.** `--snapshot` saves it under a path
+  computed from the host repo, in a private per-user directory, and `--baseline auto`
+  recomputes the same path — so the two steps name no file. They cannot: a skill's steps
+  are separate tool calls and shell state does not survive between them, which is why the
+  superseded instruction hardcoded `/tmp/ux-baseline.json` and why `$(mktemp)` would have
+  been a regression. One shared filename meant two concurrent audits overwrote each
+  other's baseline, and the check then measured one repo against the other's tree — in the
+  reproduction, an agent editing host application code reported **`safe`**. The sweep in
+  `check_no_hardcoded_temp_paths()` keeps a fixed temp path out of every component, because
+  a component is a prompt: "pick a unique path" would be improvised differently each run.
+
 - **`_dirty_paths()` never gets `--ignored`, and the second pass is why it doesn't have to.**
   `changes_confined_to()` looks for ignored escapes through a pathspec-scoped sweep of
   `_ALL_PROFILE_PATHS` — the union of every profile's paths, so an ignored `.ux/cujs/`

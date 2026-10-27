@@ -45,7 +45,7 @@ one requested.
 **Before you write anything**, record what was already dirty:
 
 ```
-python3 scripts/audit_safety.py <host-repo> --snapshot > /tmp/ux-baseline.json
+python3 scripts/audit_safety.py <host-repo> --snapshot
 ```
 
 Git can tell you the tree differs from HEAD; it cannot tell you *who* made it differ. You
@@ -53,6 +53,11 @@ are most often run on a repo that is dirty **before you start** — "did my refa
 journey?" means the refactor is uncommitted, by definition. Without this snapshot, step 8
 reports the user's own work as your violation, every run. A check that cries wolf gets muted,
 and a muted check is a deleted one.
+
+**Do not redirect it to a file you pick.** The command saves the baseline itself, under a
+path derived from the host repo, and step 8 reads it back with `--baseline auto` — so
+neither step names a path and the two cannot disagree about one. Shell state does not
+survive between your steps anyway: a variable set here is gone by then.
 
 Then read `.ux/cujs/` in the host repo and apply `--cuj`. Record the **selected set** now: it
 is the denominator for every count you report later, and it never shrinks.
@@ -328,7 +333,7 @@ check below is unaffected. (Also available on demand via `/ux-review`.)
 ### 8. Confirm your footprint
 
 ```
-python3 scripts/audit_safety.py <host-repo> --baseline /tmp/ux-baseline.json
+python3 scripts/audit_safety.py <host-repo> --baseline auto
 ```
 
 The **default `audit` profile**, deliberately. You are an auditor: `.ux/audits/` is the only
@@ -336,7 +341,9 @@ place you write. `.ux/cujs/` and `SPEC.md` are **violations** for this skill eve
 `/ux-spec` may write them — that asymmetry is the mechanical form of "never repair the journey
 you are grading". Show the real output.
 
-Pass step 1's baseline so this measures **your** footprint rather than the state of the repo
+`auto` is the literal — it resolves to the baseline step 1 saved for *this* host repo, so
+a second audit running beside yours cannot hand you its tree by mistake. Passing step 1's
+baseline is what makes this measure **your** footprint rather than the state of the repo
 you walked into. The baseline forgives pre-existing dirt only while its bytes are unchanged —
 so if you touched a file that was already modified, this still catches you, which is the point.
 

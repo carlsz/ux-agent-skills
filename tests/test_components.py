@@ -1429,6 +1429,44 @@ def check_wiring() -> list[str]:
                  f"silent trap in AGENTS.md)", errs)
     return errs
 
+def check_no_hardcoded_temp_paths() -> list[str]:
+    """No component tells an agent to write to a fixed path in a shared temp directory.
+
+    `audit-cuj` did: `--snapshot > /tmp/ux-baseline.json`, read back under the same name
+    at step 8. One filename, shared by every run on the machine, so two audits at once —
+    two repos, or one repo in two worktrees — overwrote each other's baseline and the
+    footprint check then measured this repo against that one's tree. Both directions were
+    reproduced: a user's own uncommitted work reported as the agent's violation, and, far
+    worse, an agent writing to host application code reported as `safe`. The check that
+    enforces findings-only was quietly deciding the wrong case.
+
+    A component is a PROMPT, so "use a unique temp path" would be improvised differently
+    every run. The fix is that `audit_safety.py` derives the path itself from the host
+    repo and the two steps name none: `--snapshot`, then `--baseline auto`. This sweep
+    covers instructions only — the script's own docstring names `/tmp` to explain what
+    was wrong with it.
+    """
+    errs: list[str] = []
+    for path in sorted([*(ROOT / "agents").glob("*.md"), *(ROOT / "commands").glob("*.md"),
+                        *(ROOT / "skills").glob("*/SKILL.md"),
+                        *(ROOT / "skills").glob("*/references/*.md")]):
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if re.search(r"(?<![\w.])/(?:tmp|var/tmp|dev/shm)/", line):
+                errs.append(
+                    f"{path.relative_to(ROOT)}:{n} writes to a fixed shared temp path - "
+                    f"derive it in the script instead, so two runs cannot collide: "
+                    f"{line.strip()!r}")
+    # And the one that burned us must use the derived form, not merely avoid the literal.
+    cuj = (ROOT / "skills" / "audit-cuj" / "SKILL.md").read_text(encoding="utf-8")
+    _require("--baseline auto" in cuj,
+             "audit-cuj skill: must read the baseline back with `--baseline auto`, which "
+             "resolves per host repo, rather than naming a file", errs)
+    _require("--snapshot\n" in cuj,
+             "audit-cuj skill: `--snapshot` must be run without redirecting it to a path "
+             "the agent picks - the command saves the baseline itself", errs)
+    return errs
+
+
 CHECKS = (
     check_persona, check_skill, check_command, check_references,
     check_accessibility_persona, check_accessibility_skill, check_accessibility_command,
@@ -1438,6 +1476,7 @@ CHECKS = (
     check_cuj_references,
     check_cuj_auditor_persona, check_audit_cuj_skill, check_cuj_audit_command,
     check_render_report_skill, check_ux_review_command,
+    check_no_hardcoded_temp_paths,
     # Last on purpose: it reports on everything above it.
     check_wiring,
 )

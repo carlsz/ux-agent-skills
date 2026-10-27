@@ -51,6 +51,33 @@ All notable changes to this project are documented here. The format is based on
   `/ux-audit` now fans out to three native auditors and one wrapped, instead of two and two.
 
 ### Fixed
+- **The safety baseline no longer lives at one fixed path in `/tmp`.** `audit-cuj` step 1
+  said `--snapshot > /tmp/ux-baseline.json` and step 8 read that same name back: one
+  filename in a world-writable directory, shared by every run on the machine.
+
+  **It was a correctness bug in the check that enforces findings-only, not untidiness.**
+  Two audits at once — two repos, or one repo in two worktrees — overwrite each other's
+  baseline, and the footprint check then measures this repo against that one's tree. Both
+  directions reproduce. A user's own uncommitted work gets reported as the agent's
+  violation; and, far worse, when the other repo happened to have the same path dirty, an
+  agent writing to **host application code** was reported as `safe`. The check had no
+  symptom either way — it printed a confident verdict about the wrong tree.
+
+  `audit_safety.py` now derives the path itself from the host repo: `--snapshot` saves it
+  (and still prints the JSON, so `> file` plus `--baseline <path>` keeps working), and
+  `--baseline auto` recomputes the same path to read it back. Neither step names a file,
+  which is the point — a skill's steps are separate tool calls and shell state does not
+  survive between them, so `$(mktemp)` would have been a regression rather than a fix.
+  One file per repo, named by digest, in a per-user directory created `0o700` and refused
+  if it turns out to be a symlink — `mkdir(exist_ok=True)` is satisfied by a symlink to a
+  directory, so the mode alone was decoration. `--baseline auto` with nothing saved exits
+  2 rather than quietly running unbaselined, which would restore the false positive the
+  baseline exists to remove. There is also no `/tmp` on Windows.
+
+  A sweep now keeps a fixed temp path out of every persona, skill, command and reference.
+  A component is a prompt, so "use a unique temp path" would be improvised differently
+  every run; the path has to be derived in the script or it is not derived at all.
+
 - **`health.trend` can be populated now, and has a command that does it.** The field
   shipped with a documented source that did not contain the data: §7 said `index.md`'s
   `Health` column "carries the trend the roll-up reads", but index rows are appended one
