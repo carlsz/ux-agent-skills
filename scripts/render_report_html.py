@@ -131,6 +131,57 @@ def _inline(text: str, report_dir: Path) -> str:
     return text
 
 
+# --- heading anchors (deep-link targets) --------------------------------------------------
+
+MD_LINK_TEXT_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+
+
+def _slug(text: str) -> str:
+    """GitHub's heading slug for `text` — the id a `#fragment` link is written against.
+
+    The suite writes deep links in Markdown: a roll-up's `## Merged top issues` links each
+    issue to `member.md#p1-the-heading`, and a report's own executive summary links its
+    worst findings to `#p1-the-heading`. Those fragments are GitHub heading slugs, because
+    GitHub is where the canonical Markdown is read — so the HTML companion has to mint the
+    SAME string, or every one of those links lands nowhere. This is a derived view: it does
+    not get to invent its own anchor scheme and expect the Markdown to follow.
+
+    The algorithm is GitHub's: link syntax collapses to its text, emphasis and code marks
+    drop, HTML entities are decoded (a heading that reads `&lt;body&gt;` slugs as `body`,
+    not `ltbodygt`), what is left is lowercased, everything but word characters, spaces and
+    hyphens is removed, and spaces become hyphens.
+    """
+    t = MD_LINK_TEXT_RE.sub(r"\1", text.strip())
+    t = re.sub(r"[`*_~]", "", t)
+    t = html.unescape(t).lower()
+    t = "".join(c for c in t if c.isalnum() or c in " -_")
+    return t.replace(" ", "-")
+
+
+class _Anchors:
+    """One id namespace per rendered page, deduplicated the way GitHub deduplicates.
+
+    A second heading with the same text gets `-1`, a third `-2`. Ids are page-unique by
+    construction, so the HTML stays valid even when a report repeats a heading.
+    """
+
+    def __init__(self, *, reserved: tuple[str, ...] = ()) -> None:
+        self._seen: dict[str, int] = {r: 0 for r in reserved}
+
+    def id(self, text: str) -> str:
+        base = _slug(text)
+        if base not in self._seen:
+            self._seen[base] = 0
+            return base
+        self._seen[base] += 1
+        return f"{base}-{self._seen[base]}"
+
+
+def _h2(anchors: "_Anchors", name: str, report_dir: Path) -> str:
+    """A section heading that can be linked to."""
+    return f'<h2 id="{html.escape(anchors.id(name))}">{_inline(name, report_dir)}</h2>'
+
+
 # --- block markdown ----------------------------------------------------------------------
 
 SECTION_RE = re.compile(r"^##\s+(.*)$", re.MULTILINE)
@@ -265,7 +316,10 @@ def _parse_findings(body: str) -> list[dict]:
         title = ANY_TAG_RE.sub("", heading).strip()
         fields = {name: val.strip() for name, val in FINDING_FIELD_RE.findall(block)}
         p = int(m.group(1)) if m.group(1) is not None else SEV_TO_PRI[int(m.group(2))]
-        findings.append({"p": p, "title": title, "fields": fields})
+        # `heading` keeps the tag (`[P1] …`), because the anchor is the slug of the heading
+        # as WRITTEN — `title` has the tag stripped for display and would slug differently.
+        findings.append({"p": p, "title": title, "heading": heading.lstrip("# ").strip(),
+                         "fields": fields})
     return findings
 
 
@@ -311,7 +365,7 @@ RAIL_FIELDS = (
 )
 
 
-def _render_findings(body: str, report_dir: Path) -> str:
+def _render_findings(body: str, report_dir: Path, anchors: "_Anchors") -> str:
     """Findings as cards, each with a permanent apparatus rail beside its prose.
 
     The rail is the design's one structural commitment: the framework citation, the source
@@ -319,6 +373,10 @@ def _render_findings(body: str, report_dir: Path) -> str:
     apparatus is prominent by *position* rather than by colour or weight. That is what lets
     it stay at full strength — a reader skimming the prose cannot miss it, and a reader
     checking the work does not have to hunt for it.
+
+    Each card carries the `id` its Markdown heading slugs to, so the deep links the suite
+    already writes — a roll-up's merged top issues, a report's own executive summary —
+    resolve to the card instead of to nothing.
     """
     findings = _parse_findings(body)
     if not findings:
@@ -363,7 +421,7 @@ def _render_findings(body: str, report_dir: Path) -> str:
                          f'<div class="prose">{"".join(prose)}</div></div>')
 
         cards.append(
-            f'<article class="finding p{n}">'
+            f'<article class="finding p{n}" id="{html.escape(anchors.id(f["heading"]))}">'
             f'<div class="find-head"><span class="chip p{n}">P{n} {PRI_LABELS[n]}</span>'
             f"<h3>{_inline(f['title'], report_dir)}</h3></div>"
             f"{body_html}</article>")
@@ -596,6 +654,11 @@ def _brief(*, kind: str, token: str, token_label: str, eyebrow: str, title: str,
     executive summary and the `## Design health` body section are both skipped in the body
     for this reason: the same numbers printed two and three times down one page was the
     thing that made these reports hard to read, not a shortage of emphasis.
+
+    Because it absorbs `## Executive summary`, it also answers to that section's anchor:
+    an absorbed section still has a heading in the canonical Markdown, so a `#executive-
+    summary` link has to land somewhere, and the block that swallowed it is the only honest
+    target. `_scorecard` carries `#design-health` for the same reason.
     """
     chips = "".join(
         f'<span class="chip p{n}">{c} &times; P{n} {PRI_LABELS[n]}</span>'
@@ -616,7 +679,7 @@ def _brief(*, kind: str, token: str, token_label: str, eyebrow: str, title: str,
     foot_html = (f'<div class="brief-foot">{foot}{foot_extra}</div>'
                  if (foot or foot_extra) else "")
     lead = f"{lead_html}" if lead_html else ""
-    return (f'<section class="brief {kind}">'
+    return (f'<section class="brief {kind}" id="executive-summary">'
             f'<div class="brief-top">'
             f'<div class="lock{" long" if len(token) > 5 else ""}">'
             f"<b>{html.escape(token)}</b>"
@@ -714,7 +777,7 @@ def _scorecard(fm: dict) -> str:
     caption = _facts([("Rubric", f"<code>{html.escape(rubric)}</code>" if rubric else ""),
                       ("Score", html.escape(f'{health.get("score")} of {health.get("max")}')
                        if health.get("max") else "")])
-    return ('<section class="md"><h2>Design health</h2>' + intro + caption +
+    return ('<section class="md"><h2 id="design-health">Design health</h2>' + intro + caption +
             f'<div class="rub">{"".join(rows)}</div></section>')
 
 
@@ -919,6 +982,9 @@ letter-spacing:.04em}
 /* --- findings: C's card, A's permanent apparatus rail --------------------------------- */
 .finding{background:var(--card);border:1px solid var(--line);border-radius:4px;margin:1rem 0;
 box-shadow:var(--shadow)}
+/* Arrived by deep link: say which card, since the scroll alone does not. */
+[id]{scroll-margin-top:1.2rem}
+.finding:target{border-color:var(--teal);box-shadow:0 0 0 3px var(--tint),var(--shadow)}
 .find-head{padding:1.15rem 1.4rem .2rem}
 .find-head h3{font:500 1.12rem/1.35 Optima,Candara,"Gill Sans MT","Trebuchet MS",
 system-ui,sans-serif;margin:.5rem 0 0}
@@ -1114,6 +1180,7 @@ def _render_rollup(fm: dict, body: str, report_dir: Path) -> str:
                    f'rather than deriving it, so treat it as unverified.</em>')
     verdict_banner = _banner(f"verdict {kind}", icon, detail)
 
+    anchors = _Anchors(reserved=("executive-summary",))  # the brief carries that id
     body = _link_md_to_html(body)
     matches = list(SECTION_RE.finditer(body))
     pre = body[:matches[0].start()] if matches else body
@@ -1141,7 +1208,7 @@ def _render_rollup(fm: dict, body: str, report_dir: Path) -> str:
         name = m.group(1).strip()
         start_i = m.end()
         end_i = matches[idx + 1].start() if idx + 1 < len(matches) else len(body)
-        parts.append(f'<section class="md"><h2>{_inline(name, report_dir)}</h2>'
+        parts.append(f'<section class="md">{_h2(anchors, name, report_dir)}'
                      f'{_render_blocks(body[start_i:end_i], report_dir)}</section>')
     return "\n".join(parts)
 
@@ -1178,6 +1245,10 @@ def render(md_path: str | Path) -> str:
         title = f"UX audit roll-up — {fm.get('scope', '')}".strip(" —")
         return _page(title, _render_rollup(fm, body, report_dir))
 
+    # `executive summary` and `design health` are absorbed by the brief and the scorecard,
+    # which carry those two ids themselves — reserved here so a body heading cannot take
+    # them and leave the absorbed link pointing at the wrong block.
+    anchors = _Anchors(reserved=("executive-summary", "design-health"))
     matches = list(SECTION_RE.finditer(body))
     sections: list[tuple[str, str]] = []  # (lowercased name, section html)
     has_walkthrough = False
@@ -1194,14 +1265,14 @@ def render(md_path: str | Path) -> str:
         if nlow in ABSORBED:
             continue
         if nlow == "findings":
-            inner = _render_findings(content, report_dir)
+            inner = _render_findings(content, report_dir, anchors)
         elif nlow == "walkthrough":
             has_walkthrough = True
             inner = _render_walkthrough(content, report_dir)
         else:
             inner = _render_blocks(content, report_dir)
         sections.append(
-            (nlow, f'<section class="md"><h2>{_inline(name, report_dir)}</h2>{inner}</section>'))
+            (nlow, f'<section class="md">{_h2(anchors, name, report_dir)}{inner}</section>'))
 
     # A report with no walkthrough surfaces its Evidence screenshots as a fallback gallery.
     gallery = ""

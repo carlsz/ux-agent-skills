@@ -411,6 +411,19 @@ After the frontmatter, in order:
    ### [PN] <short title>           # N ∈ 0..3
    ```
 
+   > **The heading is also the link target, so derive the fragment — never guess it.**
+   > `## Prioritized fixes` above and a roll-up's `## Merged top issues` (§9) both link to
+   > these findings, and the fragment is the **GitHub heading slug of the heading as
+   > written**, tag included: lowercase it, drop everything that is not a letter, digit,
+   > hyphen or underscore, and turn each remaining space into a hyphen. So
+   > `### [P1] CUJ-001 — a task does not survive a reload` is reached as
+   > `#p1-cuj-001--a-task-does-not-survive-a-reload` — two hyphens, because the em dash is
+   > *removed* and the spaces around it both become hyphens. Punctuation vanishes without
+   > a trace: `fails AA contrast at 3.64:1` slugs to `fails-aa-contrast-at-3641`. A real
+   > run guessed `...-at-364-1` in one place and `...-at-364` in another, so the same
+   > finding had two dead links and neither matched the heading. Copy the heading and
+   > transform it; do not compose the fragment from memory.
+
    Each finding block MUST contain these five labelled fields, each written as a markdown
    **list item** — `- **Field:** value`, the literal shape of the list below, with any
    continuation lines indented two spaces under their bullet:
@@ -644,7 +657,9 @@ health:                      # the suite scorecard
 4. **`## Auditors that ran vs. skipped`** — prose mirroring `auditors_ran` /
    `auditors_skipped`, with the reason for every skip.
 5. **`## Merged top issues`** — findings across all members, `P0` → `P3`, each
-   linking to its finding anchor in the member report.
+   linking to its finding anchor in the member report: `member-<stamp>.md#<slug>`, where
+   `<slug>` is the member's finding heading slugged by §5's rule. Cite the heading as the
+   member wrote it — a paraphrased title slugs to a fragment that exists nowhere.
 6. **`## Verdict rationale`** — why the gate landed where it did.
 7. **`## Notes`** — provenance, target caveats, and links to the member reports. A roll-up
    has **no `## Appendix`**: coverage honesty is each member report's own obligation

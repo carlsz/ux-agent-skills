@@ -149,13 +149,18 @@ shape. Know both before you touch reporting.
   demand. **The Markdown stays the source of truth**; the `.html` is never validated against or
   in place of it. Full spec: §10.6–10.7.
 
-  Two things about it are easy to break. **The brief absorbs `## Executive summary` and
+  Three things about it are easy to break. **The brief absorbs `## Executive summary` and
   `## Design health`**, so those sections render from frontmatter and are skipped in the body —
   un-skip either and the page states the same numbers twice. And **the renderer is read-tolerant
   where the validator is write-strict**: it reads `[sevN]` finding tags, `sevN:` counts, the
   `Severity:` field name, `totals:`, and `report: rollup`, none of which validate on write. Every
   one of those exists because a report is append-only history; drop one and the suite's own
-  back-catalogue renders as empty.
+  back-catalogue renders as empty. And **the anchors are GitHub's, not the renderer's**:
+  every finding card and section heading carries the slug its Markdown heading would get on
+  GitHub, because that is what the roll-up's merged top issues and a report's prioritized
+  fixes link to. The two absorbed sections above keep their anchors on the blocks that
+  absorbed them. Mint a scheme of your own and every deep link in the suite goes dead —
+  which is what the renderer did until it emitted no `id` at all.
 
 **`render-report` is the suite's one non-auditor skill** — so the "adding an auditor" recipe
 above does *not* apply to it: no persona (a mechanical transform holds no point of view), no

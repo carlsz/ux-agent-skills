@@ -8,6 +8,48 @@ All notable changes to this project are documented here. The format is based on
 
 
 ### Fixed
+- **Every deep link in the HTML companion was dead, because the renderer emitted no `id`
+  attribute anywhere.** The suite writes two kinds of fragment link and answered neither: a
+  roll-up's `## Merged top issues` points each issue at `member.md#p1-…`, and a report's own
+  `## Prioritized fixes` points at `#p1-…`. Measured against a real Sprout run, **0 of 32
+  fragment links resolved**; after the fix, 30 do. The remaining two are an authoring slip
+  in that run, not a renderer defect — it guessed the slug of `3.64:1` two different ways
+  and neither matched its own heading, which is dead on GitHub too.
+
+  It read as a broken page rather than a missing feature: the links were visible, blue and
+  clickable, and clicking one did nothing.
+
+  Finding cards and section headings now carry the **GitHub heading slug** of their
+  Markdown heading. GitHub's algorithm, not a scheme of the renderer's own — the Markdown is
+  canonical and the links are written against where it is read, so a derived view does not
+  get to invent anchors and expect the source to follow. Three details decide whether the
+  string matches: the slug comes from the heading *as written* (`[P1] …`, so the card is
+  `p1-…`; slugging the displayed title silently drops the prefix every link relies on),
+  entities are decoded first (a heading reading `&lt;body&gt;` slugs to `body`, not
+  `ltbodygt` — a real report has that anchor), and punctuation is removed rather than
+  replaced, so an em dash leaves the two hyphens every `cuj` anchor carries.
+
+  The id sits on the `<article>`, not its `<h3>`: the heading renders below the priority
+  chip, so anchoring it would scroll the chip out of view on arrival. Arriving is
+  acknowledged — `.finding:target` rings the card — because a scroll alone does not say
+  which of nine cards you were sent to. `## Executive summary` and `## Design health` have
+  no body section (the brief and the scorecard absorb them), so those two ids live on the
+  absorbing blocks; an absorbed section still has a heading in the canonical Markdown and a
+  link to it has to land somewhere honest.
+
+  **The fixtures are why no test caught this: not one of them contained a deep link.** The
+  roll-up fixture listed its merged top issues with file-only links, which §9's body layout
+  has required an anchor for since it was written, and it even paraphrased the member
+  reports' finding titles — so it modelled the shortcut rather than the contract. It now
+  cites the real headings and links to their anchors, and the usability fixture's
+  prioritized fixes link in-page. The test resolves every fragment against the ids actually
+  present, the way a browser does, and **fails if fewer than five fragments exist at all** —
+  a fixture set that links to nothing would otherwise pass this check vacuously, which is
+  precisely how the defect survived.
+
+  §5 now states the anchor rule with the worked cases, and §9.5 says to cite the member's
+  heading verbatim, since a paraphrased title slugs to a fragment that exists nowhere.
+
 - **A usability finding attributed outside Nielsen now has a `health` item to land on.** Same
   defect as the `cuj` one below, in the auditor that ships four frameworks and a rubric of
   ten. The persona tells the auditor to reserve standalone citations for what Shneiderman,
