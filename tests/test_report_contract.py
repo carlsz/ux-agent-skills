@@ -8,6 +8,7 @@ conforming report passes while known-malformed reports fail.
 
 Run: `python3 tests/test_report_contract.py` (exit 0 = pass, 1 = fail).
 """
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -280,6 +281,51 @@ def main() -> int:
                                 "has to land on one of them")
     failures += _expect_invalid(FIXTURES / "invalid" / "health-below-floor.md",
                                 "lowest item score must be 3")
+
+    # --- a `success_criteria` failure needs an item of its own (§4.1) ---------------------
+    # The `cuj` auditor's proudest failure class is the silent-data-loss `P1`: every step
+    # matched, and then the data did not persist. `success_criteria` are explicitly NOT
+    # steps — they are evaluated once, after the journey completes — so while items were
+    # steps only, that report was UNWRITABLE. The floor demanded an item at 1 and no step
+    # had failed, and all three ways out were falsehoods: invent a non-step item,
+    # re-attribute the failure to a step that passed, or soften the P1.
+    #
+    # The suite shipped the second one. THIS fixture used to score `CUJ-001 step 2` a `1`
+    # for a finding whose Framework Violation field reads `success-criteria` and whose text
+    # says "Steps 1 and 2 both passed". So asserting it validates is not enough — validity
+    # is exactly what the misattribution bought. The ATTRIBUTION is what this pins.
+    _cuj = (FIXTURES / "valid" / "cuj-20260716-120000.md").read_text(encoding="utf-8")
+    _items = re.findall(r'- item: "([^"]+)"\n\s+score: (\d+|null)', _cuj)
+    if not _items:
+        failures.append("criteria-item probe: could not parse the cuj fixture's items")
+    else:
+        _crit = [(n, v) for n, v in _items if "success criteria" in n.lower()]
+        _steps = [(n, v) for n, v in _items if " step " in n.lower()]
+        if not _crit:
+            failures.append(
+                "the cuj fixture files a success-criteria P1 but carries no "
+                "'<journey> success criteria' item for it to land on")
+        if any(v != "4" for _, v in _steps):
+            failures.append(
+                f"a criteria failure must not mark a STEP down — these steps passed and "
+                f"are scored below 4: {[n for n, v in _steps if v != '4']}")
+        if not any(v == "1" for _, v in _crit):
+            failures.append(
+                f"the P1 must land on the criteria item, got {_crit}")
+
+    # ...and the dead end itself: the same report with the criteria item removed must be
+    # rejected, and the message must name the way out. Without the hint an auditor's only
+    # visible options are the three falsehoods above — which is how the fixture got written.
+    _stripped = _cuj.replace("""    - item: "CUJ-001 success criteria"
+      score: 1
+      note: "P1 - the captured task does not survive a reload; both steps passed"
+""", "").replace("  score: 21", "  score: 20").replace("  max: 24", "  max: 20")
+    if _stripped == _cuj:
+        failures.append("criteria-hint probe: could not strip the criteria item")
+    with tempfile.TemporaryDirectory() as _d:
+        _p = Path(_d) / "cuj-20260716-120000.md"
+        _p.write_text(_stripped, encoding="utf-8")
+        failures += _expect_invalid(_p, "success criteria` item, not on a step that passed")
     # --- `pct` is rubric-size independent (§4.1) ------------------------------------------
     # The headline is a priority index over `summary`, not `score / max`, and this is the
     # assertion that says why: take a valid report and GROW its rubric with passing items.
@@ -331,7 +377,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (29 checks)")
+    print("PASS — report contract (32 checks)")
     return 0
 
 

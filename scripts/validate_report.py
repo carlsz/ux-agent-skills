@@ -365,10 +365,21 @@ def _check_health(fm: dict) -> list[str]:
                 f"{ITEM_OF}; these are marked down with nothing filed against them: {low}")
     else:
         if lowest != worst:
+            # The dead end this message has to open: for `cuj`, a `success_criteria`
+            # failure is not a step failure, so an auditor grading only steps has no row
+            # for its worst finding. Naming the criteria item here is the difference
+            # between adding the missing row and re-attributing the failure to a step
+            # that passed — which is what the suite's own early fixture did (§4.1).
+            hint = ""
+            if fm.get("auditor") == "cuj":
+                hint = (" A `success_criteria` failure lands on that journey's "
+                        "`CUJ-<id> success criteria` item, not on a step that passed; add "
+                        "the criteria item rather than marking a step down (§4.1).")
             errors.append(
                 f"health: the worst finding is P{worst}, so the lowest item score must be "
                 f"{worst} (got {lowest}) — an item's score is the P-number of the worst "
-                f"finding against it, and the worst finding has to land on one of them")
+                f"finding against it, and the worst finding has to land on one of them."
+                f"{hint}")
 
     # `score`/`max` still reconcile with the rows; `pct` is the priority index, which the
     # rows cannot produce — see §4.1 on why the two answer different questions.

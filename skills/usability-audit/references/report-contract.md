@@ -301,6 +301,26 @@ the exact heuristic, criterion or step the finding is about — and that is the 
 it deducts from. One observation, graded once, shown two ways: the findings list says what
 broke, the scorecard says where.
 
+**So the rubric must have a row for everything the auditor can grade**, or the floor below
+cannot be satisfied honestly. For `cuj` that means the items are *not* only the steps: a
+journey whose `success_criteria` were evaluated gets **one further item for the criteria
+set**, named for the journey (`CUJ-001 success criteria`). A criteria failure lands there
+and nowhere else.
+
+That item exists because of the failure class this auditor cares most about. A
+`success_criteria`-only failure — every step matched, and then the data did not persist —
+is a `P1`, and `success_criteria` are emphatically **not** steps: they are evaluated once,
+after the journey completes. Without a criteria row the worst finding has no item to land
+on, and the three ways out are all falsehoods: invent an item that is not a step,
+re-attribute the failure to the last step that actually passed, or soften the `P1` until
+the arithmetic works. The suite shipped the second one — an early fixture scored
+`CUJ-001 step 2` a `1` for a finding whose own Framework Violation field reads
+`success-criteria` and whose text says *"Steps 1 and 2 both passed"*.
+
+A criteria item is `of: 4` like any other and scores `4` when every criterion held, so it
+costs a clean run nothing, and `max` grows by one per journey without moving `pct` — which
+is the whole point of `pct` being a priority index.
+
 > **Why this is mechanical and not a matter of taste.** Grading the rubric and filing the
 > findings used to be two independent passes over the same app, so they could disagree —
 > and did, in opposite directions at once. In one real run the `cuj` auditor scored four
@@ -313,7 +333,8 @@ broke, the scorecard says where.
 
 **One 0–4 scale, four idioms.** Every item is `of: 4` whatever the auditor: usability one
 per Nielsen heuristic, accessibility one per WCAG criterion checked, `cuj` one per journey
-step verified, web performance one per metric measured. The *items* carry each auditor's
+step verified **plus one per journey whose `success_criteria` were evaluated** (above), web
+performance one per metric measured. The *items* carry each auditor's
 idiom; the *scale* is shared, which is what makes the percentage comparable. A pass/fail
 rubric like WCAG still grades 0–4 here, because the item records how badly the criterion
 failed, not whether it normatively conforms — and a `P2` contrast defect genuinely is not

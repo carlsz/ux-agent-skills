@@ -136,6 +136,28 @@ def _check_asset_wiring(low: str, who: str, errs: list[str]) -> None:
         _require(banned not in low, f"{who}: must not still describe {what}", errs)
 
 
+def _check_criteria_item_wiring(low: str, who: str, errs: list[str]) -> None:
+    """A `cuj` component must authorize the `success_criteria` rubric item.
+
+    Wired into the cuj persona and the audit-cuj skill, and this is the silent trap again.
+    The findings floor (§4.1) requires the worst finding to land on a `health` item; a
+    `success_criteria` failure is not a step failure, so while items were steps only the
+    silent-data-loss `P1` — the class this auditor exists for — was unwritable. Drop the
+    criteria-item instruction from either file and that dead end comes back, with every
+    other check green, and the auditor's visible options are the three falsehoods §4.1
+    names: a non-step item, a re-attribution to a step that passed, or a softened `P1`.
+
+    The repo shipped the re-attribution once, in a fixture. Nothing caught it.
+    """
+    low = _flatten(low)
+    _require("success criteria" in low,
+             f"{who}: must authorize a `CUJ-<id> success criteria` health item", errs)
+    _require("never on a step" in low or "rather than against a step" in low
+             or "not on a step" in low,
+             f"{who}: must say a criteria failure lands on the criteria item, never on a "
+             f"step that passed", errs)
+
+
 def check_persona() -> list[str]:
     errs: list[str] = []
     path = ROOT / "agents" / "usability-auditor.md"
@@ -641,6 +663,7 @@ def check_cuj_auditor_persona() -> list[str]:
              errs)
     _check_auth_wiring(low, "cuj-auditor persona", errs)
     _check_asset_wiring(low, "cuj-auditor persona", errs)
+    _check_criteria_item_wiring(low, "cuj-auditor persona", errs)
     return errs
 
 
@@ -843,6 +866,7 @@ def check_audit_cuj_skill() -> list[str]:
              "audit-cuj: must state explicit exit criteria", errs)
     _check_auth_wiring(low, "audit-cuj skill", errs)
     _check_asset_wiring(low, "audit-cuj skill", errs)
+    _check_criteria_item_wiring(low, "audit-cuj skill", errs)
     return errs
 
 

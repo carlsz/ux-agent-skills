@@ -380,6 +380,9 @@ work as your violation, and do not quietly dismiss a real one as "probably their
 - Every step has a verdict backed by evidence; unobserved steps are listed as not observed.
 - `success_criteria` were scored separately, and every absence criterion has a baseline.
 - Every finding names its journey and step, and its justification names both priority stages.
+- Every journey whose `success_criteria` were evaluated carries its own
+  `CUJ-<id> success criteria` item, and a criteria failure is scored there rather than
+  against a step that passed (§4.1).
 - Each step's `health` item scores the P-number of the worst finding against that step
   (`4` for a verbatim match), `of: 4` — not a binary pass/fail, which marked a step that
   diverged by one word of copy the same `0` as a step that never ran.

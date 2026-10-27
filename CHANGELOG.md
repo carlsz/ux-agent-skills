@@ -8,6 +8,34 @@ All notable changes to this project are documented here. The format is based on
 
 
 ### Fixed
+- **A `cuj` `success_criteria` failure now has a `health` item to land on.** The silent
+  data-loss `P1` is the failure class this auditor exists for — every step matched, and then
+  the data did not persist — and while `health` items were journey *steps* only, that report
+  was **unwritable**. `success_criteria` are explicitly not steps (they are evaluated once,
+  after the journey completes), so the findings floor demanded an item scoring `1` while no
+  step had failed. All three ways out were falsehoods: invent an item that is not a step,
+  re-attribute the failure to a step that passed, or soften the `P1` until the arithmetic
+  works.
+
+  **The suite had shipped the second one.** `tests/fixtures/valid/cuj-20260716-120000.md`
+  scored `CUJ-001 step 2` a `1` for a finding whose own Framework Violation field reads
+  `success-criteria` and whose text says *"Steps 1 and 2 both passed"*. The fixture was
+  valid, which is exactly what the misattribution bought it.
+
+  A journey whose criteria were evaluated now carries one further item — `CUJ-001 success
+  criteria` — scored like any other from the worst finding against it, `4` when every
+  criterion held. It costs a clean run nothing, and because `pct` is a priority index the
+  extra row cannot move the headline. The floor itself is unchanged: it was right, and the
+  rubric was defined too narrowly to satisfy it honestly. The validator's floor message now
+  names the criteria item for `cuj`, since that message is what an auditor reads at the dead
+  end where the falsehoods look like the only options.
+
+  Tests pin the **attribution**, not just validity: the fixture's step items must all be `4`
+  and the `P1` must sit on the criteria item, and stripping the criteria item must be
+  rejected *with* the hint. `_check_criteria_item_wiring()` is hand-wired into both cuj
+  components, because dropping the instruction from either one restores the dead end with
+  every other check green.
+
 - **The contract's own examples had stopped obeying the contract, in six places.** Two
   semantic changes landed without their examples following them: `pct` became a priority
   index while both `health` examples kept printing a `score / max` number, and assets became

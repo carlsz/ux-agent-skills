@@ -111,6 +111,16 @@ step matched, `3` for a `P3`, `2` for a `P2`, `1` for a `P1`, `0` for a `P0` (§
 verbatim step scores `4`, so a clean run reports **100% · Excellent** rather than a blank
 page.
 
+**Then one more item per journey whose `success_criteria` you evaluated**, named for the
+journey — `CUJ-001 success criteria` — scored the same way from the worst criteria finding,
+`4` when every criterion held. **A criteria failure lands on that item and never on a
+step.** This is not bookkeeping: the silent-data-loss `P1` below is a criteria failure on a
+journey whose every step passed, so without this item your worst finding has no row to
+deduct from, and the only ways to make the scorecard validate are to re-attribute the
+failure to a step that passed or to soften the `P1`. Both are lies about the evidence. If
+you did not evaluate a journey's criteria, it gets no criteria item — and you may not claim
+`success-criteria` in `frameworks` either.
+
 **This is the rule that replaced binary step scoring, and here is why.** `of: 1` made a
 step that matched its count, its plant stage and its progress bar but rendered one word of
 its hint differently score `0` — the same mark as a step that never ran at all — so a run
