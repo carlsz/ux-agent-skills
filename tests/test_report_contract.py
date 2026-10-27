@@ -95,7 +95,38 @@ def main() -> int:
     # whose image is an external URL (or any non-`./assets/` path) is rejected — the light
     # check that keeps the walk-through inside the auditor's write boundary.
     failures += _expect_invalid(FIXTURES / "invalid" / "walkthrough-bad-path.md",
-                                "walkthrough image path")
+                                "image path must be relative")
+
+    # --- assets belong to the run that captured them (§1) ---------------------------------
+    # Assets live in `./assets/<report-stem>/`, a directory DERIVED from the report's own
+    # filename — which is the only reason this is checkable at all. The probe changes nothing
+    # but the name of the file: identical bytes validate under the name whose stem matches
+    # their embeds and are rejected under any other. Flat `assets/` names (the earlier
+    # layout) carried no run identity, so a re-run's `cuj-001-step-1.png` overwrote the image
+    # a kept report embedded — every path still resolved, so an existence check saw nothing
+    # wrong, and the HTML companion then base64-welded the newer screenshot into the older
+    # report. Only the filename can tell those apart.
+    _cuj = FIXTURES / "valid" / "cuj-20260716-120000.md"
+    _body = _cuj.read_text(encoding="utf-8")
+    with tempfile.TemporaryDirectory() as _d:
+        _same = Path(_d) / _cuj.name
+        _same.write_text(_body, encoding="utf-8")
+        failures += _expect_valid(_same)
+        # One run earlier, same bytes. Every embed now points into a sibling run's directory.
+        _other = Path(_d) / "cuj-20260716-110000.md"
+        _other.write_text(_body, encoding="utf-8")
+        failures += _expect_invalid(_other, "run's own asset directory")
+    # The rule covers the WHOLE body, not just `## Walkthrough` — a finding's `Evidence:`
+    # embed is evidence in the strictest sense. The usability fixture cites two of its
+    # screenshots inside findings, so a walkthrough-only check would have let those through.
+    _use = FIXTURES / "valid" / "usability-20260715-143000.md"
+    _mangled = _use.read_text(encoding="utf-8").replace(
+        "live capture ![place order idle](./assets/usability-20260715-143000/",
+        "live capture ![place order idle](./assets/usability-20260101-000000/", 1)
+    with tempfile.TemporaryDirectory() as _d:
+        _p = Path(_d) / _use.name
+        _p.write_text(_mangled, encoding="utf-8")
+        failures += _expect_invalid(_p, "run's own asset directory")
 
     # --- the suite roll-up (§9) ----------------------------------------------------------
     # A roll-up is a SIBLING document type, not an auditor report: no `auditor`, no `mode`,
@@ -153,7 +184,8 @@ def main() -> int:
     # how an accessibility run carrying two P0s read 79% while a usability run carrying
     # none read 50% — the lenses enumerate different numbers of things. Same findings must
     # now mean the same percentage however large the rubric.
-    _src = (FIXTURES / "valid" / "usability-20260715-143000.md").read_text(encoding="utf-8")
+    _fix = FIXTURES / "valid" / "usability-20260715-143000.md"
+    _src = _fix.read_text(encoding="utf-8")
     _grown = _src.replace(
         '    - item: "Help and documentation"',
         "".join(f'    - item: "Padding heuristic {i}"\n      score: 4\n' for i in range(12))
@@ -161,7 +193,8 @@ def main() -> int:
     if _grown == _src:
         failures.append("rubric-size probe: could not grow the fixture's rubric")
     with tempfile.TemporaryDirectory() as _d:
-        _p = Path(_d) / "grown-rubric.md"
+        # Keeps the fixture's own filename: its asset paths are run-scoped to that stem.
+        _p = Path(_d) / _fix.name
         # score/max move with the rubric (they are the rubric view); pct must not.
         _p.write_text(_grown.replace("  score: 31\n", "  score: 79\n")
                              .replace("  max: 36\n", "  max: 84\n"), encoding="utf-8")
@@ -192,7 +225,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (23 checks)")
+    print("PASS — report contract (26 checks)")
     return 0
 
 

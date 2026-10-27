@@ -36,9 +36,11 @@ plugin repo:
 └── .ux/
     └── audits/
         ├── index.md                       # rolling index of every run (all auditors)
-        ├── assets/                         # captured screenshots / evidence images
         ├── usability-20260715-143000.md    # one file per run
-        └── usability-20260715-160000.md
+        ├── usability-20260715-160000.md
+        └── assets/                         # captured screenshots / evidence images
+            ├── usability-20260715-143000/  # one directory per run (§1, below)
+            └── usability-20260715-160000/
 ```
 
 - Create `.ux/`, `.ux/audits/`, and `.ux/audits/assets/` if absent.
@@ -50,13 +52,23 @@ plugin repo:
 
 ### Asset naming (screenshots)
 
-Screenshots captured in **live/hybrid** mode are saved under `.ux/audits/assets/` with
-**stable, deterministic names** — one canonical name per thing captured, so a re-run
-**overwrites** rather than accumulates. This bounds the directory by what a run captures
-(journeys × steps, or the key states of a flow), not by the number of runs. Reports are
-append-only, but their images are prune-to-latest: an older report references the same
-stable path and therefore renders with the most recent run's capture of that thing — the
-report *text* is the record of truth; the image is a best-effort current view.
+Screenshots captured in **live/hybrid** mode go in a **per-run directory** named after the
+report that cites them — the report's filename without its `.md`:
+
+```
+.ux/audits/
+├── cuj-20260716-120000.md
+└── assets/
+    └── cuj-20260716-120000/      # this run's captures, and only this run's
+        ├── cuj-001-step-1.png
+        └── cuj-001-step-2.png
+```
+
+**The directory name is derived, not chosen**, which is what makes it checkable: the
+validator computes the expected directory from the name of the file it is validating, so a
+report that cites another run's captures is rejected on write rather than discovered later.
+Within the directory, names only have to be unique *to that run* — nothing from another run
+shares the directory, so no naming convention has to be agreed across runs or auditors:
 
 | Auditor | What | Name |
 |---------|------|------|
@@ -64,9 +76,27 @@ report *text* is the record of truth; the image is a best-effort current view.
 | cuj | criteria / other evidence | `cuj-<id>-<slug>.png` (e.g. `cuj-001-after-reload.png`) |
 | usability (and other flow auditors) | a key state | `<auditor>-<scope-slug>-<state>.png` (state ∈ `initial`, `mid-flow`, `success`, `error`, `empty`) |
 
-Reference every image from the body with an **inline embed** — `![alt](./assets/<name>.png)`
-— never a bare path, so it renders in Markdown viewers. Paths are always relative and under
-`./assets/`.
+Reference every image from the body with an **inline embed** —
+`![alt](./assets/<report-stem>/<name>.png)` — never a bare path, so it renders in Markdown
+viewers. Paths are always relative and under `./assets/`.
+
+**Why per-run, when a flat directory is smaller.** Earlier revisions of this contract put
+every capture in `assets/` directly under one stable name per thing captured, so a re-run
+**overwrote** rather than accumulated. That bounded the directory by what a single run
+captures rather than by the number of runs — but it bought that bound by mutating the
+evidence under reports nobody had deleted. Reports are append-only; their images were
+prune-to-latest, and the two cannot both be true of one document. A `cuj-001-step-2.png`
+written this morning replaced the image last week's report embeds — silently, and
+undetectably, because the path still resolves and an image still renders. The HTML companion
+makes it permanent: it base64-embeds whatever is on disk at render time, so re-rendering an
+older report welds a later run's screenshots into it. Per-run directories spend the disk the
+overwrite was saving, and buy back the only thing a finding cannot do without — that its
+evidence is its own.
+
+So **retention is a whole-run operation**: dropping an old run means deleting its report and
+its asset directory together. That is a pruning policy the host can apply, by hand or by
+script, without touching a report it keeps — which is precisely what the flat layout made
+impossible.
 
 ## 2. File naming
 

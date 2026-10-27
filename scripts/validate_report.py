@@ -140,7 +140,6 @@ FINDING_RE = re.compile(r"^###\s+\[P([0-3])\]", re.MULTILINE)
 # report fails with "this is the old scale" rather than a baffling count mismatch.
 LEGACY_TAG_RE = re.compile(r"^###\s+\[(sev\d|P[4-9]|P\d\d+)\]", re.MULTILINE | re.IGNORECASE)
 # The optional `## Walkthrough` section (§5) and the markdown images inside it.
-WALKTHROUGH_RE = re.compile(r"^##\s+Walkthrough\s*$", re.MULTILINE | re.IGNORECASE)
 IMAGE_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 # The five labelled fields every finding block must contain.
 FINDING_FIELDS = ["Issue Description", "Framework Violation", "Priority",
@@ -422,28 +421,38 @@ def _check_coverage(body: str) -> list[str]:
     return errors
 
 
-def _check_walkthrough(body: str) -> list[str]:
-    """Light validation of the optional `## Walkthrough` section (§5).
+def _check_assets(body: str, stem: str) -> list[str]:
+    """Validate every embedded image path against the asset layout (§1).
 
-    The section is optional (live/hybrid only) — its absence is never an error. When
-    present, every embedded image path must be relative and under `./assets/`, so the
-    walk-through stays inside the auditor's write boundary and renders from the report's
-    own directory. This checks the reference shape, not that the file exists on disk.
+    Two rules, and the second is the reason this takes `stem`. Every path must be
+    relative and under `./assets/`, so an embed stays inside the auditor's write
+    boundary and renders from the report's own directory. And it must be under
+    `./assets/<stem>/` — the run's **own** directory, derived from this file's name —
+    so a report embeds the captures of the run that wrote it and no other.
+
+    The second rule is checkable only because the directory name is derived rather
+    than chosen: the alternative is a flat `assets/` where each run overwrites the
+    last, which keeps every path resolving while silently replacing the evidence under
+    reports nobody deleted. An existence check cannot catch that — the file is always
+    there. Comparing the path to the filename can.
+
+    This checks the whole body, not just `## Walkthrough`: a finding's `Evidence:`
+    embed is evidence in the strictest sense and has exactly the same problem.
+    It checks the reference shape, not that the file exists on disk.
     """
-    m = WALKTHROUGH_RE.search(body)
-    if m is None:
-        return []
-    # Section runs from its heading to the next `## ` heading (or end of body).
-    start = m.end()
-    nxt = re.search(r"^##\s", body[start:], re.MULTILINE)
-    section = body[start:start + nxt.start()] if nxt else body[start:]
-
+    prefix = f"assets/{stem}/"
     errors: list[str] = []
-    for path in (p.strip() for p in IMAGE_RE.findall(section)):
-        under_assets = path.startswith("./assets/") or path.startswith("assets/")
-        if not under_assets or ".." in path:
+    for raw in IMAGE_RE.findall(body):
+        path = raw.strip()
+        rel = path[2:] if path.startswith("./") else path
+        if not rel.startswith("assets/") or ".." in path:
             errors.append(
-                f"walkthrough image path must be relative and under './assets/': {path!r}")
+                f"image path must be relative and under './assets/': {path!r}")
+        elif not rel.startswith(prefix):
+            errors.append(
+                f"image path must be under this run's own asset directory "
+                f"'./assets/{stem}/': {path!r}. A report embeds the captures of the "
+                f"run that wrote it, never another run's (§1)")
     return errors
 
 
@@ -658,7 +667,7 @@ def validate(path: str | Path) -> list[str]:
     errors += _check_health(fm)
     errors += _check_finding_fields(body)
     errors += _check_coverage(body)
-    errors += _check_walkthrough(body)
+    errors += _check_assets(body, path.stem)
     return errors
 
 

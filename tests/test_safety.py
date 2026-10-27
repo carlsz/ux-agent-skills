@@ -255,6 +255,25 @@ def main() -> int:
         if not any("usability-20260824-090000.md" in x for x in w):
             failures.append(f"writes must be observable when the prefix is NOT ignored: {w}")
 
+        # 14. Screenshots live two directories deep now — `.ux/audits/assets/<report-stem>/`
+        #     (report contract §1) — so the positive half has to see a nested write, not
+        #     just files sitting directly under the prefix. Both commands behind
+        #     `writes_under()` are git pathspecs and recurse, so this holds for free; it is
+        #     asserted because the layout change made nested the NORMAL case, and a
+        #     "writes were observed" that silently stopped covering the images would
+        #     certify a run whose entire walk-through went missing.
+        shot = repo / ".ux" / "audits" / "assets" / "usability-20260824-090000"
+        shot.mkdir(parents=True, exist_ok=True)
+        (shot / "usability-sprout-initial.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+        w = writes_under(repo, ".ux/audits/")
+        if not any("usability-sprout-initial.png" in x for x in w):
+            failures.append(f"a nested asset write must be observed: {w}")
+        # (Scoped to asset paths: case 13 rewrote `.gitignore`, which is a real change
+        #  outside the prefix and nothing to do with this one.)
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT)
+        if any("assets" in x for x in v):
+            failures.append(f"a run's own asset directory is confined, not an escape: {v}")
+
     # ---------------------------------------------------------------------------------
     # The positive half must be reachable from the COMMAND LINE. Every skill's self-check
     # step runs `python3 scripts/audit_safety.py <host-repo>`; a `writes_under()` that only

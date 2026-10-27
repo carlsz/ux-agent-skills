@@ -70,11 +70,13 @@ default (see step 1); `--mode` forces one.
    starting or restarting a dev server and before navigating the browser to any URL — do
    not launch a server or navigate unprompted.
    - **Navigate** to the target URL and walk the in-scope flow step by step.
-   - **Screenshot** each key state (initial, mid-flow, success, error, empty) and save the
-     images under `.ux/audits/assets/` with the stable name
-     `usability-<scope-slug>-<state>.png` (per the report contract's asset-naming rule, so a
-     re-run overwrites rather than accumulates). Embed them inline (`![alt](./assets/…)`) —
-     in findings for evidence, and assembled into the `## Walkthrough` section (step 6).
+   - **Screenshot** each key state (initial, mid-flow, success, error, empty) and save each
+     as `usability-<scope-slug>-<state>.png` inside **this run's own** asset directory,
+     `.ux/audits/assets/<report-stem>/` — the report filename you will write in step 6
+     without its `.md`, so the images and the report that cites them share one lifecycle and
+     no later run can overwrite them (report contract §1). Embed them inline
+     (`![alt](./assets/<report-stem>/…)`) — in findings for evidence, and assembled into the
+     `## Walkthrough` section (step 6).
    - **Exercise** real interactions — submit forms, trigger errors, click destructive
      actions — and observe the actual response and timing.
    - **Read the accessibility / DOM tree** to confirm labels, roles, and focus order.
@@ -113,8 +115,9 @@ default (see step 1); `--mode` forces one.
      behavior as fact. If something couldn't be checked, record it as skipped with the
      reason — a false pass is worse than an honest gap.
 
-6. **Write the report.** Create `.ux/`, `.ux/audits/`, and `.ux/audits/assets/` in the
-   host repo if absent. Write `.ux/audits/usability-<YYYYMMDD>-<HHMMSS>.md` (UTC clock)
+6. **Write the report.** Create `.ux/`, `.ux/audits/`, and this run's
+   `.ux/audits/assets/<report-stem>/` in the host repo if absent. Write
+   `.ux/audits/usability-<YYYYMMDD>-<HHMMSS>.md` (UTC clock)
    with the frontmatter schema, executive summary, prioritized fixes, findings, and an
    appendix. The appendix records the `mode` used, the frameworks applied, and — honestly
    — everything in scope you did **not** inspect. In **live/hybrid** mode, add a
@@ -192,9 +195,10 @@ default (see step 1); `--mode` forces one.
   so the headline means the same thing whatever size rubric the lens happens to have.
 - Runtime-perception findings are `verified` (live) or `potential — unverified` (static),
   matching the mode actually used.
-- Live-mode screenshots are saved under `.ux/audits/assets/` with their stable names,
+- Live-mode screenshots are saved under this run's own `.ux/audits/assets/<report-stem>/`,
   embedded inline in findings, and assembled into a `## Walkthrough` section (omitted in
-  static mode).
+  static mode). `validate_report.py` derives that directory from the report's filename, so an
+  embed pointing at another run's captures fails the report.
 - The appendix names all in-scope areas that were not inspected.
 - `audit_safety.py` exits 0 on **both** halves: nothing changed outside `.ux/audits/`,
   **and** the writes this run made inside it were observed and listed. (`git status` alone is

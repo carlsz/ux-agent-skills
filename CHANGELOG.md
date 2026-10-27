@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format is based on
 
 
 ### Changed
+- **Screenshots move into one directory per run — `.ux/audits/assets/<report-stem>/`.** The
+  layout was flat `assets/` with one canonical name per thing captured, so a re-run
+  *overwrote* rather than accumulated. That bounded the directory by captures instead of
+  runs, and it quietly made a report's evidence mutable after the fact: `cuj-001-step-1.png`
+  carried no run identity, so this morning's run replaced the image last week's report
+  embeds. Nothing looked wrong — the path still resolved, an image still rendered, and
+  `render_report_html.py` base64-embeds whatever is on disk, so the next render welded the
+  newer screenshot permanently into the older report. A run's reports and its captures now
+  share one lifecycle, and pruning is a whole-run delete rather than a silent edit to
+  reports the host kept.
+
+  **The directory name is derived from the report's filename, which is the only reason any
+  of this is checkable.** An existence check cannot see the failure, because the file is
+  always there; comparing the path against the name of the file being validated can.
+  `validate_report.py` now does exactly that, over the **whole body** rather than just
+  `## Walkthrough` — a finding's `Evidence:` embed is evidence in the strictest sense, and
+  the usability fixture cites two of its screenshots that way. The renderer is unchanged and
+  stays read-tolerant of flat paths, so the suite's back-catalogue still renders; writing
+  one is now a violation.
 - **Severity `sev4`–`sev1` is now priority `P0`–`P3`, everywhere — report contract
   `schema: 3`.** The old scale said how bad a finding was; the new one says **what to do
   about it**: `P0` Blocking (fix immediately), `P1` Major (fix before release), `P2` Minor

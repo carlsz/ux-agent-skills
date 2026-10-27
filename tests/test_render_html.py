@@ -218,7 +218,10 @@ def main() -> int:
         failures.append("absent asset should render a placeholder, not crash")
 
     # A real asset inlines as a data: URI; a no-walkthrough report shows an evidence gallery
-    # harvested from the bare `(./assets/…)` Evidence path.
+    # harvested from the bare `(./assets/…)` Evidence path. The path here is FLAT — the
+    # layout before assets became per-run — and it still renders, on purpose: the renderer
+    # is read-tolerant where the validator is write-strict, and the suite's back-catalogue
+    # of reports was all written against the flat layout.
     with tempfile.TemporaryDirectory() as d:
         base = Path(d)
         (base / "assets").mkdir()
@@ -226,10 +229,25 @@ def main() -> int:
         (base / "acc.md").write_text(_ACC_REPORT, encoding="utf-8")
         html = render(base / "acc.md")
         if "data:image/png;base64," not in html:
-            failures.append("real asset was not inlined as a data: URI")
+            failures.append("legacy flat asset path was not inlined as a data: URI")
         if "Evidence gallery" not in html:
             failures.append("no-walkthrough report should surface an evidence gallery")
         failures += [f"temp report: {e}" for e in _self_contained(html)]
+    # ...and the layout reports are written in NOW: `./assets/<report-stem>/`. Nothing in
+    # the renderer special-cases either shape — it resolves relative to the report's own
+    # directory — but a path regex that stopped at the first `/` would silently drop every
+    # current report's evidence while the legacy case above stayed green.
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d)
+        (base / "assets" / "acc").mkdir(parents=True)
+        (base / "assets" / "acc" / "shot.png").write_bytes(_PNG)
+        (base / "acc.md").write_text(
+            _ACC_REPORT.replace("(./assets/shot.png)", "(./assets/acc/shot.png)"),
+            encoding="utf-8")
+        html = render(base / "acc.md")
+        if "data:image/png;base64," not in html:
+            failures.append("run-scoped asset path was not inlined as a data: URI")
+        failures += [f"run-scoped report: {e}" for e in _self_contained(html)]
 
     # --- the suite roll-up dashboard (contract §9) ----------------------------------------
     # This whole block exists because the dashboard never rendered once. `render()` looked

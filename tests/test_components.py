@@ -106,6 +106,36 @@ def _check_auth_wiring(low: str, who: str, errs: list[str]) -> None:
                  f"{who}: auth Never list must cover {what}", errs)
 
 
+def _check_asset_wiring(low: str, who: str, errs: list[str]) -> None:
+    """A component that captures screenshots must send them to the RUN's own directory.
+
+    Called from the same four places as `_check_auth_wiring` — both auditors and both
+    auditing skills — and for the same reason. The layout it enforces replaced a flat
+    `assets/` where every run wrote one canonical name per thing captured, so a re-run
+    overwrote the images an older report embeds. Nothing about that failure is visible:
+    the path still resolves, an image still renders, and `validate_report.py` can only
+    catch it by comparing the path against the citing report's filename — which it can
+    only do if the component wrote the path that way in the first place.
+
+    So a component that drops `<report-stem>` from its instructions reverts the whole fix
+    while every other check stays green, and the validator has nothing to compare. Hence
+    both halves here: the run-scoped path must be present, and the superseded vocabulary
+    must be gone, because "a stable name, so a re-run overwrites" reads like guidance and
+    is now precisely the bug.
+    """
+    low = _flatten(low)
+    _require("assets/<report-stem>" in low,
+             f"{who}: captures must go in this run's own assets/<report-stem>/ directory, "
+             f"not a shared assets/", errs)
+    for banned, what in [
+        ("prune-to-latest", "the superseded prune-to-latest asset layout"),
+        ("overwrites rather than accumulates", "a re-run overwriting its own evidence"),
+        ("overwrite rather than accumulate", "a re-run overwriting its own evidence"),
+        ("stable name", "flat 'stable name' asset naming"),
+    ]:
+        _require(banned not in low, f"{who}: must not still describe {what}", errs)
+
+
 def check_persona() -> list[str]:
     errs: list[str] = []
     path = ROOT / "agents" / "usability-auditor.md"
@@ -151,6 +181,7 @@ def check_persona() -> list[str]:
              "persona: frameworks must be applied, not deferred (stale Phase-1 wording)",
              errs)
     _check_auth_wiring(low, "persona", errs)
+    _check_asset_wiring(low, "persona", errs)
     return errs
 
 
@@ -212,6 +243,7 @@ def check_skill() -> list[str]:
     _require("arrive in a later phase" not in low and "later phase" not in low,
              "skill: frameworks must be applied now, not deferred to a later phase", errs)
     _check_auth_wiring(low, "skill", errs)
+    _check_asset_wiring(low, "skill", errs)
     return errs
 
 
@@ -608,6 +640,7 @@ def check_cuj_auditor_persona() -> list[str]:
              "cuj-auditor: must state that it never repairs the journey it is grading",
              errs)
     _check_auth_wiring(low, "cuj-auditor persona", errs)
+    _check_asset_wiring(low, "cuj-auditor persona", errs)
     return errs
 
 
@@ -809,6 +842,7 @@ def check_audit_cuj_skill() -> list[str]:
     _require("exit" in low or "done when" in low or "acceptance" in low,
              "audit-cuj: must state explicit exit criteria", errs)
     _check_auth_wiring(low, "audit-cuj skill", errs)
+    _check_asset_wiring(low, "audit-cuj skill", errs)
     return errs
 
 
@@ -1040,7 +1074,14 @@ def check_auth_handoff_reference() -> list[str]:
 
 
 def check_references() -> list[str]:
-    """The skill-local framework lenses must exist and carry their defining terms."""
+    """The skill-local references must exist and carry their defining terms.
+
+    Mostly the framework lenses. `report-contract.md` is here for a different reason: it
+    OWNS the asset layout that `_check_asset_wiring` makes four components point at, and
+    under the one-owner rule they cite it instead of restating it. If the contract's own
+    §1 drifts back to a flat `assets/`, every one of those links lands on prose that
+    contradicts both the components and the validator.
+    """
     errs: list[str] = []
     refs = ROOT / "skills" / "usability-audit" / "references"
     expected = {
@@ -1048,6 +1089,8 @@ def check_references() -> list[str]:
                               "reversal", "locus of control", "memory load"],
         "ai-design-heuristics.md": ["expectation", "explain", "correct"],
         "npcis.md": ["navigation", "presentation", "content", "interaction", "strategy"],
+        "report-contract.md": ["per-run directory", "assets/<report-stem>/",
+                               "derived, not chosen"],
     }
     for fname, terms in expected.items():
         path = refs / fname

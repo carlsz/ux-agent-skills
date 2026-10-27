@@ -374,9 +374,10 @@ and safety invariants:
   regressions/fixes? (Deferred; `index.md` enables this later.)
 - **Suite orchestration** — a future `/ux-agent-skills:audit` meta-command that fans out
   usability + a11y + perf auditors and merges results. (Out of scope here; contract enables it.)
-- **Screenshot assets** — *resolved (§10, schema 2)*: `.ux/audits/assets/` is the standard
-  location; images use stable names so re-runs overwrite (prune-to-latest), and are embedded
-  inline as a `## Walkthrough` visual sequence.
+- **Screenshot assets** — *resolved (§10, schema 2; naming revised in §10.3)*:
+  `.ux/audits/assets/<report-stem>/` is the standard location — one directory per run, named
+  after the citing report — and images are embedded inline as a `## Walkthrough` visual
+  sequence.
 - **VCS treatment** — leave `.ux/` committed vs. ignored to the host team; auditor only
   recommends. (Committing keeps the walk-through images rendering on GitHub; stable naming
   bounds the binary footprint.)
@@ -791,12 +792,12 @@ in §3.4 / the contract §6). Placed after `## Findings` and before `## Appendix
 - **usability shape** — one `### <state>` per captured key state (Initial / Mid-flow /
   Success / Error / Empty).
 
-## 10.3 Asset naming — stable, prune-to-latest
+## 10.3 Asset naming — one directory per run
 
-Screenshots live under `.ux/audits/assets/` (already permitted by the `audit_safety.py`
-allowlist — no change) with **stable, deterministic names**, so a re-run overwrites rather
-than accumulates: the directory is bounded by (journeys × steps) or a flow's key states, not
-by run count.
+Screenshots live under `.ux/audits/assets/<report-stem>/` (inside the path the
+`audit_safety.py` allowlist already permits — no change), where `<report-stem>` is the
+citing report's filename without its `.md`. Names only have to be unique within that
+directory:
 
 | Auditor | What | Name |
 |---------|------|------|
@@ -804,17 +805,31 @@ by run count.
 | cuj | criteria / other evidence | `cuj-<id>-<slug>.png` |
 | usability | a key state | `usability-<scope-slug>-<state>.png` |
 
-Reports are append-only but their images are prune-to-latest: an older report references the
-same stable path and so renders with the most recent capture. The report *text* is the record
-of truth; the image is a best-effort current view. Every reference is an inline embed
-(`![alt](./assets/…)`), always relative and under `./assets/`.
+Every reference is an inline embed (`![alt](./assets/<report-stem>/…)`), always relative and
+under `./assets/`.
+
+**This supersedes the prune-to-latest layout this section originally specified**, in which
+every capture sat flat in `assets/` under one stable name per thing captured and a re-run
+overwrote rather than accumulated. That bounded the directory by (journeys × steps) instead
+of by run count, and it was wrong for one reason: it made reports append-only and their
+evidence prune-to-latest, which cannot both be true of one document. This morning's
+`cuj-001-step-2.png` replaced the image last week's report embeds — undetectably, because
+the path still resolved and an image still rendered, so neither an existence check nor the
+validator had anything to object to. §10.6's HTML companion then made it permanent, since it
+base64-embeds whatever is on disk at render time. Per-run directories spend the disk the
+overwrite was saving to buy back the one property evidence cannot do without: being the
+evidence of the run that cites it. Retention becomes a whole-run operation — delete a report
+and its directory together — which is the pruning the flat layout made impossible without
+mutating reports the host was keeping.
 
 ## 10.4 Enforcement — instruct + light validation
 
 The skills mandate the capture and assembly; `validate_report.py` adds only light checks
-(`schema == 3`, and — *if* a `## Walkthrough` section exists — every image path is relative
-and under `./assets/`). It does **not** require the section to exist, nor that a file is on
-disk: a missing PNG never fails a run. This matches the suite's "no silent gaps" ethic without
+(`schema == 3`, and every image path in the body relative and under this report's own
+`./assets/<report-stem>/`). It does **not** require a `## Walkthrough` section to exist, nor
+that a file is on disk: a missing PNG never fails a run. The run-scoping half is checkable
+precisely because the directory name is *derived* from the filename rather than chosen — the
+validator compares the two, which is the only signal available when every path resolves. This matches the suite's "no silent gaps" ethic without
 being brittle against the fixtures, which carry no real images.
 
 ## 10.5 Acceptance criteria (Definition of Done)
@@ -823,13 +838,14 @@ being brittle against the fixtures, which carry no real images.
       `## Walkthrough` section and asset-naming rule documented; `validate_report.py` requires
       `schema == 3`, validates the `health` scorecard against its items, and light-checks
       walkthrough image paths.
-- [ ] `audit-cuj` captures every replayed step in live/hybrid mode with the stable name and
-      assembles a `## Walkthrough`; static runs emit none.
+- [ ] `audit-cuj` captures every replayed step in live/hybrid mode into the run's own asset
+      directory and assembles a `## Walkthrough`; static runs emit none.
 - [ ] `usability-audit` names its key-state captures by the convention, embeds them inline,
       and assembles a `## Walkthrough` in live/hybrid mode.
 - [ ] Both personas describe inline-embed + walk-through assembly.
 - [ ] Fixtures validate at `schema: 3`; at least one cuj and one usability fixture carry a
-      `## Walkthrough`; a walkthrough with a non-`./assets/` image path is rejected.
+      `## Walkthrough`; a non-`./assets/` image path is rejected, and so is one pointing at
+      another run's directory (the same bytes under a different filename).
 - [ ] `audit_safety.py` is unchanged and still confines writes to `.ux/audits/`.
 - [ ] README / AGENTS / CHANGELOG updated; `plugin.json` at 0.4.0.
 

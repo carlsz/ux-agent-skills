@@ -124,12 +124,22 @@ Two capabilities were layered onto the report contract without changing the find
 shape. Know both before you touch reporting.
 
 - **The `## Walkthrough` section (report contract schema 2).** Live/hybrid auditors capture
-  screenshots — per journey step (cuj), per key state (usability) — into `.ux/audits/assets/`
-  with **stable names** (`cuj-<id>-step-<n>.png`, `usability-<scope>-<state>.png`), so a re-run
-  overwrites rather than accumulates (prune-to-latest). They're embedded inline and assembled
-  into an optional `## Walkthrough` section (after `## Findings`, before `## Appendix`, **live/
-  hybrid only**). `validate_report.py` requires `schema == 2` and light-checks that walkthrough
-  image paths are relative and under `./assets/`. Full spec: [SPEC.md](SPEC.md) §10.1–10.5.
+  screenshots — per journey step (cuj), per key state (usability) — into
+  `.ux/audits/assets/<report-stem>/`: **one directory per run**, named after the report that
+  cites it. They're embedded inline and assembled into an optional `## Walkthrough` section
+  (after `## Findings`, before `## Appendix`, **live/hybrid only**). `validate_report.py`
+  requires `schema == 3` and checks that **every** image path in the body is relative and
+  under *this* report's asset directory. Full spec: [SPEC.md](SPEC.md) §10.1–10.5.
+
+  **The run-scoping is the whole point, and it reads like an accident.** The layout used to
+  be flat `assets/` with one stable name per thing captured, so a re-run overwrote rather
+  than accumulated — bounding the directory by captures instead of runs. It also made a
+  report's evidence mutable after the fact: `cuj-001-step-2.png` carried no run identity, so
+  a later run silently replaced the image an earlier report embeds, and the HTML companion
+  base64-welded the newer screenshot in on the next render. Nothing looked wrong, because
+  the path still resolved — which is why the check compares the path against the **report's
+  filename** rather than looking for a missing file. Keep the directory name derived; choose
+  it, and the invariant stops being checkable.
 
 - **The HTML companion (`scripts/render_report_html.py`).** A **deterministic, derived** view:
   it renders any report `.md` into a self-contained `.html` beside it (a brief, findings as

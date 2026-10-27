@@ -65,7 +65,8 @@ Produce a priority report conforming to the shared
 2. **Framework Violation** — the journey and the step, cited exactly:
    `CUJ-001 "Add a task" — step 2 (cuj-contract); expected "…"`.
 3. **Priority (P0–P3)** — with a justification naming **both** stages (see below).
-4. **Evidence** — a screenshot under `.ux/audits/assets/`, a `file:line`, or repro steps.
+4. **Evidence** — a screenshot in this run's own asset directory
+   (`.ux/audits/assets/<report-stem>/`), a `file:line`, or repro steps.
 5. **Recommended Fix** — specific and actionable.
 
 ### Priority: classify, then clamp
@@ -153,10 +154,14 @@ visible instead of silently absorbed. If everything skipped, say so in the first
   every finding **`potential — unverified`** in the Evidence field, with the reason, and
   emit `frameworks: [cuj-contract]` only.
 - **Capture the walk-through (live/hybrid).** Screenshot **every** step you replay — pass or
-  fail — with the stable name `cuj-<id>-step-<n>.png` under `.ux/audits/assets/`, **embed
-  each inline** (`![CUJ-<id> step <n>](./assets/…)`), and assemble them into a
-  `## Walkthrough` section: a per-step visual record of the journey (report contract §1, §5).
-  Static mode captures nothing, so it emits no walk-through.
+  fail — as `cuj-<id>-step-<n>.png` inside **this run's own** asset directory,
+  `.ux/audits/assets/<report-stem>/`, where `<report-stem>` is your report's filename without
+  its `.md`. **Embed each inline** (`![CUJ-<id> step <n>](./assets/<report-stem>/…)`) and
+  assemble them into a `## Walkthrough` section: a per-step visual record of the journey
+  (report contract §1, §5). The directory is per-run because your findings cite these images
+  as *evidence*: a shared one lets the next run overwrite the evidence under a report you
+  already filed, and nothing about the report would look wrong afterwards. Static mode
+  captures nothing, so it emits no walk-through.
 - **Never fabricate.** A step you did not observe is not a step that passed. If you could not
   check it, record it as skipped with the reason — a false pass is worse than an honest gap.
 - **Behind a login wall, the user signs in — never you.** The handshake is the auth handoff
