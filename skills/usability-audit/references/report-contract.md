@@ -1,9 +1,10 @@
 # Shared `.ux/audits` Report Contract
 
 The single output contract for the **ux-agent-skills auditor suite**. Every auditor —
-usability (this suite's first), and future accessibility, web-performance, and others —
-writes reports that conform to this contract, so their outputs are comparable, tracked in
-one index, and consumable by a future fan-out meta-command.
+usability (this suite's first), accessibility and `cuj` — the other default members of the
+`/ux-audit` bundle — web-performance (opt-in), and others, writes reports that conform to
+this contract, so their outputs are comparable, tracked in one index, and consumed by the
+`/ux-audit` fan-out.
 
 Only two things differ between auditors: the `auditor` frontmatter value and the
 `frameworks` list. Everything else here is fixed.
@@ -130,14 +131,20 @@ summary:                     # counts MUST reconcile (see §5)
   p3: 0                      # polish
 health:                      # the scorecard — see §4.1
   rubric: nielsen-10
-  score: 30
-  max: 36
-  pct: 83
-  band: Good
+  score: 31                  # the rubric view: sum of the non-null item scores
+  max: 36                    # their `of` values (9 × 4); the n/a item is in neither
+  pct: 73                    # NOT score/max (86) — the priority index over `summary` (§4.1)
+  band: Good                 # follows `pct`
   items:
     - item: "Visibility of system status"
-      score: 4
-      note: "aria-live task count; immediate feedback on every action"
+      score: 1               # DERIVED: the `p1: 1` finding above cites this heuristic,
+                             # so the lowest item score is 1 — the floor rule (§4.1)
+      note: "no feedback while the order submits"
+    - item: "Help users recognize, diagnose, and recover from errors"
+      score: 2               # DERIVED: the `p2: 1` finding cites this one
+      note: "promo-code error says only 'invalid'"
+    # … the other seven heuristics score 4 and are omitted here for length. `score` and
+    # `max` above count all ten, so this ABRIDGED list will not reconcile if copied as-is.
     - item: "Help and documentation"
       score: null
       note: "n/a — single-screen app, no help surface"
@@ -227,16 +234,17 @@ which makes a good result legible and a trend possible.
 ```yaml
 health:
   rubric: nielsen-10        # which framework the items come from; must appear in `frameworks`
-  score: 30                 # sum of item scores
-  max: 36                   # sum of item `of` values; n/a items excluded from BOTH
-  pct: 83                   # round(100 * score / max)
-  band: Good                # see the band table below
+  score: 31                 # sum of the non-null item scores
+  max: 36                   # sum of their `of` values; n/a items excluded from BOTH
+  pct: 73                   # the PRIORITY INDEX over `summary` — NOT score / max, which
+                            # here would read 86. See "pct is a priority index" below.
+  band: Good                # follows `pct`; see the band table below
   items:
     - item: "Visibility of system status"
-      score: 4              # DERIVED: the P-number of the worst finding citing this item,
+      score: 1              # DERIVED: the P-number of the worst finding citing this item,
                             # 4 when none cites it. null = not applicable
       of: 4                 # optional; always 4 — see "one 0-4 scale" below
-      note: "aria-live task count; immediate feedback on every action"
+      note: "no feedback while the order submits"
 ```
 
 | `pct` | Band |
@@ -326,9 +334,11 @@ a `P0` one.
   fails the run on a mismatch, exactly as it does the roll-up verdict.
 - An item marked n/a (`score: null`) carries no findings; a finding citing it is a
   contradiction the run must resolve before writing.
-- `score` = sum of non-null item scores; `max` = sum of `of` for non-null items; `pct` =
-  `round(100 * score / max)`; `band` follows the table. **All four are validated against
-  `items`** — a hand-written headline that disagrees with its own rows is rejected.
+- `score` = sum of non-null item scores and `max` = sum of `of` for non-null items, both
+  validated against `items`. **`pct` is not computed from them** — it is the priority index
+  over `summary` (see above), validated against `summary`, and `band` follows `pct` in the
+  table. A hand-written headline that disagrees with either source is rejected. Dividing
+  `score` by `max` gives a different number, and on a narrow rubric a different *band*.
 - `score: null` means *not applicable*: excluded from both `score` and `max`, so marking an
   item n/a never silently penalises the result.
 - **An item scoring at or below half its `of`, or marked n/a, MUST carry a `note`.** An
@@ -430,11 +440,11 @@ Two shapes, by auditor:
   ## Walkthrough
 
   ### Step 1 — Click the new-task input
-  ![CUJ-001 step 1](./assets/cuj-001-step-1.png)
+  ![CUJ-001 step 1](./assets/<report-stem>/cuj-001-step-1.png)
   > Expected: input takes focus, placeholder "What needs doing?". Observed: match.
 
   ### Step 2 — Type 'Buy milk', press Enter
-  ![CUJ-001 step 2](./assets/cuj-001-step-2.png)
+  ![CUJ-001 step 2](./assets/<report-stem>/cuj-001-step-2.png)
   > Expected: row appears at top, input clears. Observed: match.
   ```
 
@@ -445,12 +455,14 @@ Two shapes, by auditor:
   ## Walkthrough
 
   ### Initial
-  ![checkout initial](./assets/usability-checkout-initial.png)
+  ![checkout initial](./assets/<report-stem>/usability-checkout-initial.png)
   ```
 
-Every image path in this section must be relative and under `./assets/` — the validator
-rejects `http(s)://`, absolute, or `../`-escaping paths. It does **not** require the section
-to exist, nor that the file is present on disk.
+Every image path in this section must be relative and under this report's **own** asset
+directory, `./assets/<report-stem>/` (§1) — substitute your report's filename without its
+`.md`. The validator rejects `http(s)://`, absolute and `../`-escaping paths, and also a
+flat `./assets/<name>.png` that belongs to no run. It does **not** require the section to
+exist, nor that the file is present on disk.
 
 ### Count reconciliation
 The number of `[PN]` findings in the body must exactly equal `summary.total`, and the

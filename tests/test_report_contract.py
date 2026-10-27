@@ -15,7 +15,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from validate_report import validate, validate_index  # noqa: E402
+from validate_report import (PRIORITY_KEYS, priority_index, validate,  # noqa: E402
+                             validate_index)
 
 FIXTURES = ROOT / "tests" / "fixtures"
 
@@ -50,6 +51,108 @@ def _expect_invalid_index(path: Path, needle: str) -> list[str]:
     if not any(needle in e for e in errors):
         return [f"{path.name}: expected an index error mentioning {needle!r}, got {errors}"]
     return []
+
+
+
+CONTRACT = ROOT / "skills" / "usability-audit" / "references" / "report-contract.md"
+
+
+def _fenced_blocks(text: str) -> list[str]:
+    """Every ```-fenced block body in `text`, outermost fences only."""
+    blocks, cur = [], None
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            if cur is None:
+                cur = []
+            else:
+                blocks.append("\n".join(cur))
+                cur = None
+            continue
+        if cur is not None:
+            cur.append(line)
+    return blocks
+
+
+def _check_contract_examples() -> list[str]:
+    """The contract's OWN examples must obey the contract.
+
+    This exists because five of them stopped obeying it and nothing noticed. Two semantic
+    changes landed without their examples following: `pct` became a priority index while
+    the §4.1 example kept printing a `score / max` number, and assets became run-scoped
+    while the §5 walkthrough examples kept their flat paths. Both produced a document that
+    reads as authoritative and teaches a report the validator rejects — and an auditor
+    copying an example is the single most likely thing an auditor does.
+
+    The contract itself records why this matters, in the `version` field's note: an auditor
+    once copied the literal `0.1.0` from an example and "did exactly what it was told; the
+    instruction was the bug". That lesson was written down and then not applied to the
+    examples around it.
+
+    Three probes, each one a defect a real run hit:
+
+    1. Every image embed is run-scoped. A flat `./assets/<name>.png` is what §1 forbids.
+    2. The prescriptive `score / max` formula for `pct` appears nowhere. Prose that
+       *negates* it ("why not `score / max`") is the point and stays legal; it is the
+       formula written as an instruction that sent a run to a rejected report — and, on a
+       narrow rubric, to a different band.
+    3. The §4.1 health example's `pct` equals the priority index over the §3 `summary`
+       example. Scoped to the AUDITOR health block (the one with a `rubric:`), because the
+       §9 roll-up's `pct` is a mean of its members and obeys a different rule.
+
+    Probe 3 assumes one `summary:` example and one `rubric:`-bearing `health:` example. Add
+    a second and this needs to pair them deliberately rather than by document order.
+    """
+    import re
+
+    if not CONTRACT.exists():
+        return [f"missing the contract: {CONTRACT}"]
+    text = CONTRACT.read_text(encoding="utf-8")
+    errors: list[str] = []
+
+    # 1. Run-scoped embeds.
+    for path in (m.group(1).strip() for m in re.finditer(r"!\[[^\]]*\]\(([^)]+)\)", text)):
+        rel = path[2:] if path.startswith("./") else path
+        if not rel.startswith("assets/"):
+            errors.append(f"contract example embeds a non-./assets/ path: {path!r}")
+        elif rel.count("/") < 2:
+            errors.append(
+                f"contract example embeds a FLAT asset path: {path!r} — §1 requires "
+                f"./assets/<report-stem>/<name>, and the validator rejects this")
+
+    # 2. No prescriptive score/max formula for pct.
+    if "round(100 * score / max)" in text:
+        errors.append(
+            "contract still prescribes `round(100 * score / max)` for `pct`; §4.1 makes it "
+            "the priority index over `summary`, and the validator enforces that")
+
+    # 3. The example numbers agree with the rule.
+    blocks = _fenced_blocks(text)
+    summaries = [b for b in blocks if re.search(r"^\s*summary:", b, re.MULTILINE)]
+    healths = [b for b in blocks
+               if re.search(r"^\s*rubric:", b, re.MULTILINE)
+               and re.search(r"^\s*pct:", b, re.MULTILINE)]
+    if not summaries:
+        errors.append("contract has no `summary:` example to check `pct` against")
+    elif not healths:
+        errors.append("contract has no auditor `health:` example (one with a `rubric:`)")
+    else:
+        counts = {}
+        for key in PRIORITY_KEYS:
+            m = re.search(rf"^\s*{key}:\s*(\d+)", summaries[0], re.MULTILINE)
+            counts[key] = int(m.group(1)) if m else 0
+        shown = int(re.search(r"^\s*pct:\s*(\d+)", healths[0], re.MULTILINE).group(1))
+        want = priority_index(counts)
+        if shown != want:
+            errors.append(
+                f"contract's health example prints pct: {shown}, but the priority index "
+                f"over its own summary example ({counts}) is {want} — copying the example "
+                f"produces a report the validator rejects")
+
+    # The bundle's default members are not "future".
+    if "future accessibility" in text:
+        errors.append("contract still calls accessibility 'future'; it is a default member "
+                      "of the /ux-audit bundle")
+    return errors
 
 
 def main() -> int:
@@ -216,6 +319,9 @@ def main() -> int:
     failures += _expect_invalid(FIXTURES / "invalid" / "health-false-unscored.md",
                                 "Unscored")
 
+    # --- the contract's own examples (they are the most-copied text in the repo) ---
+    failures += _check_contract_examples()
+
     # index.md: a conforming index passes; a malformed one is rejected.
     failures += _expect_valid_index(FIXTURES / "valid" / "index.md")
     failures += _expect_invalid_index(FIXTURES / "invalid" / "index-badcols.md", "column")
@@ -225,7 +331,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (26 checks)")
+    print("PASS — report contract (29 checks)")
     return 0
 
 

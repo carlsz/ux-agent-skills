@@ -7,6 +7,36 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 
+### Fixed
+- **The contract's own examples had stopped obeying the contract, in six places.** Two
+  semantic changes landed without their examples following them: `pct` became a priority
+  index while both `health` examples kept printing a `score / max` number, and assets became
+  run-scoped while the §5 walkthrough examples kept their flat `./assets/<name>.png` paths.
+  A Sprout shakedown caught all of it — three independent auditors hit the `pct`
+  contradiction, and one proved the walkthrough example is rejected by building a report from
+  it verbatim.
+
+  The damage was not cosmetic. The stale formula sat in §4.1's normative **Rules** list,
+  which is where an auditor looks for the arithmetic, and on the cuj run it yields 86% `Good`
+  where the priority index yields 97% `Excellent` — a different *band*, not just a different
+  number. The §3 frontmatter template also declared a `p1` finding with no item scoring `1`,
+  violating the findings floor it is supposed to illustrate. Both `health` examples now carry
+  the same worked numbers as the valid usability fixture (31/36, `pct: 73`), mark their
+  abridged `items` list as abridged, and name the `score / max` number they are *not*.
+  Line 4 no longer calls accessibility and `cuj` "future" — both are default members of the
+  `/ux-audit` bundle.
+
+- **`test_report_contract.py` now checks the contract's examples against the contract.**
+  Nothing did, which is the only reason six of them drifted silently. Three probes, each a
+  defect a real run hit: every image embed is run-scoped; the prescriptive
+  `round(100 * score / max)` appears nowhere (prose that *negates* it stays legal, and is the
+  point); and the `health` example's `pct` equals the priority index over the `summary`
+  example — scoped to the auditor block, since a roll-up's `pct` is a mean of its members and
+  obeys a different rule. The third probe found the sixth defect on its first run, in the
+  frontmatter template no auditor had reported. The contract already knew this risk: its
+  `version` note records an auditor copying a literal `0.1.0` from an example and says *"the
+  instruction was the bug"*. That lesson now has a test behind it.
+
 ### Changed
 - **Screenshots move into one directory per run — `.ux/audits/assets/<report-stem>/`.** The
   layout was flat `assets/` with one canonical name per thing captured, so a re-run
