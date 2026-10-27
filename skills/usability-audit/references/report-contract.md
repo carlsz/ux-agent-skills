@@ -161,9 +161,21 @@ re-run land in the same place:
 
 1. **If a user would contact support about it, it is at least P1.**
 2. **If the user cannot complete the task at all — no workaround, no way around it — it is
-   P0.** Difficulty is P1; impossibility is P0.
+   P0.** Difficulty is P1; impossibility is P0. **This rule is a ceiling as well as a
+   floor: `P0` requires impossibility, so no raise from rule 3 may reach `P0` for a defect
+   the user can work around.** Without that clause rule 3 escalates a merely difficult
+   defect on a declared journey to "Blocking — fix immediately", contradicting this rule
+   while "the higher priority wins" resolves in favour of the absurd reading. The way out
+   is not to lower the base grade until the raise lands somewhere defensible — that is
+   reverse-engineering the input to fix the output, exactly the drift these tie-breakers
+   exist to stop.
 3. **If it affects a journey in `.ux/cujs/`, raise it one level** (to a maximum of P0). A
-   defect on a path the host has declared critical is not a minor defect.
+   defect on a path the host has declared critical is not a minor defect. **This rule is
+   for the auditors that are not `cuj`.** The `cuj` auditor's findings are *all* about a
+   journey in `.ux/cujs/` by construction, so applying it there fires on every finding —
+   nothing could ever be graded `P3` — and it double-counts the weighting that auditor
+   already applies through its `criticality` clamp. It exists to pull *other* lenses'
+   findings onto declared-critical paths, not to re-weigh the journey auditor's own.
 4. **If it is only visible to the auditor** — found by reading source, never surfaced to a
    user — it is at most P2, and the Evidence field says so.
 
@@ -247,7 +259,23 @@ After the frontmatter, in order:
    ### [PN] <short title>           # N ∈ 0..3
    ```
 
-   Each finding block MUST contain these five labelled fields:
+   Each finding block MUST contain these five labelled fields, each written as a markdown
+   **list item** — `- **Field:** value`, the literal shape of the list below, with any
+   continuation lines indented two spaces under their bullet:
+
+   ```markdown
+   - **Issue Description:** what is broken, in enough detail to act on without
+     re-auditing.
+   ```
+
+   > **Write the bullet.** This list is both the roster of fields and the markup for them,
+   > and that double duty has already cost a real defect: given this section, a `cuj` run
+   > bulleted its fields while `usability` and `accessibility` runs wrote bare `**Field:**`
+   > paragraphs. Bare bold still *validates* — §7's check is a substring test — so the
+   > divergence was invisible until the HTML companion rendered those findings as cards
+   > with completely empty bodies. `render_report_html.py` now reads both forms, because
+   > reports are append-only history; emit the bulleted one.
+
    - **Issue Description:** what is broken or confusing.
    - **Framework Violation:** the exact heuristic / rule / dimension (e.g. "Nielsen #1 —
      Visibility of System Status").

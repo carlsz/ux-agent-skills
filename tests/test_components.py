@@ -9,7 +9,9 @@ Run: `python3 tests/test_components.py` (exit 0 = pass, 1 = fail).
 """
 from __future__ import annotations
 
+import importlib.util
 import re
+import textwrap
 from pathlib import Path
 
 import yaml
@@ -318,6 +320,85 @@ def check_rollup_skill() -> list[str]:
     # Safety boundary restated.
     _require("never" in low and "outside" in low,
              "rollup skill: must forbid writing outside .ux/audits", errs)
+    errs.extend(_check_rollup_template(body))
+    return errs
+
+
+# A grading instruction that names its level as a BARE NUMBER, e.g. "it grades 3, not 2".
+# Under the superseded 0-4 scale that read correctly; under P0-P3 the numbers mean the
+# opposite, so such a sentence silently teaches the inverted grade.
+_BARE_GRADE_RE = re.compile(
+    r"(?:grades?|grade it|scores?|rates?)\s+\**([0-4])\**\s*(?:,\s*not\s+\**([0-4])\**)?",
+    re.IGNORECASE,
+)
+
+
+def _no_bare_number_grades(path: Path) -> list[str]:
+    """No component may state a finding's grade as a bare 0-4 number.
+
+    This is the third defect of its exact kind on this contract, and the one that proves
+    the greps are not enough: a sweep for `sev[0-4]` or for the literal scale `0-4` misses
+    "it grades **3, not 2**" completely, because the sentence names no scale at all. It
+    survived the schema-3 migration in `audit-cuj` step 6 and was found only when a real
+    run read the step and asked which scale it meant — where, under P0-P3, "3" is the
+    *least* severe grade and "2" is worse than it, exactly backwards.
+
+    Bare numbers are banned outright rather than translated case by case, because the
+    failure is that the reader cannot tell which scale is meant. Write the tag.
+    """
+    errs: list[str] = []
+    for m in _BARE_GRADE_RE.finditer(path.read_text(encoding="utf-8")):
+        errs.append(
+            f"{path.name}: grading instruction {m.group(0).strip()!r} names a bare 0-4 "
+            "number; schema 3 grades are P0-P3 tags, where the numbers run the other way")
+    return errs
+
+
+def _check_rollup_template(body: str) -> list[str]:
+    """The skill's copy-this-exactly roll-up YAML must satisfy the validator it feeds.
+
+    This block is not illustration — step 6 says "copy the key names exactly", so it is
+    the literal source of every roll-up an agent writes. That makes drift between it and
+    `validate_report.py` a defect that produces a *valid-looking* roll-up the suite's own
+    validator then rejects, which is exactly how `schema: 2` survived the schema-3
+    migration here: the contract and the validator were updated, the template was not,
+    and nothing compared the two.
+
+    So compare them directly, against the validator's own constants rather than a literal
+    copied here — a second copy would be one more thing to forget.
+    """
+    errs: list[str] = []
+    spec = importlib.util.spec_from_file_location(
+        "_validate_report", ROOT / "scripts" / "validate_report.py")
+    if spec is None or spec.loader is None:        # pragma: no cover - layout changed
+        return ["rollup skill: cannot import scripts/validate_report.py to compare"]
+    validator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(validator)
+
+    block = next((m.group(1) for m in re.finditer(r"```yaml\n(.*?)```", body, re.DOTALL)
+                  if "kind: rollup" in m.group(1)), None)
+    if block is None:
+        return ["rollup skill: needs a ```yaml``` roll-up template containing 'kind: rollup'"]
+    # The block is indented inside a numbered step, and its `<placeholders>` are not YAML.
+    flat = textwrap.dedent(block).replace("---\n", "")
+    tmpl = yaml.safe_load(re.sub(r":\s*<[^>]*>", ": placeholder", flat))
+    if not isinstance(tmpl, dict):
+        return ["rollup skill: the roll-up template does not parse as a YAML mapping"]
+
+    _require(tmpl.get("schema") == validator.SCHEMA,
+             f"rollup skill: template says schema: {tmpl.get('schema')!r}, but "
+             f"validate_report.py requires {validator.SCHEMA} — an agent copying this "
+             "writes a roll-up its own validator rejects", errs)
+    for key in validator.ROLLUP_REQUIRED_KEYS:
+        _require(key in tmpl,
+                 f"rollup skill: template omits '{key}', which the validator requires",
+                 errs)
+    counts = tmpl.get("summary")
+    if isinstance(counts, dict):
+        for key in validator.PRIORITY_KEYS:
+            _require(key in counts,
+                     f"rollup skill: template's summary omits '{key}'; schema "
+                     f"{validator.SCHEMA} counts are {validator.PRIORITY_KEYS}", errs)
     return errs
 
 
@@ -696,6 +777,7 @@ def check_audit_cuj_skill() -> list[str]:
         _require(tag in low, f"audit-cuj: must classify against {tag.upper()}", errs)
     _require("verbatim" in low,
              "audit-cuj: must grade against the verbatim expect, never a paraphrase", errs)
+    errs.extend(_no_bare_number_grades(path))
     _require("one report per run" in low,
              "audit-cuj: one report per run keeps index.md rows 1:1 with runs", errs)
     _require("success_criteria" in low,

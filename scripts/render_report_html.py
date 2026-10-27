@@ -59,12 +59,21 @@ IMAGE_MIME = {
 # because reports are append-only history, and it must stay in BOTH alternations — a name
 # missing from the lookahead does not merely go unrendered, it gets swallowed into the
 # preceding field's value, which is how `Priority` silently vanished from every card.
+#
+# The leading `- ` is OPTIONAL, and that is not politeness. Contract §5 introduces the five
+# fields as a markdown bullet list, which reads equally as "these are the fields" and as
+# "this is the markup", so auditors split on it: of three real reports written against §5,
+# the cuj one bulleted its fields and the usability and accessibility ones wrote bare bold
+# paragraphs. The validator checks field presence with a substring test, so a bare-bold
+# report is *contract-valid* — and with a mandatory `- ` here it rendered as a finding card
+# with a completely empty body: no prose, no apparatus rail, no evidence, no fix. Silent
+# total loss on a valid document. Read both forms; §5 now states the canonical one.
+_FIELD_NAMES = (r"Issue Description|Framework Violation|Priority|Severity|Evidence|"
+                r"Recommended Fix")
 FINDING_FIELD_RE = re.compile(
-    r"-\s+\*\*(Issue Description|Framework Violation|Priority|Severity|Evidence|"
-    r"Recommended Fix):\*\*"
-    r"\s*(.*?)(?=\n-\s+\*\*(?:Issue Description|Framework Violation|Priority|Severity|"
-    r"Evidence|Recommended Fix):\*\*|\Z)",
-    re.DOTALL,
+    rf"^[ \t]*(?:[-*+][ \t]+)?\*\*({_FIELD_NAMES}):\*\*"
+    rf"\s*(.*?)(?=\n[ \t]*(?:[-*+][ \t]+)?\*\*(?:{_FIELD_NAMES}):\*\*|\Z)",
+    re.DOTALL | re.MULTILINE,
 )
 
 

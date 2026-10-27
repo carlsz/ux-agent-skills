@@ -140,7 +140,7 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
    ```yaml
    ---
    kind: rollup                 # exactly this — not `report:`, not `rollup: true`
-   schema: 2
+   schema: 3
    version: <from .claude-plugin/plugin.json>
    date: <ISO-8601 UTC>
    target: <same target the auditors ran against>

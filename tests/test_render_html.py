@@ -338,6 +338,30 @@ def main() -> int:
     if "<li>" in unscored and "cannot quietly leave the report" not in unscored:
         failures.append("a list item's continuation line was dropped or stranded")
 
+    # --- fields written WITHOUT the markdown bullet ------------------------------------
+    # Contract §5 lists the five fields as a bullet list, which reads both as "these are
+    # the fields" and as "this is the markup" — and real auditors split on it: given the
+    # same §5, a cuj run bulleted its fields while usability and accessibility runs wrote
+    # bare bold paragraphs. The validator tests field presence by substring, so bare-bold
+    # is contract-VALID; while the renderer required the bullet, such a report produced
+    # finding cards with entirely empty bodies — no prose, no rail, no evidence, no fix.
+    # Total silent loss on a valid document, so assert the tolerant form directly.
+    bare = _ACC_REPORT.replace("\n- **", "\n**")
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "barebold.md"
+        path.write_text(bare, encoding="utf-8")
+        html = render(path)
+    if html.count('<article class="finding p') != 1:
+        failures.append("bare-bold fields: the finding card itself went missing")
+    if '<div class="prose"></div>' in html:
+        failures.append("bare-bold fields: finding body rendered EMPTY (fields dropped)")
+    for dt in ("<dt>Framework</dt>", "<dt>Source</dt>", "<dt>Why this grade</dt>"):
+        if dt not in html:
+            failures.append(f"bare-bold fields: apparatus rail lost {dt}")
+    for text in ("WCAG 2.2", "P2 Minor", "fix it"):
+        if text not in html:
+            failures.append(f"bare-bold fields: dropped field content {text!r}")
+
     # The index landing repoints run links from .md to .html and stays self-contained.
     with tempfile.TemporaryDirectory() as d:
         base = Path(d)

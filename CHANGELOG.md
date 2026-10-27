@@ -154,6 +154,45 @@ All notable changes to this project are documented here. The format is based on
   above a table totalling five — because the generic severity bar reads `summary.total`, a
   key the roll-up did not carry. Dispatch now goes through a shared
   `is_rollup()` in [`validate_report.py`](scripts/validate_report.py).
+
+The five below were found by running the suite against a real app — three auditors reading
+only these instructions, with no knowledge of what the migration intended. Every one of them
+produced valid-looking output, and the test suite was green over all five.
+
+- **A contract-valid report could render as findings with entirely empty bodies.** §5
+  introduces the five labelled fields as a markdown bullet list, which reads both as "these
+  are the fields" and as "this is the markup" — and real auditors split on it: given the same
+  §5, the `cuj` run bulleted its fields while the `usability` and `accessibility` runs wrote
+  bare `**Field:**` paragraphs. §7's field check is a substring test, so bare bold *validates*;
+  the HTML companion's field pattern required the bullet, so every field of such a finding was
+  dropped — no prose, no apparatus rail, no evidence, no recommended fix — under a correct
+  title and priority chip. Fifteen of this run's sixteen findings were affected. The renderer
+  reads both forms now (reports are append-only history), and §5 states the canonical one.
+- **The roll-up skill told agents to write a roll-up its own validator rejects.** Step 6 says
+  to copy its YAML template "exactly", and that template still read `schema: 2` after the
+  migration took the validator and the contract to `3`. The validator's required version is
+  now a named `SCHEMA` constant, and `test_components.py` parses the template out of the skill
+  and compares it against that constant and `ROLLUP_REQUIRED_KEYS`, so the two cannot drift.
+- **A third instruction file still graded on the 0–4 numbers — and no grep could have found
+  it.** `audit-cuj/SKILL.md` step 6 said a `success_criteria` failure "grades **3, not 2**".
+  The sentence names no scale, so it survived both the `sev[0-4]` sweep and the `0–4` sweep
+  that caught its siblings, while under `P0`–`P3` it reads exactly backwards — `P3` is the
+  least severe grade. Bare-number grades are now banned outright rather than translated case
+  by case, because the defect is that the reader cannot tell which scale is meant.
+- **§4's tie-breakers contradicted each other, and all three auditors hit it.** Rule 3 raises
+  anything touching a journey in `.ux/cujs/` by one level, and "the higher priority wins"
+  resolved the clash in favour of the absurd reading: the accessibility run graded two AA
+  contrast failures `P0` — "Prevents the task entirely" — for text that is merely hard to
+  read, and the usability run admitted lowering its *base* grade until the raise landed
+  somewhere defensible, which is the drift these rules exist to stop. Rule 2 is now a ceiling
+  as well as a floor (`P0` requires impossibility), and rule 3 is scoped to the auditors that
+  are not `cuj` — whose findings are *all* about a journey by construction, so the rule fired
+  on every one of them and double-counted the weighting the `criticality` clamp already
+  applies.
+- **`validate_report.py .ux/audits/*.md` reported a valid index as `INVALID`.** That glob is
+  how the skills tell an agent to validate a run, and it necessarily sweeps up `index.md` —
+  a table with no frontmatter by design (§7) — which then failed as a malformed report. The
+  CLI dispatches on the name now, so the documented command exits 0 on a good run.
 - **A second bug that would have survived fixing the first.** The verdict test was
   `verdict.lower() == "go"`, but every real roll-up wrote the token and its justification as
   one string — `verdict: "GO — all 3 journeys pass"`. That equals neither verdict, so every

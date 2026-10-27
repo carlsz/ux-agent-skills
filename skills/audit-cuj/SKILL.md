@@ -232,7 +232,7 @@ passes.
 Criteria are evaluated **after** the journey completes, once, and they are not the last step's
 `expect`. A journey can pass every step and still fail here: the row appears, the user
 believes they succeeded, and it is gone after a reload. That class is invisible if you skip
-this, and it grades **3, not 2** (step 7).
+this, and it grades **`P1`, not `P2`** (step 7).
 
 **An absence criterion needs a non-empty baseline.** A criterion like *"'Buy milk' is absent
 from the active list after a reload"* is **vacuously true** when 'Buy milk' was never there —

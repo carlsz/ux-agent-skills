@@ -39,6 +39,10 @@ FRAMEWORKS_BY_AUDITOR = {
     "cuj": {"cuj-contract", "task-completion", "success-criteria"},
 }
 # Schema 3: P0-P3 replaces sev4-sev1. The tag says what to DO, not just how bad it is.
+# Named once, because both document types check it and the roll-up skill's copy-this-exactly
+# template is compared against it by tests/test_components.py — a second literal is a third
+# place to forget, which is how that template stayed at 2 through the schema-3 migration.
+SCHEMA = 3
 PRIORITY_KEYS = ["p0", "p1", "p2", "p3"]
 PRIORITY_ACTION = {"p0": "fix immediately", "p1": "fix before release",
                    "p2": "fix in the next pass", "p3": "fix if time allows"}
@@ -125,8 +129,8 @@ def _check_frontmatter(fm: dict) -> list[str]:
         if key not in fm:
             errors.append(f"frontmatter missing required key: {key!r}")
 
-    if fm.get("schema") != 3:
-        errors.append("frontmatter 'schema' must equal 3")
+    if fm.get("schema") != SCHEMA:
+        errors.append(f"frontmatter 'schema' must equal {SCHEMA}")
 
     mode = fm.get("mode")
     if mode not in KNOWN_MODES:
@@ -372,8 +376,8 @@ def _check_rollup_frontmatter(fm: dict) -> list[str]:
             f"rollup must carry 'kind: rollup'"
             + (f" (found the legacy discriminator {legacy[0]!r} instead)" if legacy else ""))
 
-    if fm.get("schema") != 3:
-        errors.append("rollup frontmatter 'schema' must equal 3")
+    if fm.get("schema") != SCHEMA:
+        errors.append(f"rollup frontmatter 'schema' must equal {SCHEMA}")
 
     date = fm.get("date")
     if isinstance(date, datetime):
@@ -640,14 +644,24 @@ def main(argv: list[str]) -> int:
         return 2
     ok = True
     for arg in argv:
-        errors = validate(arg)
+        # `.ux/audits/*.md` is how the skills tell an agent to validate a run, and that
+        # glob necessarily sweeps up `index.md` — which is a table, not a report, and has
+        # no frontmatter by design (§7). Dispatching on the name rather than making the
+        # caller special-case it stops the documented command from reporting a perfectly
+        # valid index as INVALID, which reads as a failed run and costs a debugging cycle.
+        if Path(arg).name == "index.md":
+            errors = validate_index(arg)
+            label, bad = "valid index", "INVALID index"
+        else:
+            errors = validate(arg)
+            label, bad = "valid", "INVALID"
         if errors:
             ok = False
-            print(f"INVALID: {arg}", file=sys.stderr)
+            print(f"{bad}: {arg}", file=sys.stderr)
             for e in errors:
                 print(f"  - {e}", file=sys.stderr)
         else:
-            print(f"valid: {arg}")
+            print(f"{label}: {arg}")
     return 0 if ok else 1
 
 
