@@ -320,6 +320,34 @@ def check_command() -> list[str]:
     return errs
 
 
+
+def _check_conformance_grading(flat: str, who: str, errs: list[str]) -> None:
+    """A conformance level must be evidence, never the priority itself.
+
+    `ux-audit` used to normalize external accessibility findings with a lookup —
+    `Level AA (e.g. 1.4.3 contrast) -> P1` — and that one line made the suite's `GO`
+    unreachable: essentially every real web app fails some AA criterion, every one of
+    those became a `P1`, and §9's gate blocks on any `P1`. Because the lookup also
+    contradicted §4's impact rubric beside it, real runs split the difference instead,
+    grading the same criterion `P1`, `P2` and `P3` across five runs and twice inside one
+    report. The flat mapping must stay gone, and the reason must stay written down, or it
+    reads like a simplification worth restoring.
+    """
+    _require("conformance level is not a priority" in flat,
+             f"{who}: must cite §4's rule that a conformance level is not a priority", errs)
+    _require("evidence" in flat,
+             f"{who}: must say the WCAG level is evidence, not the priority", errs)
+    # The impact axis, in the words that make it checkable: the grade follows the user the
+    # defect affects, not the median user who never meets it.
+    _require("impact" in flat,
+             f"{who}: must grade an accessibility finding by its impact", errs)
+    # The old lookup, in any of the spellings it was written in.
+    for banned in ("level aa (e.g. 1.4.3 contrast) → `p1`",
+                   "level aa (e.g. 1.4.3 contrast) -> `p1`"):
+        _require(banned not in flat,
+                 f"{who}: the flat Level-AA-to-P1 lookup is back", errs)
+
+
 def check_rollup_skill() -> list[str]:
     """The suite roll-up skill fans out to auditors and normalizes into the contract."""
     errs: list[str] = []
@@ -353,6 +381,12 @@ def check_rollup_skill() -> list[str]:
                  f"rollup skill: the go/no-go gate must name {tag.upper()}", errs)
     _require(".ux/audits" in low,
              "rollup skill: must write into .ux/audits", errs)
+    _check_conformance_grading(_flatten(body), "rollup skill", errs)
+    # A failed criterion graded `P2` is still reported. Lowering a priority must never
+    # read as permission to drop the finding — that would turn this fix into a way of
+    # making the gate pass by publishing less.
+    _require("still a finding" in _flatten(body),
+             "rollup skill: a failed criterion must stay a finding at any priority", errs)
     # The auth handoff is a PRE-FLIGHT here, not a lazy trigger, and the ordering is the
     # whole point: every auditor shares one browser session, so a handoff inside the
     # fan-out interrupts the user minutes in and can ask once per auditor. Assert both
@@ -1140,7 +1174,11 @@ def check_references() -> list[str]:
         "ai-design-heuristics.md": ["expectation", "explain", "correct"],
         "npcis.md": ["navigation", "presentation", "content", "interaction", "strategy"],
         "report-contract.md": ["per-run directory", "assets/<report-stem>/",
-                               "derived, not chosen"],
+                               "derived, not chosen",
+                               # §4 owns the scale, so it owns this rule; `ux-audit` cites
+                               # it rather than restating it.
+                               "a conformance level is not a priority",
+                               "evidence, not input"],
     }
     for fname, terms in expected.items():
         path = refs / fname

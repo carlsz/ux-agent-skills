@@ -109,9 +109,16 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
    contract-conforming report at `.ux/audits/<auditor>-<YYYYMMDD>-<HHMMSS>.md` — same
    frontmatter schema, body layout, and appendix. **Map each tool's severity onto the
    `P0`-`P3` scale** (contract §4 — note the direction: `P0` is the worst):
-   - **Accessibility (WCAG):** blocker on a core flow / Level A name-role-value failure →
-     `P0`-`P1`; Level AA (e.g. 1.4.3 contrast) → `P1`; minor/AAA or edge → `P2`; cosmetic →
-     `P3`.
+   - **Accessibility (WCAG):** grade by **impact on the user the defect affects**, per
+     [§4's *A conformance level is not a priority*](../usability-audit/references/report-contract.md#a-conformance-level-is-not-a-priority).
+     The `A`/`AA`/`AAA` level is evidence — put it in the Framework Violation field with
+     the criterion number — never the priority. So: a control a screen-reader user cannot
+     identify or operate is `P0` (impossible *for them*, rule 2), not a level lookup; a
+     defect that makes the task significantly harder for that user is `P1`; a secondary
+     caption a little under the contrast minimum is `P2`; cosmetic is `P3`. **Do not map
+     a level straight onto the scale** — `Level AA → P1` puts every real app past the
+     `P1` gate and makes `GO` unreachable, and every failed criterion is still a finding
+     at whatever priority it earns.
    - **Web performance:** a Core Web Vital in the "poor" band (measured) → `P1`; "needs
      improvement" → `P2`; a structural anti-pattern with only *potential* impact →
      `P2`-`P3`, labeled potential per the metric-honesty rule.

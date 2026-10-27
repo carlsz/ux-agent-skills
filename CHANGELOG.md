@@ -8,6 +8,51 @@ All notable changes to this project are documented here. The format is based on
 
 
 ### Fixed
+- **`GO` was unreachable for any real app, because accessibility was graded on a different
+  axis from everything else.** The roll-up normalized external WCAG findings with a lookup —
+  *"Level AA (e.g. 1.4.3 contrast) → `P1`"* — while §9's gate blocks on any `P1`.
+  Essentially every real web app fails some AA criterion, so the suite's one positive
+  verdict could not be reached by an app that had been looked at closely.
+
+  **The deeper fault is the axis, not the threshold.** §4 grades by *what to do about this
+  defect* — the action column is the whole point of P0–P3 over 0–4. A conformance level
+  grades something else entirely: which rule was broken and how central it is to the
+  standard. Pricing a finding off the letter means the same report cannot be read on one
+  scale.
+
+  **What the runs actually did is the evidence.** Facing a rule that contradicted the rubric
+  beside it, auditors quietly split the difference. Across five real runs the *same*
+  criterion, `1.4.3`, was graded `P1`, `P2` and `P3` — and twice within one report, where
+  `1.4.3` at 3.64:1 came out `P1` while `1.4.11` and `2.4.7`, both also AA, came out `P2`
+  and `P3`. One run's roll-up resolved the squeeze by inventing a verdict the schema does
+  not have: `GO with required fixes`. So the lookup was never actually followed; it was
+  loud enough to cause drift and ignored often enough to hide that `GO` was unreachable.
+
+  §4 gains **"A conformance level is not a priority"**: the level is *evidence*, named in
+  the Framework Violation field where §5 already puts it, and the finding is graded by the
+  rubric like any other. The rule that makes this honest rather than a softening is
+  **grade the impact on the user the defect actually affects** — an unlabeled submit
+  control is not difficult for a screen-reader user, it is *impossible*, so it is `P0` by
+  rule 2 while the sighted mouse user sails past it. Judging that against the median user
+  is how an accessibility blocker gets filed as polish. Symmetrically, a secondary caption
+  at 4.3:1 is a real AA failure a user reads with mild effort: `P2`, and saying so is not
+  softening it. A failed criterion is **always a finding** at whatever priority it earns —
+  lowering a grade is never permission to leave it out, or this fix becomes a way of
+  passing the gate by publishing less.
+
+  **The gate is unchanged, deliberately.** `P1` means *fix before release*; a gate that let
+  `P1` through would make the rubric's action column decorative. §9 now says that a `NO-GO`
+  which feels disproportionate is a grading problem to take back to the members, not a
+  reason to invent a third verdict.
+
+  The tests pin both halves: the same two AA failures derive `GO` priced by impact and
+  `NO-GO` priced by level, so the gate is provably reachable *and* provably still a gate.
+  The accessibility fixture is the worked example and diverges from a level lookup in both
+  directions — its Level AA contrast failure is `P0` because the primary action is
+  unreadable, its Level A name-role-value failure is `P2` because the field is optional.
+  Weakening the gate to `p0` alone is mutation-tested as a failure, because it is the
+  tempting wrong fix.
+
 - **`*Italics*` reached the HTML as literal asterisks.** `_inline` rendered images, code,
   links and `**bold**`, and had no rule for `*emphasis*` at all — so every phrase an auditor
   emphasised arrived with its stars intact. Across the real Sprout run and the four

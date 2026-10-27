@@ -16,8 +16,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from validate_report import (PRIORITY_KEYS, priority_index, validate,  # noqa: E402
-                             validate_index)
+from validate_report import (PRIORITY_KEYS, derive_verdict, priority_index,  # noqa: E402
+                             validate, validate_index)
 
 FIXTURES = ROOT / "tests" / "fixtures"
 
@@ -411,6 +411,57 @@ def main() -> int:
     # --- the contract's own examples (they are the most-copied text in the repo) ---
     failures += _check_contract_examples()
 
+    # --- a conformance level is not a priority (§4) --------------------------------
+    #
+    # `ux-audit` normalized external accessibility findings with a lookup: "Level AA
+    # (e.g. 1.4.3 contrast) -> `P1`". Since essentially every real web app fails some AA
+    # criterion, and §9's gate blocks on any `P1`, that line made `GO` unreachable for
+    # real apps while grading on a different axis from every other auditor.
+    contract = (ROOT / "skills" / "usability-audit" / "references"
+                / "report-contract.md").read_text(encoding="utf-8")
+    flat = re.sub(r"\s+", " ", contract).lower()
+    for probe in ("a conformance level is not a priority",
+                  "evidence, not input",
+                  # The reachability consequence, kept because without it the rule reads
+                  # like style and the lookup looks like a harmless simplification.
+                  "unreachable in practice",
+                  # And the half that stops the fix becoming a way to publish less.
+                  "always a finding"):
+        if probe not in flat:
+            failures.append(f"contract §4: must state {probe!r}")
+    # §9 must send a disproportionate NO-GO back to the grades, not to a third verdict.
+    if "grading problem, not a gate problem" not in flat:
+        failures.append("contract §9: a disproportionate NO-GO must point at the grades")
+
+    # The gate is REACHABLE with real conformance failures present. Two AA failures priced
+    # by impact derive `GO`; the same two priced off their level derive `NO-GO`. This is
+    # the whole defect in four lines.
+    by_impact = {"total": 2, "p0": 0, "p1": 0, "p2": 1, "p3": 1}
+    by_level = {"total": 2, "p0": 0, "p1": 2, "p2": 0, "p3": 0}
+    if derive_verdict(by_impact) != "GO":
+        failures.append("gate: AA failures graded by impact must still be able to reach GO")
+    if derive_verdict(by_level) != "NO-GO":
+        failures.append("gate: a P1 must still block — the gate is not what was wrong")
+
+    # The accessibility fixture is the worked example, and it diverges from a level lookup
+    # in BOTH directions: its Level AA contrast failure is `P0` because the primary action
+    # is unreadable, and its Level A name-role-value failure is `P2` because the field it
+    # affects is optional. Priority tracks impact, not the letter.
+    acc = (FIXTURES / "valid" / "accessibility-20260716-090000.md").read_text(encoding="utf-8")
+    for heading, level, want in (
+        ("### [P0] \"Place order\" button text fails contrast", "Level AA", "P0"),
+        ("### [P2] Promo-code input has no programmatic label", "Level A", "P2"),
+    ):
+        if heading not in acc:
+            failures.append(f"conformance fixture: lost {want} finding {heading!r}")
+            continue
+        block_text = acc.split(heading, 1)[1].split("\n### ", 1)[0]
+        if level not in block_text:
+            failures.append(f"conformance fixture: {want} finding must cite {level}")
+    if "Level A." not in acc or "Level AA." not in acc:
+        failures.append("conformance fixture: must carry both an A and an AA citation, so "
+                        "the two gradings can disagree with a level lookup")
+
     # index.md: a conforming index passes; a malformed one is rejected.
     failures += _expect_valid_index(FIXTURES / "valid" / "index.md")
     failures += _expect_invalid_index(FIXTURES / "invalid" / "index-badcols.md", "column")
@@ -420,7 +471,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (35 checks)")
+    print("PASS — report contract (39 checks)")
     return 0
 
 

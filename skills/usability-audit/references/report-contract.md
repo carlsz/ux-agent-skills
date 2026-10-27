@@ -219,6 +219,46 @@ re-run land in the same place:
 Where two rules disagree, the higher priority wins and the Priority field says which rule
 decided it.
 
+### A conformance level is not a priority
+
+A standard's own severity vocabulary — WCAG's `A` / `AA` / `AAA`, a linter's `error` /
+`warning` — says **which rule was broken and how central it is to the standard**. It does
+not say what to do about this defect in this app, which is the only thing the column above
+records. So a conformance level is **evidence, not input**: name it in the Framework
+Violation field (§5), where it belongs, and grade the finding by the rubric and the
+tie-breakers like any other.
+
+**Grade the impact on the user the defect actually affects.** This is where a conformance
+failure earns a real priority, and the reason the shortcut below looked attractive: an
+unlabeled submit control is not "difficult" for a screen-reader user, it is *impossible*,
+so it is `P0` by rule 2 — while the sighted mouse user sails past it. Judging that finding
+against the median user is how an accessibility blocker gets filed as polish. Equally, a
+secondary caption at 4.3:1 against 4.5:1 is a real AA failure that a user reads with mild
+effort: `P2`, and saying so is not softening it.
+
+> **Why this is spelled out.** This contract's consumer for external tools once mapped the
+> conformance level straight onto the scale — *"Level AA (e.g. 1.4.3 contrast) → `P1`"* —
+> and that single line had three consequences. It graded on a different axis from every
+> other auditor, so the same report could not be read on one scale. It made the suite's
+> `GO` **unreachable in practice**: essentially every real web app has some AA contrast or
+> target-size defect, every one of those became a `P1`, and §9's gate blocks on any `P1`.
+> And because the rule contradicted the rubric it sat beside, auditors quietly split the
+> difference — in five real runs the *same criterion*, `1.4.3`, was graded `P1`, `P2` and
+> `P3`, twice within a single report. One run's roll-up resolved the squeeze by inventing
+> a third verdict, `GO with required fixes`, which §9 does not have.
+>
+> **If the gate says `NO-GO` and that feels wrong, the grades are wrong — not the gate.**
+> `P1` means *fix before release*; a gate that let `P1` through would make the rubric's
+> action column decorative. Re-grade against impact, or state the nuance in
+> `verdict_reason`, which exists for exactly this.
+
+A conformance failure is still **always a finding**, at whatever priority it earns. Grading
+one `P2` is not permission to leave it out — "non-problem" in the rubric above means *not a
+defect*, and a failed criterion is a defect with a citation. A team under a conformance
+obligation reads the accessibility report's own findings and `health` scorecard, where
+every criterion checked is enumerated; the suite's release gate is about user impact and
+does not try to be a compliance attestation.
+
 ### Migrating from schema 2
 
 `sev4 → P0`, `sev3 → P1`, `sev2 → P2`, `sev1 → P3`. Reports already written at `schema: 2`
@@ -623,6 +663,11 @@ health:                      # the suite scorecard
   validator recomputes it from `summary` and rejects a mismatch. Nuance belongs in
   `verdict_reason` — never in a third verdict value. (The gate reads straight off the
   rubric: P0 is *fix immediately* and P1 is *fix before release*, so either one blocks.)
+  **A `NO-GO` that feels disproportionate is a grading problem, not a gate problem** —
+  check the members for a finding priced off a conformance level rather than its impact
+  (§4, *A conformance level is not a priority*), re-grade it there, and re-merge. Do not
+  reach for `GO with required fixes`: a real run wrote exactly that, and a verdict the
+  schema does not have is read by nothing and decides nothing.
 - `summary` holds the **merged** counts across all members and reconciles the same way as
   §3: `total` equals the sum of `p0..p3`.
 - `health.pct` is the mean of the member `health.pct` values, rounded; `band` follows §4.1's
