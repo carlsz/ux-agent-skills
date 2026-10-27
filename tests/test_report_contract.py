@@ -326,6 +326,49 @@ def main() -> int:
         _p = Path(_d) / "cuj-20260716-120000.md"
         _p.write_text(_stripped, encoding="utf-8")
         failures += _expect_invalid(_p, "success criteria` item, not on a step that passed")
+
+    # --- a finding attributed outside the rubric needs an item too (§4.1) ----------------
+    # The same hole, in the auditor that carries four lenses. The usability persona reserves
+    # standalone citations for what Shneiderman, the AI heuristics and NPCIS uniquely
+    # express, and then grades ten NIELSEN heuristics — so a finding attributed to
+    # Shneiderman has no row. It is invisible in the scorecard, and if it is the worst
+    # finding the floor cannot be met at all.
+    #
+    # A real run hit this and resolved it the wrong way: its P1 belonged to Shneiderman #7
+    # locus of control, no Nielsen item could carry the 1, so it re-filed the finding under
+    # Nielsen #1. The schema steered the attribution. This fixture is that run done honestly
+    # — the P1 stays on Shneiderman and brings its own item — and the assertions pin the
+    # ATTRIBUTION, not the validity, because validity is exactly what re-filing bought.
+    _xfix = FIXTURES / "valid" / "usability-20260718-110000.md"
+    _xf = _xfix.read_text(encoding="utf-8")
+    failures += _expect_valid(_xfix)
+    _xitems = re.findall(r'- item: "([^"]+)"\n\s+score: (\d+|null)', _xf)
+    _outside = [(n, v) for n, v in _xitems if "shneiderman" in n.lower()]
+    if not _outside:
+        failures.append(
+            "the cross-framework fixture files a Shneiderman-attributed P1 but carries no "
+            "Shneiderman item for it to land on")
+    elif not any(v == "1" for _, v in _outside):
+        failures.append(f"the P1 must land on the Shneiderman item, got {_outside}")
+    if any(v == "1" for n, v in _xitems if "shneiderman" not in n.lower()):
+        failures.append(
+            "a Shneiderman-attributed P1 must not mark a NIELSEN item down to 1 — that is "
+            "the re-attribution this fixture exists to rule out")
+
+    # The dead end: remove the out-of-rubric item and the report is unwritable again.
+    _target = ('    - item: "Shneiderman #7 - locus of control"\n'
+               '      score: 1\n'
+               '      note: "P1 - the user is the responder to an autosave they cannot '
+               'initiate or stop"\n')
+    _xstripped = (_xf.replace(_target, "")
+                     .replace("  score: 39", "  score: 38")
+                     .replace("  max: 44", "  max: 40"))
+    if _xstripped == _xf:
+        failures.append("cross-framework probe: could not strip the Shneiderman item")
+    with tempfile.TemporaryDirectory() as _d:
+        _p = Path(_d) / _xfix.name
+        _p.write_text(_xstripped, encoding="utf-8")
+        failures += _expect_invalid(_p, "lowest item score must be 1")
     # --- `pct` is rubric-size independent (§4.1) ------------------------------------------
     # The headline is a priority index over `summary`, not `score / max`, and this is the
     # assertion that says why: take a valid report and GROW its rubric with passing items.
@@ -377,7 +420,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (32 checks)")
+    print("PASS — report contract (35 checks)")
     return 0
 
 

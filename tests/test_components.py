@@ -158,6 +158,30 @@ def _check_criteria_item_wiring(low: str, who: str, errs: list[str]) -> None:
              f"step that passed", errs)
 
 
+def _check_out_of_rubric_item_wiring(low: str, who: str, errs: list[str]) -> None:
+    """A usability component must authorize an item for a non-Nielsen attribution.
+
+    The persona reserves standalone citations for what Shneiderman, the AI heuristics and
+    NPCIS uniquely express, and grades ten NIELSEN heuristics. Those two instructions only
+    coexist if a finding attributed outside Nielsen may add its own `health` row —
+    otherwise it is invisible in the scorecard, and when it is the worst finding the floor
+    (§4.1) cannot be satisfied at all.
+
+    A real run resolved that by moving the finding: its `P1` belonged to Shneiderman #7
+    and was re-filed under Nielsen #1 so the report would validate. Drop this instruction
+    and that pressure returns silently, with every other check green — the schema steering
+    the evidence, which is the one thing the derived scorecard exists to prevent.
+    """
+    low = _flatten(low)
+    _require("shneiderman #7" in low or "outside the rubric" in low
+             or "outside nielsen" in low,
+             f"{who}: must authorize a `health` item for a finding attributed outside the "
+             f"Nielsen rubric", errs)
+    _require("re-attribut" in low or "do not move the attribution" in low
+             or "none has to be re-attributed" in low,
+             f"{who}: must forbid re-attributing a finding to satisfy the floor", errs)
+
+
 def check_persona() -> list[str]:
     errs: list[str] = []
     path = ROOT / "agents" / "usability-auditor.md"
@@ -204,6 +228,7 @@ def check_persona() -> list[str]:
              errs)
     _check_auth_wiring(low, "persona", errs)
     _check_asset_wiring(low, "persona", errs)
+    _check_out_of_rubric_item_wiring(low, "persona", errs)
     return errs
 
 
@@ -266,6 +291,7 @@ def check_skill() -> list[str]:
              "skill: frameworks must be applied now, not deferred to a later phase", errs)
     _check_auth_wiring(low, "skill", errs)
     _check_asset_wiring(low, "skill", errs)
+    _check_out_of_rubric_item_wiring(low, "skill", errs)
     return errs
 
 

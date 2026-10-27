@@ -8,6 +8,35 @@ All notable changes to this project are documented here. The format is based on
 
 
 ### Fixed
+- **A usability finding attributed outside Nielsen now has a `health` item to land on.** Same
+  defect as the `cuj` one below, in the auditor that ships four frameworks and a rubric of
+  ten. The persona tells the auditor to reserve standalone citations for what Shneiderman,
+  the AI heuristics and NPCIS uniquely express — and then `rubric: nielsen-10` gave those
+  citations nowhere to be scored. A finding whose primary Framework Violation is
+  `Shneiderman #7` is invisible in the scorecard, and if it is the worst finding in
+  `summary` the floor cannot be satisfied at all.
+
+  **A real run took the dishonest way out.** Its `P1` belonged to Shneiderman's locus of
+  control — an autosave the user can neither initiate nor stop — and was re-filed under
+  Nielsen #1 "visibility of system status", because no Nielsen item could carry the `1` and
+  the report would not otherwise validate. The citation moved to fit the arithmetic.
+
+  §4.1 now says what `rubric` actually is: the **baseline** enumeration, not the limit. A
+  finding whose primary citation falls outside it adds its own item, named with its
+  framework (`Shneiderman #7 — locus of control`, `NPCIS — Strategy`). This needed no schema
+  change — `_check_health` validates `rubric` against `frameworks` and has always left the
+  item names free text — which is the same shape as the `cuj` fix: the floor was right, and
+  the rubric was drawn too narrowly to satisfy it honestly.
+
+  `tests/fixtures/valid/usability-20260718-110000.md` is the case written down: a nielsen-10
+  + shneiderman-8 run whose `P1` sits on `Shneiderman #7 - locus of control` while all ten
+  Nielsen items stay at `4` or above. Tests pin the attribution — the `P1` must land on the
+  Shneiderman row, no Nielsen row may carry a `1`, and stripping the row must be rejected by
+  the floor — and `_check_out_of_rubric_item_wiring()` is hand-wired into both the usability
+  persona and its skill, each of which must also forbid re-attribution outright, because
+  dropping the instruction from either one restores the dead end with every other check
+  green.
+
 - **A `cuj` `success_criteria` failure now has a `health` item to land on.** The silent
   data-loss `P1` is the failure class this auditor exists for — every step matched, and then
   the data did not persist — and while `health` items were journey *steps* only, that report

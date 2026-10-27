@@ -317,9 +317,26 @@ the arithmetic works. The suite shipped the second one — an early fixture scor
 `CUJ-001 step 2` a `1` for a finding whose own Framework Violation field reads
 `success-criteria` and whose text says *"Steps 1 and 2 both passed"*.
 
-A criteria item is `of: 4` like any other and scores `4` when every criterion held, so it
-costs a clean run nothing, and `max` grows by one per journey without moving `pct` — which
-is the whole point of `pct` being a priority index.
+**And for every auditor, the items are not limited to the framework `rubric` names.**
+`rubric` is the *baseline* enumeration — the one lens graded in full, so a clean run shows a
+complete pass and a trend has a stable spine. A finding whose **primary** Framework
+Violation cites a different *applied* framework adds its own item, named with that framework
+(`Shneiderman #7 — locus of control`, `NPCIS — Strategy`).
+
+This is the same defect as the `cuj` one, in the auditor that carries four lenses. The
+usability auditor is told to reserve standalone citations for what a framework uniquely
+expresses — Shneiderman's closure and locus-of-control, NPCIS's navigation-flow and
+Strategy — and then to grade *ten Nielsen heuristics*. So a finding attributed to
+Shneiderman has no row: it is invisible in the scorecard, and if it is the worst finding the
+floor cannot be met at all. A real run hit exactly that, filed its `P1` against
+Shneiderman #7 — locus of control, found no Nielsen item that could carry the `1`, and
+**re-attributed the finding to Nielsen #1 to make the report validate**. The evidence moved
+to fit the schema, which is the one thing this section exists to prevent.
+
+An extra item is `of: 4` like any other and scores `4` when nothing cites it, so neither
+addition costs a clean run anything: `max` grows by one per journey's criteria and by one
+per out-of-rubric attribution actually used, without moving `pct` — which is the whole point
+of `pct` being a priority index.
 
 > **Why this is mechanical and not a matter of taste.** Grading the rubric and filing the
 > findings used to be two independent passes over the same app, so they could disagree —
@@ -334,7 +351,8 @@ is the whole point of `pct` being a priority index.
 **One 0–4 scale, four idioms.** Every item is `of: 4` whatever the auditor: usability one
 per Nielsen heuristic, accessibility one per WCAG criterion checked, `cuj` one per journey
 step verified **plus one per journey whose `success_criteria` were evaluated** (above), web
-performance one per metric measured. The *items* carry each auditor's
+performance one per metric measured — and, for any of them, **plus one per finding
+attributed outside the `rubric` lens** (above). The *items* carry each auditor's
 idiom; the *scale* is shared, which is what makes the percentage comparable. A pass/fail
 rubric like WCAG still grades 0–4 here, because the item records how badly the criterion
 failed, not whether it normatively conforms — and a `P2` contrast defect genuinely is not

@@ -88,7 +88,18 @@ that decided it.
 A findings list is silent about everything that works, so a clean audit has nothing to
 show. Alongside the findings, score **all ten Nielsen heuristics** into the `health` block
 (report contract §4.1) — including the ones that are fine, and `null` for any that
-genuinely do not apply.
+genuinely do not apply. `rubric: nielsen-10` names that baseline.
+
+**Then add an item for every finding you attributed outside Nielsen.** You are told above to
+reserve standalone citations for what Shneiderman, the AI heuristics and NPCIS uniquely
+express — so when a finding's **primary** Framework Violation is one of those, it gets its
+own row, named with its framework: `Shneiderman #7 — locus of control`, `NPCIS — Strategy`.
+Without it that finding is invisible in the scorecard, and if it is your worst finding the
+floor (§4.1) cannot be satisfied at all. **Do not move the attribution to a Nielsen
+heuristic to make the arithmetic work.** A real run did exactly that — its `P1` belonged to
+Shneiderman's locus of control and was re-filed under Nielsen #1 because no Nielsen item
+could carry the `1`. Add the row; the evidence decides the attribution, never the
+scorecard.
 
 **The 0–4 score is derived, not a second opinion.** A heuristic scores the P-number of the
 worst finding whose *Framework Violation* field cites it — `4` when nothing cites it, down
