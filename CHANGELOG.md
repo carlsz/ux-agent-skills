@@ -115,6 +115,29 @@ All notable changes to this project are documented here. The format is based on
   includes the read-tolerant/write-strict asymmetry and the legacy prose verdict.
 
 ### Fixed
+- **The health score was anti-correlated with severity, and the index made it plain.** The
+  scorecard and the findings list were two independent judgments of one app, so they could
+  disagree — and did, in both directions at once. A `cuj` run whose only finding was a `P3`
+  scored four journey steps `0` and published **43% · Poor**, while an accessibility run
+  carrying two `P0`s published **70% · Good**: the auditor that found a single word of
+  divergent copy scored worst, the one that found blocking defects scored best. A reader
+  trusting the dial drew the opposite of the truth. **An item's `score` is now derived —
+  it is the P-number of the worst finding filed against it** (`4` when none is), bridged by
+  the *Framework Violation* field every finding already carries, which names the heuristic,
+  criterion or step the item stands for. One observation, graded once. `validate_report.py`
+  enforces both halves: the lowest item score must equal the worst priority in `summary`, so
+  a report cannot file a `P0` and show a flawless scorecard, nor sink below what it found.
+  On the same three reports the scores become 86% / 50% / 79% — the cosmetic run now reads
+  best rather than worst. **Known limit:** the number is still diluted by rubric size, so a
+  22-criterion accessibility run and a 10-heuristic usability run are not yet comparable to
+  each other; within a report the score is now a strict function of the findings.
+- **One 0–4 scale for every auditor.** `of` was per-item, so a binary rubric could mark a
+  step `0/1` — the worst available mark — for a divergence the same run graded `P3`, the
+  least severe. Every item is `of: 4` now, whatever the idiom: the *items* stay each
+  auditor's own (Nielsen heuristic, WCAG criterion, journey step, metric), the *scale* is
+  shared, which is what the percentage needs to mean anything. A pass/fail rubric still
+  grades 0–4 here, because the item records how badly the criterion failed, not whether it
+  normatively conforms.
 - **A report written before schema 3 rendered as having no findings at all.** Its findings
   are tagged `[sev4]`..`[sev1]` and its counts keyed `sevN:`; the renderer read neither, so
   every report the suite produced before the migration published the words *"No findings"*

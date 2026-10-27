@@ -104,8 +104,18 @@ preference; it is what makes `total: 0` mean something.
 
 ### Score the journeys into `health`
 
-Grade one `health` item per step verified (`score: 1, of: 1` for a pass, `0` with a note for
-a failure), so a clean run reports **4/4 · 100% · Excellent** rather than a blank page. A run
+Grade one `health` item per step verified, `of: 4`, and **do not grade it a second time**:
+the score is the P-number of the worst finding you filed against that step — `4` when the
+step matched, `3` for a `P3`, `2` for a `P2`, `1` for a `P1`, `0` for a `P0` (§4.1). A
+verbatim step scores `4`, so a clean run reports **100% · Excellent** rather than a blank
+page.
+
+**This is the rule that replaced binary step scoring, and here is why.** `of: 1` made a
+step that matched its count, its plant stage and its progress bar but rendered one word of
+its hint differently score `0` — the same mark as a step that never ran at all — so a run
+whose only finding was a `P3` published **43% · Poor**. Your own grade of the divergence
+and your grade of the step have to be the same grade, because they are the same judgment.
+A run
 that verified *nothing* — static, or every journey skipped — has no gradable item: it sets
 `pct: null` and `band: Unscored` rather than a percentage it did not earn. `0%` would read
 as catastrophic and `100%` as a clean pass; both would be lies.

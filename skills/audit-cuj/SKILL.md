@@ -377,6 +377,9 @@ work as your violation, and do not quietly dismiss a real one as "probably their
 - Every step has a verdict backed by evidence; unobserved steps are listed as not observed.
 - `success_criteria` were scored separately, and every absence criterion has a baseline.
 - Every finding names its journey and step, and its justification names both priority stages.
+- Each step's `health` item scores the P-number of the worst finding against that step
+  (`4` for a verbatim match), `of: 4` — not a binary pass/fail, which marked a step that
+  diverged by one word of copy the same `0` as a step that never ran.
 - One report per run under `.ux/audits/`, validating against the report contract, with an
   index row appended.
 - In live/hybrid mode, each replayed step was screenshot with its stable name and the

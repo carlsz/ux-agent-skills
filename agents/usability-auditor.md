@@ -86,10 +86,17 @@ that decided it.
 ### Also score the `health` rubric
 
 A findings list is silent about everything that works, so a clean audit has nothing to
-show. Alongside the findings, grade **all ten Nielsen heuristics 0–4** into the `health`
-block (report contract §4.1) — including the ones that are fine, and `null` for any that
-genuinely do not apply. Every low or n/a item carries a `note` saying what it is based on.
-This is what makes a good result legible and a trend possible.
+show. Alongside the findings, score **all ten Nielsen heuristics** into the `health` block
+(report contract §4.1) — including the ones that are fine, and `null` for any that
+genuinely do not apply.
+
+**The 0–4 score is derived, not a second opinion.** A heuristic scores the P-number of the
+worst finding whose *Framework Violation* field cites it — `4` when nothing cites it, down
+to `0` for a `P0`. That is what the anchors are: you already decided how bad the defect was
+when you tagged it, and grading the rubric again by feel is how a scorecard ends up
+disagreeing with its own findings. Every marked-down or n/a item carries a `note` naming
+the finding that took it down. This is what makes a good result legible and a trend
+possible.
 
 ## Rules
 

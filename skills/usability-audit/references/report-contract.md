@@ -203,8 +203,9 @@ health:
   band: Good                # see the band table below
   items:
     - item: "Visibility of system status"
-      score: 4              # null = not applicable
-      of: 4                 # optional; defaults to 4
+      score: 4              # DERIVED: the P-number of the worst finding citing this item,
+                            # 4 when none cites it. null = not applicable
+      of: 4                 # optional; always 4 — see "one 0-4 scale" below
       note: "aria-live task count; immediate feedback on every action"
 ```
 
@@ -216,13 +217,57 @@ health:
 | ≥ 30 | Poor |
 | < 30 | Critical |
 
-**`of` is what lets one block serve four auditors without pretending they share a scale.**
-Usability grades 0–4 against Nielsen's ten heuristics (`of: 4`, the default). Accessibility
-emits one item per WCAG criterion it checked, `score: 0 | 1, of: 1`. CUJ emits one item per
-journey step verified. Web performance emits one per metric measured. Each auditor scores in
-its own idiom and the percentage is comparable across all of them.
+### The score is derived from the findings, never judged beside them
+
+**An item's `score` is the P-number of the worst finding filed against it.** Nothing else
+decides it:
+
+| Worst finding citing this item | `score` |
+|---|---|
+| none | 4 |
+| `P3` Polish | 3 |
+| `P2` Minor | 2 |
+| `P1` Major | 1 |
+| `P0` Blocking | 0 |
+
+The bridge is already in every finding: §5 requires a **Framework Violation** field naming
+the exact heuristic, criterion or step the finding is about — and that is the `health` item
+it deducts from. One observation, graded once, shown two ways: the findings list says what
+broke, the scorecard says where.
+
+> **Why this is mechanical and not a matter of taste.** Grading the rubric and filing the
+> findings used to be two independent passes over the same app, so they could disagree —
+> and did, in opposite directions at once. In one real run the `cuj` auditor scored four
+> journey steps `0`, the worst available mark, for a divergence it had itself graded `P3`,
+> the *least* severe; the same run's index put it at 43% **Poor** for one word of copy,
+> while an accessibility run carrying two `P0`s read 70% **Good**. The number was
+> anti-correlated with severity: the auditor that found the least scored the worst. A
+> reader taking the dial at face value draws the opposite of the truth. Deriving the score
+> removes the second judgment, so the two halves cannot contradict each other.
+
+**One 0–4 scale, four idioms.** Every item is `of: 4` whatever the auditor: usability one
+per Nielsen heuristic, accessibility one per WCAG criterion checked, `cuj` one per journey
+step verified, web performance one per metric measured. The *items* carry each auditor's
+idiom; the *scale* is shared, which is what makes the percentage comparable. A pass/fail
+rubric like WCAG still grades 0–4 here, because the item records how badly the criterion
+failed, not whether it normatively conforms — and a `P2` contrast defect genuinely is not
+a `P0` one.
 
 **Rules**
+- **`score` is derived**, per the table above; `of` is `4`. A deduction with no finding
+  behind it is not allowed — if an item is worth marking down, say what is wrong and file
+  it.
+- **Any item scoring below `4`, and any n/a item, carries a `note` naming the finding that
+  took it down** (its title, or its `F`-number where the run uses them). Without finding
+  ids in the schema, that note is the only thread a reader can follow from a low row back
+  to the reason for it.
+- **The worst finding must land somewhere.** The lowest non-null item score must equal the
+  P-number of the report's worst finding — so a report carrying a `P0` has an item at `0`,
+  and a report whose worst finding is `P3` has no item below `3`. A clean run
+  (`total: 0`) scores every applicable item `4`. `validate_report.py` recomputes this and
+  fails the run on a mismatch, exactly as it does the roll-up verdict.
+- An item marked n/a (`score: null`) carries no findings; a finding citing it is a
+  contradiction the run must resolve before writing.
 - `score` = sum of non-null item scores; `max` = sum of `of` for non-null items; `pct` =
   `round(100 * score / max)`; `band` follows the table. **All four are validated against
   `items`** — a hand-written headline that disagrees with its own rows is rejected.

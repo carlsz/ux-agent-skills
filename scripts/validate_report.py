@@ -44,6 +44,10 @@ FRAMEWORKS_BY_AUDITOR = {
 # place to forget, which is how that template stayed at 2 through the schema-3 migration.
 SCHEMA = 3
 PRIORITY_KEYS = ["p0", "p1", "p2", "p3"]
+# The one health scale (§4.1). An item's score IS the P-number of the worst finding
+# against it, so the priority scale and the health scale are deliberately the same scale:
+# P0 -> 0 ... P3 -> 3, and 4 when nothing was filed against the item.
+ITEM_OF = 4
 PRIORITY_ACTION = {"p0": "fix immediately", "p1": "fix before release",
                    "p2": "fix in the next pass", "p3": "fix if time allows"}
 # Band thresholds for `health.pct` (contract §4.1), highest floor first.
@@ -79,6 +83,21 @@ def is_rollup(fm: dict) -> bool:
     if fm.get("rollup"):
         return True
     return any(str(fm.get(k, "")).strip().lower() == "rollup" for k in ("kind", "report"))
+
+
+def worst_priority(summary: dict) -> int | None:
+    """The P-number of the most severe finding in `summary`, or None for a clean run.
+
+    `P0` is the worst and is also the lowest number, so this is simply the first priority
+    key that carries a non-zero count. It doubles as the health floor (§4.1): the lowest
+    item score a report may carry is exactly this number.
+    """
+    if not isinstance(summary, dict):
+        return None
+    for level, key in enumerate(PRIORITY_KEYS):
+        if isinstance(summary.get(key), int) and summary[key] > 0:
+            return level
+    return None
 
 
 def derive_verdict(summary: dict) -> str:
@@ -216,11 +235,19 @@ def _check_summary(fm: dict, body: str) -> list[str]:
 
 
 def _check_health(fm: dict) -> list[str]:
-    """Validate the `health` scorecard (contract §4.1) against its own items.
+    """Validate the `health` scorecard (contract §4.1) against its own items AND findings.
 
     `score`, `max`, `pct` and `band` are all DERIVED. Checking them against `items` is the
     whole point: a headline number nobody can reconcile with its rows is exactly the kind
     of unfalsifiable claim this suite exists to avoid.
+
+    The items themselves are derived too. An item's score is the P-number of the worst
+    finding filed against it, so the scorecard and the findings list are two views of one
+    judgment rather than two independent passes that can disagree. They did disagree, in
+    both directions at once: a run whose worst finding was a `P3` scored four items `0`
+    and published 43% **Poor**, while a run carrying two `P0`s published 70% **Good** —
+    the dial reading backwards against severity. Enforcing the floor here is what makes
+    that unrepresentable.
     """
     errors: list[str] = []
     health = fm.get("health")
@@ -244,6 +271,7 @@ def _check_health(fm: dict) -> list[str]:
             f"scorecard cannot cite a lens the run did not apply")
 
     score = maximum = 0
+    graded: list[tuple[str, int]] = []
     for idx, item in enumerate(items):
         where = f"health item {idx}"
         if not isinstance(item, dict) or not str(item.get("item", "")).strip():
@@ -251,8 +279,10 @@ def _check_health(fm: dict) -> list[str]:
             continue
         where = f"health item {item['item']!r}"
         of = item.get("of", 4)
-        if not isinstance(of, int) or of <= 0:
-            errors.append(f"{where}: 'of' must be a positive integer")
+        if of != ITEM_OF:
+            errors.append(
+                f"{where}: 'of' must be {ITEM_OF} — every auditor grades its own items on "
+                f"the one 0-{ITEM_OF} scale, which is what makes the percentage comparable")
             continue
         got = item.get("score", "missing")
         note = str(item.get("note", "")).strip()
@@ -263,13 +293,22 @@ def _check_health(fm: dict) -> list[str]:
         if not isinstance(got, int) or not 0 <= got <= of:
             errors.append(f"{where}: 'score' must be null or an integer in 0..{of}")
             continue
-        # A weak score is an assertion until it says what it is based on.
-        if got * 2 <= of and not note:
+        # Without finding ids in the schema, the note is the only thread from a marked-down
+        # row back to the finding that marked it down. Required on EVERY deduction now, not
+        # just the bottom half: under the derived scale a 3/4 means a real P3 was filed.
+        if got < of and not note:
             errors.append(
-                f"{where}: scored {got}/{of} and must carry a 'note' — an unexplained low "
-                f"score is an assertion, not a finding")
+                f"{where}: scored {got}/{of} and must carry a 'note' naming the finding "
+                f"that took it down")
         score += got
         maximum += of
+        graded.append((item["item"], got))
+
+    if errors:
+        # A per-item failure makes every aggregate below meaningless: a rejected item is
+        # not counted, so `maximum` under-reports and the derived score, the band and the
+        # findings floor all cascade into noise that buries the one error worth reading.
+        return errors
 
     if maximum == 0:
         # Every item n/a: the run inspected nothing it could grade. That is a real state —
@@ -289,6 +328,26 @@ def _check_health(fm: dict) -> list[str]:
             f"health is marked unscored but {maximum // 1} point(s) were applicable; "
             f"'Unscored' is only for a run with no gradable item")
         return errors
+
+    # --- the findings floor (§4.1) ---------------------------------------------------
+    # The worst finding must land somewhere, and nothing may sink below it. Both halves
+    # matter: without the first, a report can file a P0 and still show a flawless
+    # scorecard; without the second, a cosmetic P3 can drag items to 0 and publish
+    # "Poor" over a healthy product. The second is the one that actually bit.
+    worst = worst_priority(fm.get("summary") or {})
+    lowest = min(got for _, got in graded)
+    if worst is None:
+        if lowest != ITEM_OF:
+            low = [name for name, got in graded if got < ITEM_OF]
+            errors.append(
+                f"health: the run reports no findings, so every applicable item scores "
+                f"{ITEM_OF}; these are marked down with nothing filed against them: {low}")
+    else:
+        if lowest != worst:
+            errors.append(
+                f"health: the worst finding is P{worst}, so the lowest item score must be "
+                f"{worst} (got {lowest}) — an item's score is the P-number of the worst "
+                f"finding against it, and the worst finding has to land on one of them")
 
     pct = round(100 * score / maximum)
     for key, want in (("score", score), ("max", maximum), ("pct", pct)):

@@ -184,7 +184,10 @@ default (see step 1); `--mode` forces one.
   `P0`-`P3` priority with its action, evidence, and a fix, with no issue filed under more
   than one finding.
 - The `health` scorecard grades every heuristic in the rubric — including the ones that
-  passed — with a `note` on each low or n/a item, and its `score`/`max`/`pct`/`band`
+  passed — **deriving each score from the findings rather than judging it a second time**
+  (§4.1: an item scores the P-number of the worst finding citing it, `4` when none does,
+  so the lowest item score equals the worst priority in `summary`), with a `note` on each
+  marked-down or n/a item naming the finding behind it, and its `score`/`max`/`pct`/`band`
   reconcile with its own items.
 - Runtime-perception findings are `verified` (live) or `potential — unverified` (static),
   matching the mode actually used.

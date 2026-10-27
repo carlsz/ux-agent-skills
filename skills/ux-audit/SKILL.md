@@ -117,9 +117,13 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
      `P2`-`P3`, labeled potential per the metric-honesty rule.
    - **Omit non-problems** (they get no tag), same as usability.
    Each normalized report also carries a `health` scorecard in its own idiom (§4.1):
-   accessibility scores one item per WCAG criterion checked (`of: 1`), web performance
-   one per metric measured. An auditor that measured nothing gradable writes
-   `pct: null, band: Unscored` rather than a number it did not earn.
+   accessibility scores one item per WCAG criterion checked, web performance one per
+   metric measured, every item `of: 4`. **Do not grade the scorecard separately from the
+   findings** — an item's score is the P-number of the worst finding you filed against it
+   (`4` when none is), so the mapping you just did onto `P0`-`P3` decides the scorecard
+   too. The validator enforces it: the lowest item score must equal the worst priority in
+   `summary`. An auditor that measured nothing gradable writes `pct: null, band: Unscored`
+   rather than a number it did not earn.
    Set `auditor` and `frameworks` per the table above; carry the tool's evidence
    (screenshots, `file:line`, measured metrics) into the Evidence field.
    The **native** auditors (usability, `cuj`) already emit contract reports — no external

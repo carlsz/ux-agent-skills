@@ -16,14 +16,14 @@ summary:
   p3: 0
 health:
   rubric: cuj-contract
-  score: 1
-  max: 1
-  pct: 100
-  band: Excellent
+  score: 2
+  max: 4
+  pct: 50
+  band: Acceptable
   items:
     - item: "CUJ-001 step 1"
-      score: 1
-      of: 1
+      score: 2
+      note: "P2 - the observed row text differs from the journey"
 ---
 
 # CUJ Audit — CUJ-001

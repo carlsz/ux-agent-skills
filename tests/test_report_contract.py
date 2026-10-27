@@ -9,6 +9,7 @@ conforming report passes while known-malformed reports fail.
 Run: `python3 tests/test_report_contract.py` (exit 0 = pass, 1 = fail).
 """
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -131,6 +132,28 @@ def main() -> int:
     # A weak score is an assertion until it says what it is based on — the same rule as a
     # skipped auditor needing a reason.
     failures += _expect_invalid(FIXTURES / "invalid" / "health-unexplained-low.md", "note")
+    # --- the findings floor (§4.1) --------------------------------------------------------
+    # An item's score IS the P-number of the worst finding against it, so the scorecard and
+    # the findings are two views of one judgment. Both directions have to be enforced, and
+    # a real run failed each of them:
+    #   * a scorecard that outruns its findings — two `P0`s filed, 70% `Good` published;
+    #   * a scorecard that sinks below them — one cosmetic `P3`, four steps marked `0`,
+    #     43% `Poor` published over a product whose journeys all completed.
+    # The second is the one that made the dial read backwards against severity, which is
+    # worse than a number being merely wrong: a reader who trusts it concludes the opposite
+    # of the truth.
+    failures += _expect_invalid(FIXTURES / "invalid" / "health-floor-unreached.md",
+                                "has to land on one of them")
+    failures += _expect_invalid(FIXTURES / "invalid" / "health-below-floor.md",
+                                "lowest item score must be 3")
+    # One 0-4 scale for every auditor is what makes the floor checkable and the percentage
+    # comparable; a per-item `of` let a binary rubric mark a cosmetic divergence `0/1`.
+    _binary = (FIXTURES / "valid" / "cuj-20260716-130000.md").read_text(encoding="utf-8")
+    _binary = _binary.replace("      score: 4\n", "      score: 1\n      of: 1\n")
+    with tempfile.TemporaryDirectory() as _d:
+        _p = Path(_d) / "binary-of.md"
+        _p.write_text(_binary, encoding="utf-8")
+        failures += _expect_invalid(_p, "'of' must be 4")
     # The scorecard cannot cite a lens the run never applied.
     failures += _expect_invalid(FIXTURES / "invalid" / "health-rubric-not-applied.md",
                                 "not in 'frameworks'")

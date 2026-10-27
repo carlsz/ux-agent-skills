@@ -309,9 +309,9 @@ def main() -> int:
         failures.append("scorecard should render exactly once (frontmatter, not the body)")
     # The score is the brief's dial. It carries a text label as well as the arc, so it is
     # not encoded in geometry alone.
-    if 'aria-label="Health score 83 out of 100, Good"' not in usab:
+    if 'aria-label="Health score 86 out of 100, Good"' not in usab:
         failures.append("health dial missing its derived percentage / accessible label")
-    if ">83</text>" not in usab:
+    if ">86</text>" not in usab:
         failures.append("health dial missing its visible percentage")
     # The executive summary is the brief's prose and must not also appear as a body
     # section: one screen stating the same thing twice is what this design removed.
