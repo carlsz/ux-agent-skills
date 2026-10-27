@@ -52,8 +52,8 @@ health:
   rubric: wcag-2.2
   score: 1
   max: 2
-  pct: 50
-  band: Acceptable
+  pct: 90
+  band: Excellent
   items:
     - item: "2.4.3 Focus order"
       score: 0
@@ -309,9 +309,9 @@ def main() -> int:
         failures.append("scorecard should render exactly once (frontmatter, not the body)")
     # The score is the brief's dial. It carries a text label as well as the arc, so it is
     # not encoded in geometry alone.
-    if 'aria-label="Health score 86 out of 100, Good"' not in usab:
+    if 'aria-label="Health score 73 out of 100, Good"' not in usab:
         failures.append("health dial missing its derived percentage / accessible label")
-    if ">86</text>" not in usab:
+    if ">73</text>" not in usab:
         failures.append("health dial missing its visible percentage")
     # The executive summary is the brief's prose and must not also appear as a body
     # section: one screen stating the same thing twice is what this design removed.

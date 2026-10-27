@@ -50,6 +50,13 @@ PRIORITY_KEYS = ["p0", "p1", "p2", "p3"]
 ITEM_OF = 4
 PRIORITY_ACTION = {"p0": "fix immediately", "p1": "fix before release",
                    "p2": "fix in the next pass", "p3": "fix if time allows"}
+# `health.pct` is a PRIORITY INDEX derived from `summary`, not from `score / max` (§4.1).
+# The worst finding sets the floor; every additional finding adds to it. It depends only on
+# what was found, never on how many items the rubric holds — which is what makes one report's
+# percentage mean the same thing as another's when the two lenses enumerate different
+# numbers of things (WCAG's criteria vs Nielsen's ten).
+INDEX_WORST = {0: 55, 1: 25, 2: 10, 3: 3}
+INDEX_EACH = {0: 15, 1: 6, 2: 2, 3: 1}
 # Band thresholds for `health.pct` (contract §4.1), highest floor first.
 BANDS = [(90, "Excellent"), (70, "Good"), (50, "Acceptable"), (30, "Poor"), (0, "Critical")]
 # A run with nothing gradable is "Unscored" — never 0% (reads catastrophic) and never
@@ -98,6 +105,21 @@ def worst_priority(summary: dict) -> int | None:
         if isinstance(summary.get(key), int) and summary[key] > 0:
             return level
     return None
+
+
+def priority_index(summary: dict) -> int:
+    """`health.pct` for these priority counts: 100 for a clean run, 0 at worst.
+
+    Deliberately independent of the rubric: two auditors that find the same things score
+    the same, whether their lens enumerates ten heuristics or fifty-six criteria.
+    """
+    found = [level for level, key in enumerate(PRIORITY_KEYS)
+             for _ in range(max(0, int(summary.get(key) or 0)))]
+    if not found:
+        return 100
+    found.sort()
+    deduction = INDEX_WORST[found[0]] + sum(INDEX_EACH[p] for p in found[1:])
+    return max(0, 100 - deduction)
 
 
 def derive_verdict(summary: dict) -> str:
@@ -349,11 +371,18 @@ def _check_health(fm: dict) -> list[str]:
                 f"{worst} (got {lowest}) — an item's score is the P-number of the worst "
                 f"finding against it, and the worst finding has to land on one of them")
 
-    pct = round(100 * score / maximum)
-    for key, want in (("score", score), ("max", maximum), ("pct", pct)):
+    # `score`/`max` still reconcile with the rows; `pct` is the priority index, which the
+    # rows cannot produce — see §4.1 on why the two answer different questions.
+    pct = priority_index(fm.get("summary") or {})
+    for key, want in (("score", score), ("max", maximum)):
         if health.get(key) != want:
             errors.append(
                 f"health {key!r} is {health.get(key)!r} but its items derive {want}")
+    if health.get("pct") != pct:
+        errors.append(
+            f"health 'pct' is {health.get('pct')!r} but its findings derive {pct} — `pct` "
+            f"is the priority index from `summary` (§4.1), not score/max, so that it means "
+            f"the same thing whatever size rubric the auditor used")
     if health.get("band") != band_for(pct):
         errors.append(
             f"health 'band' is {health.get('band')!r} but {pct}% is {band_for(pct)!r}")

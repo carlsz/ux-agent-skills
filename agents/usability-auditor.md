@@ -95,8 +95,9 @@ worst finding whose *Framework Violation* field cites it — `4` when nothing ci
 to `0` for a `P0`. That is what the anchors are: you already decided how bad the defect was
 when you tagged it, and grading the rubric again by feel is how a scorecard ends up
 disagreeing with its own findings. Every marked-down or n/a item carries a `note` naming
-the finding that took it down. This is what makes a good result legible and a trend
-possible.
+the finding that took it down. The headline `pct` is not `score / max` but the
+priority index over your `summary` (§4.1), so ten heuristics and fifty-six WCAG criteria can be
+read on one axis. This is what makes a good result legible and a trend possible.
 
 ## Rules
 

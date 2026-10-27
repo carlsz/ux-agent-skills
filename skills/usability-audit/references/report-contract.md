@@ -217,6 +217,34 @@ health:
 | ≥ 30 | Poor |
 | < 30 | Critical |
 
+### `pct` is a priority index, not `score / max`
+
+**The two numbers answer different questions and are computed differently.** `score` / `max`
+are the rubric view — how much of *this* lens is healthy, and `items` says where. `pct` is
+the headline, and it is derived from the **findings alone**:
+
+| | Deduction |
+|---|---|
+| the single **worst** finding | `P0` 55 · `P1` 25 · `P2` 10 · `P3` 3 |
+| **each other** finding | `P0` 15 · `P1` 6 · `P2` 2 · `P3` 1 |
+
+`pct = max(0, 100 - total deduction)`, and a run with no findings is `100`. The worst
+finding sets the floor; every additional one adds to it.
+
+> **Why not `score / max`.** Because that number is a function of how many items the rubric
+> happens to hold. A finding costs `(4 - score) / 4N`, so the same defect is worth twice as
+> much on a ten-heuristic rubric as on a twenty-two-criterion one — and the index and the
+> roll-up both put those side by side as though they were one scale. On one real run an
+> accessibility audit carrying two `P0`s read **79%** while a usability audit carrying none
+> read **50%**, purely because WCAG enumerates more criteria than Nielsen. A percentage
+> whose meaning depends on the size of the yardstick cannot be compared across auditors or
+> trended across a rubric change. This one depends only on what was found and how bad it
+> was, so it means the same thing on every report in the directory.
+
+Both are still mechanical and both are still checked: `score`/`max` against `items`, `pct`
+against `summary`. A reader who divides `score` by `max` will not get `pct`, and should
+not — the scorecard locates the damage, the index measures it.
+
 ### The score is derived from the findings, never judged beside them
 
 **An item's `score` is the P-number of the worst finding filed against it.** Nothing else

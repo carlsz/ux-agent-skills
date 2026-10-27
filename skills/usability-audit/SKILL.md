@@ -187,8 +187,9 @@ default (see step 1); `--mode` forces one.
   passed — **deriving each score from the findings rather than judging it a second time**
   (§4.1: an item scores the P-number of the worst finding citing it, `4` when none does,
   so the lowest item score equals the worst priority in `summary`), with a `note` on each
-  marked-down or n/a item naming the finding behind it, and its `score`/`max`/`pct`/`band`
-  reconcile with its own items.
+  marked-down or n/a item naming the finding behind it. `score`/`max` reconcile with its
+  own items; **`pct` is the priority index over `summary`, not `score / max`** (§4.1),
+  so the headline means the same thing whatever size rubric the lens happens to have.
 - Runtime-perception findings are `verified` (live) or `potential — unverified` (static),
   matching the mode actually used.
 - Live-mode screenshots are saved under `.ux/audits/assets/` with their stable names,

@@ -18,8 +18,8 @@ health:
   rubric: cuj-contract
   score: 2
   max: 4
-  pct: 50
-  band: Acceptable
+  pct: 90
+  band: Excellent
   items:
     - item: "CUJ-001 step 1"
       score: 2

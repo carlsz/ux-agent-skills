@@ -122,7 +122,11 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
    findings** — an item's score is the P-number of the worst finding you filed against it
    (`4` when none is), so the mapping you just did onto `P0`-`P3` decides the scorecard
    too. The validator enforces it: the lowest item score must equal the worst priority in
-   `summary`. An auditor that measured nothing gradable writes `pct: null, band: Unscored`
+   `summary`. **`pct` is the priority index derived from `summary` (§4.1), never
+   `score / max`** — otherwise a lens that enumerates more criteria scores higher for
+   the same defects, and this roll-up's `mean-of-auditors` would be averaging numbers
+   that do not share a scale. An auditor that measured nothing gradable writes
+   `pct: null, band: Unscored`
    rather than a number it did not earn.
    Set `auditor` and `frameworks` per the table above; carry the tool's evidence
    (screenshots, `file:line`, measured metrics) into the Evidence field.

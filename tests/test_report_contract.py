@@ -146,6 +146,28 @@ def main() -> int:
                                 "has to land on one of them")
     failures += _expect_invalid(FIXTURES / "invalid" / "health-below-floor.md",
                                 "lowest item score must be 3")
+    # --- `pct` is rubric-size independent (§4.1) ------------------------------------------
+    # The headline is a priority index over `summary`, not `score / max`, and this is the
+    # assertion that says why: take a valid report and GROW its rubric with passing items.
+    # Under the old mean-of-rubric formula each one pulled the number toward 100, which is
+    # how an accessibility run carrying two P0s read 79% while a usability run carrying
+    # none read 50% — the lenses enumerate different numbers of things. Same findings must
+    # now mean the same percentage however large the rubric.
+    _src = (FIXTURES / "valid" / "usability-20260715-143000.md").read_text(encoding="utf-8")
+    _grown = _src.replace(
+        '    - item: "Help and documentation"',
+        "".join(f'    - item: "Padding heuristic {i}"\n      score: 4\n' for i in range(12))
+        + '    - item: "Help and documentation"', 1)
+    if _grown == _src:
+        failures.append("rubric-size probe: could not grow the fixture's rubric")
+    with tempfile.TemporaryDirectory() as _d:
+        _p = Path(_d) / "grown-rubric.md"
+        # score/max move with the rubric (they are the rubric view); pct must not.
+        _p.write_text(_grown.replace("  score: 31\n", "  score: 79\n")
+                             .replace("  max: 36\n", "  max: 84\n"), encoding="utf-8")
+        _errs = validate(_p)
+        if _errs:
+            failures.append(f"rubric-size probe: 12 passing items changed the verdict: {_errs}")
     # One 0-4 scale for every auditor is what makes the floor checkable and the percentage
     # comparable; a per-item `of` let a binary rubric mark a cosmetic divergence `0/1`.
     _binary = (FIXTURES / "valid" / "cuj-20260716-130000.md").read_text(encoding="utf-8")

@@ -115,6 +115,22 @@ All notable changes to this project are documented here. The format is based on
   includes the read-tolerant/write-strict asymmetry and the legacy prose verdict.
 
 ### Fixed
+- **The health percentage was diluted by rubric size, so no two auditors were comparable.**
+  `pct` was `score / max`, a mean over the auditor's own rubric — and a finding costs
+  `(4 - score) / 4N`, so the same defect was worth twice as much against Nielsen's ten
+  heuristics as against WCAG's twenty-two criteria. The index column and the roll-up's
+  `mean-of-auditors` both put those side by side as one scale. On one real run an
+  accessibility audit carrying two `P0`s read **79%** while a usability audit carrying none
+  read **50%**, purely because the lenses enumerate different numbers of things. **`pct` is
+  now a *priority index* derived from `summary` alone:** the worst finding sets the floor
+  (`P0` 55 · `P1` 25 · `P2` 10 · `P3` 3) and every other finding adds to it (`P0` 15 ·
+  `P1` 6 · `P2` 2 · `P3` 1), to a minimum of 0, with a clean run at 100. `score`/`max` and
+  `items` stay exactly as they were — the rubric view, saying *where* the damage is — and
+  both halves are still checked, `score`/`max` against the rows and `pct` against the
+  findings. The three Sprout reports become 97 / 43 / 11, in severity order for the first
+  time. A test grows a fixture's rubric by twelve passing items and requires the percentage
+  not to move; under the old formula it rose from 73 **Good** to 94 **Excellent** without a
+  single finding changing.
 - **The health score was anti-correlated with severity, and the index made it plain.** The
   scorecard and the findings list were two independent judgments of one app, so they could
   disagree — and did, in both directions at once. A `cuj` run whose only finding was a `P3`

@@ -117,7 +117,9 @@ whose only finding was a `P3` published **43% · Poor**. Your own grade of the d
 and your grade of the step have to be the same grade, because they are the same judgment.
 A run
 that verified *nothing* — static, or every journey skipped — has no gradable item: it sets
-`pct: null` and `band: Unscored` rather than a percentage it did not earn. `0%` would read
+`pct: null` and `band: Unscored` rather than a percentage it did not earn. Note that
+`pct` is the priority index over your `summary` (§4.1), not `score / max` — your step
+count must not move the headline. `0%` would read
 as catastrophic and `100%` as a clean pass; both would be lies.
 
 ## `total: 0` is your SUCCESS state

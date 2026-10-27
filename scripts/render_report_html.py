@@ -1265,7 +1265,8 @@ def render_index(md_path: str | Path) -> str:
             '<div class="eyebrow">UX audits</div>'
             f"<h1>{html.escape(title)}</h1>"
             "<p>One row per run, appended and never rewritten. Each row links to that "
-            "run's report; <code>Health</code> is the scorecard percentage it recorded.</p>"
+            "run's report; <code>Health</code> is its priority index, derived from the findings "
+            "alone so rows with different rubrics can be read on one axis.</p>"
             "</div></section>")
     table = ZERO_CELL_RE.sub('<td class="zero">0</td>',
                             _render_blocks("\n".join(kept), md_path.parent))
