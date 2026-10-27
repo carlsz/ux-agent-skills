@@ -638,11 +638,10 @@ summary:                     # the MERGED counts across every member report
   p2: 4
   p3: 1
 health:                      # the suite scorecard
-  pct: 88
-  band: Good
-  method: mean-of-auditors
+  pct: 83                    # DERIVED: the priority index over `summary` above (§4.1).
+  band: Good                 # NOT the mean of `auditors` below, which would read 92.
   trend: [71, 76, 79, 81, 83]   # PRIOR runs, oldest → newest; [] when no history
-  auditors:
+  auditors:                  # which lens found what — printed, never averaged
     - {auditor: cuj, pct: 100, band: Excellent, unit: "steps verified"}
     - {auditor: usability, pct: 83, band: Good, unit: "Nielsen rubric"}
 ---
@@ -670,8 +669,30 @@ health:                      # the suite scorecard
   schema does not have is read by nothing and decides nothing.
 - `summary` holds the **merged** counts across all members and reconciles the same way as
   §3: `total` equals the sum of `p0..p3`.
-- `health.pct` is the mean of the member `health.pct` values, rounded; `band` follows §4.1's
-  table; `auditors` carries one entry per member that ran. **`trend` holds PRIOR runs only**
+- **`health.pct` is the priority index over `summary` (§4.1)** — the same function over the
+  same shape of input as a member applies to its own counts — and `band` follows §4.1's
+  table. It is **not** the mean of the member percentages, which is what this section said
+  until it was measured: the repo's own roll-up fixture, carrying one `P0` and two `P1`s
+  under a `NO-GO`, averaged to **75% · Good** while the index over its merged counts is
+  **29% · Critical**. Both numbers printed on one screen, and the reassuring one was the
+  headline.
+
+  The deeper fault is the one §4.1 exists to prevent, one level up. The index is rubric-
+  independent so that two auditors who find the same things score the same whatever their
+  lens enumerates; averaging the members' indices makes the headline move with **how the
+  findings were partitioned across auditors**, which is a fact about the rubric set and not
+  about the app. Add a member that finds nothing and suite health rises. Move one `P0` from
+  usability to accessibility and it changes again. Neither is a change to the product.
+
+  `auditors` still carries one entry per member that ran, because which lens found what is
+  worth printing — it is simply not the source of the headline. A member that graded nothing
+  carries `pct: null, band: Unscored`, the shape §4.1 mandates; the mean could not represent
+  it at all, so a suite run including a static or all-skipped `cuj` auditor was *unwritable*.
+  When **no** member graded anything, the roll-up's own `pct` is `null` and its band
+  `Unscored` — not `0` (reads catastrophic), not `100` (reads like a clean pass).
+
+  A `method:` key named the superseded computation and was read by nothing. It is gone; do
+  not write one. **`trend` holds PRIOR runs only**
   — the current run's score is `pct`, not the last element — and it **must degrade to `[]`**
   rather than to a broken chart: an authenticated run is advised to gitignore `.ux/audits/`
   wholesale (see `auth-handoff.md` §6), so in those repos there is no history to read.

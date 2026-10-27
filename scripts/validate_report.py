@@ -580,7 +580,27 @@ def _check_rollup_summary(fm: dict) -> list[str]:
 
 
 def _check_rollup_health(fm: dict) -> list[str]:
-    """The suite scorecard: a mean of its members, and a trend that may be empty.
+    """The suite scorecard: the priority index over the MERGED counts, and a trend.
+
+    `pct` is `priority_index(summary)` — the same function over the same shape of input as
+    a member's own `pct` (§4.1). It used to be the mean of the member percentages, and that
+    was the rubric-independence bug in a new coordinate.
+
+    The index exists so that two auditors who find the same things score the same, whether
+    their lens enumerates ten heuristics or fifty-six criteria. Averaging the members'
+    indices reintroduces exactly the dependence it removed, one level up: the headline then
+    moves with **how the findings were partitioned across auditors**, which is a fact about
+    the rubric set and not about the app. Add a member that finds nothing and suite health
+    rises; move one P0 from usability to accessibility and it changes again.
+
+    It also let the headline contradict the verdict printed beside it. The repo's own
+    roll-up fixture — one P0, two P1s, `NO-GO` — averaged to **75%, "Good"**, while the
+    index over its merged counts is **29%, "Critical"**. Both numbers were on one screen.
+
+    `auditors` stays: which lens found what is worth printing, it is simply not the source
+    of the headline. A member that graded nothing carries `pct: null, band: Unscored`,
+    which the mean could not represent at all — it rejected the shape §4.1 mandates, so a
+    suite run including a static or skipped `cuj` auditor was unwritable.
 
     `trend` holds PRIOR runs only. It is allowed to be `[]` — an authenticated run is
     advised to gitignore `.ux/audits/` wholesale, so in those repos there is no history to
@@ -604,8 +624,17 @@ def _check_rollup_health(fm: dict) -> list[str]:
             errors.append(f"rollup health auditor entry needs an 'auditor': {entry!r}")
             continue
         pct = entry.get("pct")
+        if pct is None:
+            # A member that graded nothing — a static or all-skipped run (§4.1). The mean
+            # could not represent this at all, which made such a suite run unwritable.
+            if entry.get("band") != UNSCORED:
+                errors.append(
+                    f"rollup health {entry['auditor']!r}: 'pct' is null, so 'band' must be "
+                    f"{UNSCORED!r} (a member that graded nothing is not 0%)")
+            continue
         if not isinstance(pct, int) or not 0 <= pct <= 100:
-            errors.append(f"rollup health {entry['auditor']!r}: 'pct' must be 0..100")
+            errors.append(f"rollup health {entry['auditor']!r}: 'pct' must be 0..100, or "
+                          f"null with band {UNSCORED!r}")
             continue
         if entry.get("band") != band_for(pct):
             errors.append(
@@ -613,12 +642,27 @@ def _check_rollup_health(fm: dict) -> list[str]:
                 f"{pct}% is {band_for(pct)!r}")
         pcts.append(pct)
 
-    if pcts:
-        want = round(sum(pcts) / len(pcts))
-        if health.get("pct") != want:
+    if not pcts:
+        # Nothing gradable ran. Same rule as §4.1: not 0% (reads catastrophic), not 100%
+        # (reads like a clean pass) — a suite that verified nothing has no percentage.
+        if health.get("pct") is not None:
             errors.append(
-                f"rollup health 'pct' is {health.get('pct')!r} but its {len(pcts)} "
-                f"auditors mean {want}")
+                f"rollup health 'pct' is {health.get('pct')!r} but no member graded "
+                f"anything — it must be null with band {UNSCORED!r}")
+        elif health.get("band") != UNSCORED:
+            errors.append(f"rollup health 'band' must be {UNSCORED!r} when 'pct' is null")
+    else:
+        # DERIVED, like the verdict beside it: the priority index over the MERGED counts,
+        # the same function a member applies to its own. Never the mean of the members —
+        # see this function's docstring for the two ways that went wrong.
+        summary = fm.get("summary")
+        if isinstance(summary, dict):
+            want = priority_index(summary)
+            if health.get("pct") != want:
+                errors.append(
+                    f"rollup health 'pct' is {health.get('pct')!r} but the priority index "
+                    f"over its merged summary is {want}. `pct` is derived from `summary`, "
+                    f"not averaged across `auditors` (§9)")
         if isinstance(health.get("pct"), int) and health.get("band") != band_for(health["pct"]):
             errors.append(
                 f"rollup health 'band' is {health.get('band')!r} but "

@@ -51,6 +51,35 @@ All notable changes to this project are documented here. The format is based on
   `/ux-audit` now fans out to three native auditors and one wrapped, instead of two and two.
 
 ### Fixed
+- **Suite health is derived from the merged findings, not averaged across auditors.**
+  `health.pct` on a roll-up is now `priority_index(summary)` — the same function over the
+  same shape of input a member applies to its own score (§4.1). It was
+  `method: mean-of-auditors`, and the validator *enforced* the mean.
+
+  The priority index exists so that two auditors who find the same things score the same,
+  whether their lens enumerates ten heuristics or fifty-six criteria. Averaging the member
+  indices reintroduces exactly the dependence it removed, one level up: the headline then
+  moves with **how the findings were partitioned across auditors**, which is a fact about
+  the rubric set and not about the app. Add a member that finds nothing and suite health
+  rises; move one P0 from usability to accessibility and it changes again. The same three
+  findings split one way average to 68%, split another to 59% — while the index over the
+  merged counts is 37% either way.
+
+  It also let the headline contradict the verdict printed beside it. This repo's own
+  roll-up fixture — one P0, two P1s, a derived `NO-GO` — averaged its members' 83/67/75 to
+  **75%, "Good"**. The index over its merged counts is **29%, "Critical"**. Both numbers
+  rendered on one screen, the dial reassuring and the gate blocking.
+
+  A second defect fell out of the same rule: a member carrying `pct: null, band: Unscored`
+  — the shape §4.1 mandates for an auditor that graded nothing — **failed validation**,
+  because a mean has no representation for it. A suite run including a static or skipped
+  `cuj` auditor was unwritable. Null members are now allowed and excluded from the
+  headline; a roll-up where *no* member graded anything must itself be `pct: null` with
+  band `Unscored`, never 0% (reads catastrophic) and never 100% (reads like a clean pass).
+  `auditors` stays in the frontmatter — which lens found what is worth printing, it is
+  simply not the source of the headline — and the `method:` key is gone, since there is no
+  longer a choice of method to declare.
+
 - **`test_components.py`'s silent trap now fails loudly.** The file's checks are
   hand-written and composed by name, so a component with no check went unverified while the
   suite stayed green — which is exactly how an auditor the bundle advertised could be

@@ -1,0 +1,67 @@
+---
+kind: rollup
+schema: 3
+version: 0.5.1
+date: 2026-07-16T15:00:00Z
+target: http://localhost:3000
+scope: "demo app — full UX auditor suite"
+verdict: NO-GO
+verdict_reason: "one blocking issue (a11y) and two majors block release; all other issues are minor"
+auditors_ran: [usability, accessibility, cuj]
+auditors_skipped:
+  - auditor: web-performance
+    reason: "opt-in; run with --only web-performance or --all"
+summary:
+  total: 5
+  p0: 1
+  p1: 2
+  p2: 2
+  p3: 0
+health:
+  pct: 75                      # the MEAN of 83/67/75 — the superseded rule
+  band: Good
+  trend: [71, 76, 79]
+  auditors:
+    - {auditor: usability, pct: 83, band: Good, unit: "Nielsen rubric"}
+    - {auditor: accessibility, pct: 67, band: Acceptable, unit: "WCAG criteria passed"}
+    - {auditor: cuj, pct: 75, band: Good, unit: "steps verified"}
+---
+
+# UX Audit Roll-up — demo app
+
+**Verdict: NO-GO.** Three auditors ran against http://localhost:3000. Accessibility found one
+blocking issue and usability and cuj one major apiece, so the release gate holds. The remaining
+two issues are minor and safe to address in normal iteration.
+
+## Per-auditor results
+
+| Auditor | Mode | P0 | P1 | P2 | P3 | Total | Result |
+|---------|------|------|------|------|------|-------|--------|
+| [usability](usability-20260715-143000.md) | hybrid | 0 | 1 | 1 | 0 | 2 | 1 major |
+| [accessibility](accessibility-20260716-090000.md) | live | 1 | 0 | 1 | 0 | 2 | **1 blocking** |
+| [cuj](cuj-20260716-120000.md) | live | 0 | 1 | 0 | 0 | 1 | 1 journey broken |
+| **Suite** | | **1** | **2** | **2** | **0** | **5** | **NO-GO** |
+
+## Auditors that ran vs. skipped
+
+- **Ran:** usability (native, hybrid), accessibility (wraps `web-quality-skills:accessibility`,
+  live), cuj (native, live — `.ux/cujs/` is non-empty).
+- **Skipped:** web-performance — opt-in; run with `--only web-performance` or `--all`.
+
+## Merged top issues
+
+1. **[P0 · accessibility]** ["Place order" button text fails contrast](accessibility-20260716-090000.md#p0-place-order-button-text-fails-contrast) — the primary action is unreadable at AA.
+2. **[P1 · usability]** ["Place order" gives no processing feedback](usability-20260715-143000.md#p1-place-order-gives-no-processing-feedback) — the form submits with no visible response.
+3. **[P1 · cuj]** [CUJ-001 — a captured task does not survive a reload](cuj-20260716-120000.md#p1-cuj-001--a-captured-task-does-not-survive-a-reload) — every step passed and the data did not persist.
+
+## Verdict rationale
+
+- `p0 > 0` (accessibility) → the blocking gate trips.
+- `p1 > 0` (usability, cuj) → the major gate trips independently.
+- The derived verdict is therefore **NO-GO**; `summary` and `verdict` agree.
+
+## Notes
+
+- **Target:** http://localhost:3000, shared by every member run.
+- **Member reports:** [usability](usability-20260715-143000.md) ·
+  [accessibility](accessibility-20260716-090000.md) · [cuj](cuj-20260716-120000.md).

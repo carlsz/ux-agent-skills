@@ -462,6 +462,63 @@ def main() -> int:
         failures.append("conformance fixture: must carry both an A and an AA citation, so "
                         "the two gradings can disagree with a level lookup")
 
+    # --- the suite scorecard is derived from the merged counts, not averaged ---------
+    #
+    # `health.pct` used to be the mean of the member percentages, and the validator
+    # enforced that. It is the rubric-independence bug one level up: the index exists so
+    # two auditors finding the same things score the same whatever their lens enumerates,
+    # and averaging the members makes the headline move with how the findings happen to be
+    # partitioned across auditors instead.
+    failures += _expect_valid(FIXTURES / "valid" / "rollup-20260716-150000.md")
+    failures += _expect_invalid(FIXTURES / "invalid" / "rollup-health-mean.md",
+                                "not averaged across")
+    # Partition independence, stated as the arithmetic. The SAME three findings, split two
+    # ways across two members: the mean of the member indices moves, the index over the
+    # merged counts does not. That gap is the bug — a headline that changes when findings
+    # are reattributed between lenses is describing the rubric set, not the app.
+    def _mean(*members: dict) -> int:
+        return round(sum(priority_index(m) for m in members) / len(members))
+
+    merged = {"total": 3, "p0": 1, "p1": 1, "p2": 1, "p3": 0}
+    one_sided = ({"total": 3, "p0": 1, "p1": 1, "p2": 1, "p3": 0},
+                 {"total": 0, "p0": 0, "p1": 0, "p2": 0, "p3": 0})
+    split = ({"total": 2, "p0": 1, "p1": 0, "p2": 1, "p3": 0},
+             {"total": 1, "p0": 0, "p1": 1, "p2": 0, "p3": 0})
+    if _mean(*one_sided) == _mean(*split):
+        failures.append("suite health: the partition probe is not discriminating - pick "
+                        "splits whose member means actually differ")
+    for members in (one_sided, split):
+        if priority_index(merged) == _mean(*members):
+            failures.append(
+                f"suite health: the index over the merged counts ({priority_index(merged)}) "
+                f"coincides with this partition's mean ({_mean(*members)}), so this probe "
+                f"cannot tell the two rules apart")
+    # The partition-sensitivity the mean had, stated as the test it fails: three members
+    # at 100/100/40 average 80, while the same findings merged index far lower. A
+    # roll-up's headline must not be readable as "Good" over a P0.
+    blocking = {"total": 4, "p0": 1, "p1": 0, "p2": 3, "p3": 0}
+    idx = priority_index(blocking)
+    if idx >= 70:
+        failures.append(f"suite health: a merged summary with a P0 indexes {idx} — the "
+                        f"headline would still read Good or better")
+    if derive_verdict(blocking) != "NO-GO":
+        failures.append("suite health: a merged P0 must still derive NO-GO")
+
+    # A member that graded nothing carries `pct: null, band: Unscored` — the shape §4.1
+    # mandates and the mean could not represent, which made a suite run including a static
+    # or all-skipped `cuj` auditor unwritable.
+    failures += _expect_valid(FIXTURES / "valid" / "rollup-20260720-100000.md")
+    # And when NO member graded anything, the roll-up itself is Unscored: not 0 (reads
+    # catastrophic), not 100 (reads like a clean pass). Same rule as §4.1.
+    failures += _expect_invalid(FIXTURES / "invalid" / "rollup-health-unscored.md",
+                                "no member graded anything")
+
+    # `method:` named the superseded computation and was read by nothing. A fixture that
+    # still carries it is asserting a rule that no longer exists.
+    for fx in sorted((FIXTURES).rglob("rollup-*.md")):
+        if "method:" in fx.read_text(encoding="utf-8"):
+            failures.append(f"suite health: {fx.name} still declares a `method:` key")
+
     # index.md: a conforming index passes; a malformed one is rejected.
     failures += _expect_valid_index(FIXTURES / "valid" / "index.md")
     failures += _expect_invalid_index(FIXTURES / "invalid" / "index-badcols.md", "column")
@@ -471,7 +528,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (39 checks)")
+    print("PASS — report contract (45 checks)")
     return 0
 
 

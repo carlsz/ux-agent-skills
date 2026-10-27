@@ -18,7 +18,6 @@ summary:
 health:
   pct: 83
   band: Good
-  method: mean-of-auditors
   trend: []
   auditors:
     - {auditor: usability, pct: 83, band: Good, unit: "Nielsen rubric"}

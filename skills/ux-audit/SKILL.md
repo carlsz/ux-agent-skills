@@ -132,11 +132,10 @@ Three native auditors plus one wrapped from **[web-quality-skills](https://githu
    (`4` when none is), so the mapping you just did onto `P0`-`P3` decides the scorecard
    too. The validator enforces it: the lowest item score must equal the worst priority in
    `summary`. **`pct` is the priority index derived from `summary` (§4.1), never
-   `score / max`** — otherwise a lens that enumerates more criteria scores higher for
-   the same defects, and this roll-up's `mean-of-auditors` would be averaging numbers
-   that do not share a scale. An auditor that measured nothing gradable writes
-   `pct: null, band: Unscored`
-   rather than a number it did not earn.
+   `score / max`** — otherwise a lens that enumerates more criteria scores higher for the
+   same defects. An auditor that measured nothing gradable writes `pct: null, band:
+   Unscored` rather than a number it did not earn, and the roll-up carries that entry as
+   written (step 6).
    Set `auditor` and `frameworks` per the table above; carry the tool's evidence
    (screenshots, `file:line`, measured metrics) into the Evidence field.
    The **native** auditors (usability, accessibility, `cuj`) already emit contract reports
@@ -176,14 +175,26 @@ Three native auditors plus one wrapped from **[web-quality-skills](https://githu
      p2: 4
      p3: 1
    health:                      # suite scorecard; trend holds PRIOR runs only
-     pct: 88
-     band: Good
-     method: mean-of-auditors
+     pct: 83                    # DERIVED: the priority index over `summary` above (§4.1),
+     band: Good                 # NOT the mean of `auditors` below. Write no `method:` key.
      trend: []                  # [] when there is no history to read
-     auditors:
+     auditors:                  # which lens found what — printed, never averaged
        - {auditor: usability, pct: 83, band: Good, unit: "Nielsen rubric"}
    ---
    ```
+
+   **`health.pct` is derived too, from the same place the verdict is.** It is the priority
+   index over the **merged** `summary` (§4.1) — the same function a member applies to its
+   own counts — and never the mean of the member percentages. Averaging them reintroduces,
+   one level up, the rubric dependence §4.1 removed: the headline would move with how the
+   findings happen to be split across auditors, so adding a member that finds nothing
+   raises suite health and moving one `P0` between lenses changes it, neither being a
+   change to the app. It also let the headline contradict the verdict beside it — the
+   fixture roll-up carrying one `P0` and two `P1`s under a `NO-GO` averaged to
+   **75% · Good** where the index reads **29% · Critical**. Carry each member's own `pct`
+   into `auditors` as written, including a `pct: null, band: Unscored` for one that graded
+   nothing; when **no** member graded anything, the roll-up's own `pct` is `null` and its
+   band `Unscored`. `validate_report.py` recomputes all of this and fails a mismatch.
 
    **The verdict is derived, not judged: `NO-GO` if `p0 > 0` or `p1 > 0`, else `GO`.**
    Apply the rule mechanically and put any nuance in `verdict_reason` — never invent a third
