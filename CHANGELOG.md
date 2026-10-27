@@ -51,6 +51,41 @@ All notable changes to this project are documented here. The format is based on
   `/ux-audit` now fans out to three native auditors and one wrapped, instead of two and two.
 
 ### Fixed
+- **`health.trend` can be populated now, and has a command that does it.** The field
+  shipped with a documented source that did not contain the data: §7 said `index.md`'s
+  `Health` column "carries the trend the roll-up reads", but index rows are appended one
+  per *auditor* run and a roll-up appends none of its own, so that column holds member
+  percentages and the suite's own history was never written down anywhere. Nothing tried
+  to read it either — step 6's template hard-coded `trend: []`. Every roll-up ever written
+  carried an empty trend, and the one non-empty example in this repo's own fixtures,
+  `[71, 76, 79]`, sat on a run that had no prior runs at all: three invented numbers.
+
+  The source is now the sibling `rollup-*.md` files, and the deriving command is
+  `validate_report.py --trend <report>` — run before writing the roll-up to obtain the
+  value, and after to confirm it. It prints a `note:` for every roll-up it found and could
+  not use, so a short trend is never silently short; orders by the **filename** timestamp,
+  not mtime, which a fresh checkout rewrites; counts only runs strictly older than the one
+  asking, so re-deriving an old report's trend in a directory that has since grown gives
+  the same answer it gave on the day; and keeps the eight most recent, a longer series
+  being unreadable at the width the dial renders.
+
+  **Each point is recomputed from that run's `summary`, never copied from its `pct`.**
+  `pct` is not a stable scale — it meant the mean of the member percentages until the
+  previous entry fixed it — so copying would put two definitions on one sparkline and show
+  a movement that never happened, which is precisely the "trended across a rubric change"
+  failure the contract warns about, inside the field meant to show the trend. `summary` is
+  raw merged counts and reconciles, so recomputing puts the whole series on today's scale
+  by construction and survives the next change to it.
+
+  This is the one check that needs the **directory** rather than the file, so it is a
+  separate CLI mode instead of a rule inside `validate()`: every other rule is decidable
+  from a single report, which is what lets one be validated in isolation, in a fixtures
+  directory, or after its siblings have been gitignored. What `validate()` can still see
+  alone is shape — a series longer than the cap, and a point the priority index cannot
+  produce at all (a run is either clean at 100 or has a finding, and the cheapest costs 3,
+  so 98 and 99 are typed numbers by definition). The same gap check now guards each
+  member's `pct` in `auditors`, which the roll-up carries no counts to verify against.
+
 - **Suite health is derived from the merged findings, not averaged across auditors.**
   `health.pct` on a roll-up is now `priority_index(summary)` — the same function over the
   same shape of input a member applies to its own score (§4.1). It was
@@ -296,6 +331,15 @@ All notable changes to this project are documented here. The format is based on
   instruction was the bug"*. That lesson now has a test behind it.
 
 ### Changed
+- **The health sparkline draws this run too.** `health.trend` holds prior runs only — the
+  contract rejects a series that repeats the current score — but a chart drawn from the
+  stored field alone stops short of today, and every other sparkline a reader has ever
+  seen ends at today. The first real three-run history rendered a line ending at 67 beside
+  a ring reading 90: it read as a plateau at the moment the score moved 23 points. The
+  renderer now appends the current `pct` and marks it with a dot, in the derived view
+  only. One prior run is therefore enough to draw, since with this run appended it is two
+  points, and two points are a direction.
+
 - **Screenshots move into one directory per run — `.ux/audits/assets/<report-stem>/`.** The
   layout was flat `assets/` with one canonical name per thing captured, so a re-run
   *overwrote* rather than accumulated. That bounded the directory by captures instead of

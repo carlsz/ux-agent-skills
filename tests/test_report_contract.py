@@ -8,6 +8,9 @@ conforming report passes while known-malformed reports fail.
 
 Run: `python3 tests/test_report_contract.py` (exit 0 = pass, 1 = fail).
 """
+import contextlib
+import io
+import os
 import re
 import sys
 import tempfile
@@ -16,10 +19,44 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from validate_report import (PRIORITY_KEYS, derive_verdict, priority_index,  # noqa: E402
-                             validate, validate_index)
+import validate_report  # noqa: E402
+from validate_report import (PRIORITY_KEYS, TREND_MAX, derive_verdict,  # noqa: E402
+                             priority_index, trend_for, unattainable, validate,
+                             validate_index)
 
 FIXTURES = ROOT / "tests" / "fixtures"
+
+
+def _frontmatter(path: Path) -> dict:
+    """The report's frontmatter as a mapping ({} when it does not parse)."""
+    fm, _ = validate_report._split_frontmatter(path.read_text(encoding="utf-8"))
+    return fm if isinstance(fm, dict) else {}
+
+
+def _flat(text: str) -> str:
+    """Collapse hard-wrapped prose (and blockquote markers) so probes match content."""
+    return re.sub(r"\s+", " ", text.replace("> ", " "))
+
+
+def _trend_cli(report: Path) -> int:
+    """`validate_report.py --trend <report>`, through main() so an unwired mode fails."""
+    sink = io.StringIO()
+    with contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
+        return validate_report.main(["--trend", str(report)])
+
+
+def _mini_rollup(*, p0: int = 0, p1: int = 0, p2: int = 0, p3: int = 0,
+                 trend: str | None = None) -> str:
+    """The least a file needs to count as a prior run: `kind: rollup` plus merged counts.
+
+    `trend_for` recomputes from `summary` and never reads `pct`, so these carry none —
+    which is also the point being tested.
+    """
+    extra = f"  trend: {trend}\n" if trend is not None else ""
+    return ("---\nkind: rollup\nschema: 3\n"
+            f"summary:\n  total: {p0 + p1 + p2 + p3}\n"
+            f"  p0: {p0}\n  p1: {p1}\n  p2: {p2}\n  p3: {p3}\n"
+            f"health:\n{extra}---\n\n# prior run\n")
 
 
 def _expect_valid(path: Path) -> list[str]:
@@ -519,6 +556,122 @@ def main() -> int:
         if "method:" in fx.read_text(encoding="utf-8"):
             failures.append(f"suite health: {fx.name} still declares a `method:` key")
 
+    # ---- health.trend: derived from the prior roll-ups, recomputed, never estimated ----
+    # The field shipped with a documented source that did not contain the data (`index.md`'s
+    # `Health` column, whose rows are per-AUDITOR) and a workflow template that hard-coded
+    # `trend: []`. So the only non-empty trend in this repo was three invented numbers on a
+    # run with no prior runs. These assertions are about where a point COMES FROM.
+
+    # 1. The valid roll-up fixtures are a real history: each one's declared trend is what
+    #    the directory beside it derives. Add a roll-up fixture and this keeps you honest —
+    #    run `validate_report.py --trend tests/fixtures/valid/rollup-*.md` and paste.
+    chain = sorted((FIXTURES / "valid").glob("rollup-*.md"))
+    derived_any = False
+    for fx in chain:
+        want, _ = trend_for(fx)
+        got = ((_frontmatter(fx).get("health") or {}).get("trend"))
+        if list(got or []) != want:
+            failures.append(
+                f"trend: {fx.name} declares {got!r} but the prior roll-ups beside it derive "
+                f"{want!r} - run `validate_report.py --trend` and paste what it prints")
+        derived_any = derived_any or bool(want)
+    if len(chain) < 3 or not derived_any:
+        failures.append(
+            "trend: the valid fixtures no longer form a history with a non-empty trend in "
+            "it, so the assertion above cannot fail - restore the chain")
+
+    # 2. Ordering is by the FILENAME timestamp, not mtime, which a fresh checkout rewrites.
+    #    Scramble the mtimes and the answer must not move.
+    with tempfile.TemporaryDirectory() as td:
+        box = Path(td)
+        for i, fx in enumerate(chain):
+            copy = box / fx.name
+            copy.write_text(fx.read_text(encoding="utf-8"), encoding="utf-8")
+            os.utime(copy, (1_600_000_000 - i * 86400,) * 2)  # newest file, oldest mtime
+        for fx in chain:
+            if trend_for(box / fx.name)[0] != trend_for(fx)[0]:
+                failures.append(f"trend: {fx.name} changed when mtimes were scrambled - "
+                                f"the ordering key must be the filename timestamp")
+
+    # 3. Only runs strictly OLDER count, and every roll-up found-but-unused is explained.
+    with tempfile.TemporaryDirectory() as td:
+        box = Path(td)
+        (box / "rollup-20260101-000000.md").write_text(
+            _mini_rollup(p2=1), encoding="utf-8")                      # older, usable -> 90
+        (box / "rollup-20260601-000000.md").write_text(
+            _mini_rollup(), encoding="utf-8")                          # older, clean  -> 100
+        (box / "rollup-20270101-000000.md").write_text(
+            _mini_rollup(p0=1), encoding="utf-8")                      # LATER - excluded
+        (box / "rollup-nostamp.md").write_text(_mini_rollup(), encoding="utf-8")
+        (box / "rollup-20250101-000000.md").write_text(
+            "---\nkind: rollup\nschema: 3\n---\n", encoding="utf-8")  # no summary
+        (box / "usability-20260101-000000.md").write_text(
+            _mini_rollup(p0=9), encoding="utf-8")                      # not a roll-up name
+        got, notes = trend_for(box / "rollup-20260715-120000.md")
+        if got != [90, 100]:
+            failures.append(f"trend: expected [90, 100] from the two older usable runs, "
+                            f"got {got!r} (later runs, unparseable ones and non-roll-up "
+                            f"files must all stay out)")
+        blob = " ".join(notes)
+        for expect in ("rollup-nostamp.md", "rollup-20250101-000000.md"):
+            if expect not in blob:
+                failures.append(f"trend: {expect} was skipped without a note - a short "
+                                f"trend must never be silently short")
+        if "usability-20260101-000000.md" in blob or "20270101" in blob:
+            failures.append("trend: noted a file that is not a prior roll-up at all")
+
+        # 4. The cap keeps the eight most recent, and says so.
+        for day in range(10, 28):
+            (box / f"rollup-202602{day}-000000.md").write_text(
+                _mini_rollup(p3=1), encoding="utf-8")
+        capped, notes = trend_for(box / "rollup-20270601-000000.md")
+        if len(capped) != TREND_MAX:
+            failures.append(f"trend: {len(capped)} points past the cap of {TREND_MAX}")
+        if not any("most recent" in n for n in notes):
+            failures.append("trend: truncated to the cap without saying so")
+
+    # 5. The mismatch is reported through the CLI, because that is the only place it runs:
+    #    every other rule is decidable from the file alone, which is what lets a report be
+    #    validated in isolation. Assert through main(), so an unwired mode fails here.
+    with tempfile.TemporaryDirectory() as td:
+        box = Path(td)
+        (box / "rollup-20260101-000000.md").write_text(_mini_rollup(p2=1), encoding="utf-8")
+        liar = box / "rollup-20260601-000000.md"
+        liar.write_text(_mini_rollup(trend="[71, 76, 79]"), encoding="utf-8")
+        if _trend_cli(liar) == 0:
+            failures.append("trend: --trend accepted a declared trend that the prior runs "
+                            "beside it do not derive")
+        # The liar is itself a prior run of the next one, and it is clean -> 100.
+        honest = box / "rollup-20260901-000000.md"
+        honest.write_text(_mini_rollup(trend="[90, 100]"), encoding="utf-8")
+        if _trend_cli(honest) != 0:
+            failures.append("trend: --trend rejected a correctly derived trend")
+        if _trend_cli(box / "rollup-20280101-000000.md") != 0:
+            failures.append("trend: --trend failed on a report that does not exist yet - a "
+                            "run must be able to derive its trend before writing its file")
+
+    # 6. A point the index cannot produce was typed, not derived. The gap is narrow by
+    #    design (a clean run is 100; the cheapest finding costs 3) but it is the only
+    #    evidence available without reading the directory.
+    for pct, want_gap in ((100, False), (97, False), (98, True), (99, True), (29, False)):
+        if unattainable(pct) != want_gap:
+            failures.append(f"trend: unattainable({pct}) should be {want_gap}")
+    failures += _expect_invalid(FIXTURES / "invalid" / "rollup-trend-invented.md",
+                                "cannot produce")
+    failures += _expect_invalid(FIXTURES / "invalid" / "rollup-trend-toolong.md",
+                                "most recent")
+
+    # 7. The superseded source must be gone from the contract, not merely supplemented:
+    #    the sentence that sent an agent to `index.md` is why nobody noticed for months.
+    contract = _flat((ROOT / "skills" / "usability-audit" / "references"
+                      / "report-contract.md").read_text(encoding="utf-8"))
+    if "carries the trend the roll-up reads" in contract:
+        failures.append("trend: the contract still tells the roll-up to read `index.md`'s "
+                        "Health column, which holds per-auditor rows")
+    for phrase in ("--trend", "recomputed from that run's `summary`"):
+        if phrase not in contract:
+            failures.append(f"trend: the contract does not state {phrase!r} as the source")
+
     # index.md: a conforming index passes; a malformed one is rejected.
     failures += _expect_valid_index(FIXTURES / "valid" / "index.md")
     failures += _expect_invalid_index(FIXTURES / "invalid" / "index-badcols.md", "column")
@@ -528,7 +681,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (45 checks)")
+    print("PASS — report contract (62 checks)")
     return 0
 
 

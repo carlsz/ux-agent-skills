@@ -7,6 +7,8 @@ to self-check its output before finalizing a report, and by the contract test su
 
 Usage:
     python3 scripts/validate_report.py <report.md> [<report.md> ...]
+    python3 scripts/validate_report.py --index <index.md>
+    python3 scripts/validate_report.py --trend <rollup.md>   # derive/confirm health.trend
 
 Exit code 0 = all valid; 1 = at least one report has errors (printed to stderr).
 """
@@ -133,6 +135,83 @@ def derive_verdict(summary: dict) -> str:
     auditor to decide what counted as a blocker. A derived verdict cannot drift.
     """
     return "NO-GO" if (summary.get("p0") or summary.get("p1")) else "GO"
+
+TREND_MAX = 8
+# `rollup-<YYYYMMDD>-<HHMMSS>.md` — the contract's filename shape (§9). The timestamp in
+# the NAME is the ordering key, because mtime is rewritten by a fresh checkout.
+ROLLUP_NAME_RE = re.compile(r"^rollup-(\d{8})-(\d{6})\.md$")
+# The index can never land in this gap: a clean run is exactly 100, and the cheapest
+# possible finding — one lone P3 — already costs `INDEX_WORST[3]`. A score inside the gap
+# is not one any combination of counts can produce, so it was typed rather than derived.
+_INDEX_GAP = range(101 - min(INDEX_WORST.values()), 100)
+
+
+def unattainable(pct: int) -> bool:
+    """True when no combination of priority counts yields this index (§4.1)."""
+    return pct in _INDEX_GAP
+
+
+def trend_for(report: str | Path, *, limit: int = TREND_MAX) -> tuple[list[int], list[str]]:
+    """`health.trend` for a roll-up: the priority index of each PRIOR run beside it.
+
+    Returns `(trend, notes)` — oldest → newest, at most `limit` points, `[]` when there is
+    no history. `notes` names every roll-up that was found and not used, so a short trend
+    is never silently short. The report itself need not exist yet: the filename supplies
+    the cutoff, so a run can derive its trend before writing its own file.
+
+    **The source is the sibling `rollup-*.md` files, and each point is RECOMPUTED from that
+    run's `summary` rather than copied from its `pct`.** Both halves were wrong before.
+
+    The source was documented as `index.md`'s `Health` column — §7 claimed it "carries the
+    trend the roll-up reads". It does not. Index rows are appended one per *auditor* run
+    and a roll-up appends no row of its own, so that column holds member percentages and
+    the suite's own history was never written down anywhere. Nor did anything try to read
+    it: step 6 of the roll-up workflow hard-coded `trend: []` in its template, which is
+    what every roll-up ever written carried. A field whose documented source does not
+    contain it is worse than an absent field, because it reads as implemented.
+
+    Recomputing matters because `pct` is not a stable scale. It meant the mean of the
+    member percentages until that was fixed, so a roll-up written before then carries a
+    number the current one cannot be compared with — the contract's own warning about
+    trending across a rubric change, realised. `summary` is raw merged counts and the
+    validator reconciles it (`total == sum(p0..p3)`), so recomputing puts the whole series
+    on today's scale by construction, and survives the next change to the scale too.
+
+    Only runs strictly older than this one count, so re-deriving an old report's trend in a
+    directory that has since grown gives the same answer it gave on the day.
+    """
+    path = Path(report)
+    here = ROLLUP_NAME_RE.match(path.name)
+    if not here:
+        return [], [f"{path.name} is not a rollup-<YYYYMMDD>-<HHMMSS>.md name, so prior "
+                    f"runs cannot be ordered against it"]
+    cutoff = here.group(1) + here.group(2)
+    notes: list[str] = []
+    points: list[tuple[str, int]] = []
+    for sibling in sorted(path.parent.glob("rollup-*.md")):
+        found = ROLLUP_NAME_RE.match(sibling.name)
+        if not found:
+            notes.append(f"skipped {sibling.name}: not a contract roll-up filename")
+            continue
+        stamp = found.group(1) + found.group(2)
+        if stamp >= cutoff:
+            continue  # itself, or a later run — a trend never holds future history
+        fm, _ = _split_frontmatter(sibling.read_text(encoding="utf-8"))
+        if not isinstance(fm, dict) or not is_rollup(fm):
+            notes.append(f"skipped {sibling.name}: does not read as a roll-up")
+            continue
+        summary = fm.get("summary")
+        if not isinstance(summary, dict) or not all(
+                isinstance(summary.get(k), int) for k in PRIORITY_KEYS):
+            notes.append(f"skipped {sibling.name}: no usable `summary` to recompute from")
+            continue
+        points.append((stamp, priority_index(summary)))
+    points.sort()
+    if len(points) > limit:
+        notes.append(f"kept the {limit} most recent of {len(points)} prior runs")
+        points = points[-limit:]
+    return [pct for _, pct in points], notes
+
 
 # A finding is a level-3 heading tagged with its priority, e.g. "### [P1] Foo".
 FINDING_RE = re.compile(r"^###\s+\[P([0-3])\]", re.MULTILINE)
@@ -636,6 +715,14 @@ def _check_rollup_health(fm: dict) -> list[str]:
             errors.append(f"rollup health {entry['auditor']!r}: 'pct' must be 0..100, or "
                           f"null with band {UNSCORED!r}")
             continue
+        if unattainable(pct):
+            # A member's `pct` is the priority index over its own counts (§4.1), and this
+            # roll-up carries no copy of those counts to check it against — so the gap is
+            # the only evidence available that the number was derived and not estimated.
+            errors.append(
+                f"rollup health {entry['auditor']!r}: {pct}% is not a score the priority "
+                f"index can produce — read it from that member's own report")
+            continue
         if entry.get("band") != band_for(pct):
             errors.append(
                 f"rollup health {entry['auditor']!r}: band is {entry.get('band')!r} but "
@@ -677,6 +764,19 @@ def _check_rollup_health(fm: dict) -> list[str]:
         errors.append(
             "rollup health 'trend' ends with this run's own 'pct'; trend holds PRIOR runs "
             "only, so the current score is not repeated in it")
+    elif len(trend) > TREND_MAX:
+        errors.append(
+            f"rollup health 'trend' holds {len(trend)} points; keep the {TREND_MAX} most "
+            f"recent prior runs (`validate_report.py --trend <report>` truncates for you) "
+            f"— a longer series is unreadable at the width the dial renders")
+    elif [t for t in trend if unattainable(t)]:
+        # Shape-checkable evidence that a point was typed rather than derived. The real
+        # check is `--trend`, which needs the directory; this one needs only the file.
+        errors.append(
+            f"rollup health 'trend' contains {[t for t in trend if unattainable(t)]}, "
+            f"which the priority index cannot produce: a run is either clean (100) or has "
+            f"a finding, and the cheapest one costs {min(INDEX_WORST.values())}. Derive the "
+            f"trend with `validate_report.py --trend <report>`; do not estimate it")
     return errors
 
 
@@ -777,6 +877,34 @@ def validate_index(path: str | Path) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
+    if argv and argv[0] == "--trend":
+        # The one check that needs the DIRECTORY, not the file. Every other rule in this
+        # module is decidable from a report alone, which is what lets one be validated in
+        # isolation, in a fixtures directory, or after its siblings have been archived or
+        # gitignored. History is not, so it is a separate mode the workflow runs inside a
+        # real `.ux/audits/` — first to obtain the value, then to confirm what it wrote.
+        rest = argv[1:]
+        if not rest:
+            print("usage: validate_report.py --trend <rollup.md> [...]", file=sys.stderr)
+            return 2
+        ok = True
+        for arg in rest:
+            trend, notes = trend_for(arg)
+            print(f"{arg}: trend: {trend}")
+            for note in notes:
+                print(f"  note: {note}")
+            path = Path(arg)
+            if not path.exists():
+                continue  # deriving before writing — there is nothing to compare yet
+            fm, _ = _split_frontmatter(path.read_text(encoding="utf-8"))
+            health = (fm or {}).get("health")
+            declared = health.get("trend") if isinstance(health, dict) else None
+            if declared is not None and list(declared) != trend:
+                ok = False
+                print(f"INVALID trend: {arg}", file=sys.stderr)
+                print(f"  - declares {list(declared)!r} but the prior runs beside it "
+                      f"derive {trend!r}", file=sys.stderr)
+        return 0 if ok else 1
     if argv and argv[0] == "--index":
         rest = argv[1:] or ["index.md"]
         ok = True
@@ -791,8 +919,8 @@ def main(argv: list[str]) -> int:
                 print(f"valid index: {arg}")
         return 0 if ok else 1
     if not argv:
-        print("usage: validate_report.py <report.md> [...]  |  --index <index.md>",
-              file=sys.stderr)
+        print("usage: validate_report.py <report.md> [...]  |  --index <index.md>  |  "
+              "--trend <rollup.md>", file=sys.stderr)
         return 2
     ok = True
     for arg in argv:

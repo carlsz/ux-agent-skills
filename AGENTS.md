@@ -196,7 +196,7 @@ shape. Know both before you touch reporting.
   demand. **The Markdown stays the source of truth**; the `.html` is never validated against or
   in place of it. Full spec: §10.6–10.7.
 
-  Three things about it are easy to break. **The brief absorbs `## Executive summary` and
+  Four things about it are easy to break. **The brief absorbs `## Executive summary` and
   `## Design health`**, so those sections render from frontmatter and are skipped in the body —
   un-skip either and the page states the same numbers twice. And **the renderer is read-tolerant
   where the validator is write-strict**: it reads `[sevN]` finding tags, `sevN:` counts, the
@@ -207,7 +207,26 @@ shape. Know both before you touch reporting.
   GitHub, because that is what the roll-up's merged top issues and a report's prioritized
   fixes link to. The two absorbed sections above keep their anchors on the blocks that
   absorbed them. Mint a scheme of your own and every deep link in the suite goes dead —
-  which is what the renderer did until it emitted no `id` at all.
+  which is what the renderer did until it emitted no `id` at all. And **the health
+  sparkline draws one more point than `health.trend` holds**: the stored field is prior
+  runs only, so the renderer appends this run's `pct` and marks it with a dot. Drop that
+  and the line stops short of today while the ring beside it shows today — a chart that
+  reads as a plateau at the exact moment the score moved.
+
+**A derived field needs a command, not a sentence.** `health.trend` is the cautionary
+case. It shipped with a documented source — `index.md`'s `Health` column — that did not
+contain the data, because index rows are appended per *auditor* and a roll-up appends none
+of its own. Nothing read it either: the workflow template hard-coded `trend: []`. So the
+field was empty in every roll-up ever written, and the one non-empty example, in this
+repo's own fixtures, was three invented numbers on a run that had no prior runs at all.
+It is now `validate_report.py --trend <report>`, which the workflow *runs* — before
+writing, to get the value, and after, to confirm it — and each point is **recomputed from
+that run's `summary`** rather than copied from its `pct`, because `pct` meant the mean of
+the member percentages until recently and a sparkline mixing two definitions shows a
+movement that never happened. It is also the one check that needs the **directory**: every
+other rule in `validate_report.py` is decidable from a single file, which is what lets a
+report be validated in isolation or after its siblings are gitignored. When you add a
+derived field, ask which command produces it. If the answer is a sentence, nothing will.
 
 **`render-report` is the suite's one non-auditor skill** — so the "adding an auditor" recipe
 above does *not* apply to it: no persona (a mechanical transform holds no point of view), no

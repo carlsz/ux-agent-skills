@@ -637,19 +637,35 @@ def _ring(pct: int, band: str, size: int = 78) -> str:
             f'font-family="Optima,Candara,system-ui">{pct}</text></svg>')
 
 
-def _trend_svg(vals: list[int], w: int = 108, h: int = 26) -> str:
-    """A sparkline of prior runs. Only the roll-up carries `trend`, and it may be empty."""
+def _trend_svg(prior: list[int], current: int, w: int = 108, h: int = 26) -> str:
+    """The health score over time: the prior runs, then this one, marked with a dot.
+
+    `health.trend` stores PRIOR runs only — the current score is `pct`, and the contract
+    rejects a series that repeats it. A chart drawn from the stored field alone would
+    still be read as ending at today, because that is what every other sparkline does:
+    the first real three-run history rendered a line ending at 67 beside a ring reading
+    90, which reads as a plateau and is the opposite of what happened. So the current
+    score is appended HERE, in the derived view. The stored field stays prior-only and
+    the picture reads the way a reader already expects to read it.
+
+    One prior run is therefore enough to draw: with today appended it is two points, and
+    two points are a direction.
+    """
+    vals = [*prior, current]
     if len(vals) < 2:
         return ""
     lo, hi = min(vals) - 4, max(vals) + 4
     span = (hi - lo) or 1
     step = w / (len(vals) - 1)
-    pts = " ".join(f"{i * step:.1f},{h - (v - lo) / span * h:.1f}" for i, v in enumerate(vals))
+    xy = [(i * step, h - (v - lo) / span * h) for i, v in enumerate(vals)]
+    pts = " ".join(f"{x:.1f},{y:.1f}" for x, y in xy)
     joined = ", ".join(str(v) for v in vals)
     return (f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" role="img" '
-            f'aria-label="Health over the previous {len(vals)} runs: {joined}">'
+            f'aria-label="Health over the last {len(vals)} runs: {joined} — this run last">'
             f'<polyline points="{pts}" fill="none" stroke="var(--teal)" stroke-width="1.6" '
-            f'opacity=".8"/></svg>')
+            f'opacity=".8"/>'
+            f'<circle cx="{xy[-1][0]:.1f}" cy="{xy[-1][1]:.1f}" r="2.4" fill="var(--teal)"/>'
+            f'</svg>')
 
 
 def _health_dial(fm: dict) -> str:
@@ -663,8 +679,9 @@ def _health_dial(fm: dict) -> str:
         return (f'<div class="ring"><div><div class="b">{html.escape(band)}</div>'
                 f'<div class="t">no gradable item was reached</div></div></div>')
     trend = [v for v in (health.get("trend") or []) if isinstance(v, int)]
-    trend_html = (f'{_trend_svg(trend)}<div class="t">previous {len(trend)} runs</div>'
-                  if len(trend) >= 2 else "")
+    before = "the run before" if len(trend) == 1 else f"the {len(trend)} runs before"
+    trend_html = (f'{_trend_svg(trend, int(pct))}'
+                  f'<div class="t">this run and {before}</div>' if trend else "")
     return (f'<div class="ring">{_ring(int(pct), band)}'
             f'<div><div class="b">{html.escape(band)}</div>'
             f'<div class="t">health score</div>{trend_html}</div></div>')

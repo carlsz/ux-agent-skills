@@ -894,8 +894,12 @@ screenshot of it is a defensible summary:
   An auditor report never shows a go/no-go: **the gate is the suite's**, derived across
   auditors, and one auditor must not appear to issue it.
 - The **health dial** — `pct` as an arc with the band beside it, plus a sparkline when the
-  roll-up carries a `trend`. A run with `band: Unscored` draws **no dial at all**, because
-  an arc at 0 and an arc at 100 both read as claims this run cannot make.
+  roll-up carries a `trend` of two or more prior runs. A run with `band: Unscored` draws
+  **no dial at all**, because an arc at 0 and an arc at 100 both read as claims this run
+  cannot make. The trend is the priority index of each prior roll-up in `.ux/audits/`,
+  **recomputed from that run's counts** rather than copied from its headline — `pct` has
+  not always meant the same thing, and a sparkline that mixes two definitions shows a
+  movement that never happened.
 - The **executive summary** as the brief's prose, and the **non-zero counts** as chips.
   Zeros are suppressed, not dimmed: four cells reading `0` crowd out the one reading `2`.
 

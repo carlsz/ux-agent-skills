@@ -616,12 +616,48 @@ def main() -> int:
             failures.append("index: run link not repointed to .html")
         failures += [f"index: {e}" for e in _self_contained(html)]
 
+    # ---- the trend sparkline: the field's only consumer, and it drew nothing for years
+    # because nothing could populate `health.trend`. Now that it can, assert it renders.
+    # The stored field holds PRIOR runs; the chart appends THIS run and dots it, because a
+    # sparkline that stops before today is read as today. Both halves are asserted: the
+    # extra point is drawn, and it is the current `pct`, not a repeat of the last prior.
+    spark = render(FIX / "rollup-20260720-100000.md")       # trend: [29, 100], pct: 88
+    if "this run and the 2 runs before" not in spark:
+        failures.append("trend: no caption saying which runs the sparkline covers")
+    marks = re.findall(r'<polyline points="([^"]+)"', spark)
+    if not marks:
+        failures.append("trend: a two-point trend drew no sparkline")
+    elif len(marks[0].split()) != 3:
+        failures.append(f"trend: sparkline has {len(marks[0].split())} points for two "
+                        f"prior runs plus this one: {marks[0]!r}")
+    if "Health over the last 3 runs: 29, 100, 88 — this run last" not in spark:
+        failures.append("trend: the sparkline's accessible label does not name its values "
+                        "and say which one is this run")
+    if spark.count("<circle") < 1 or "r=\"2.4\"" not in spark:
+        failures.append("trend: this run is not marked on the sparkline, so the line reads "
+                        "as ending at the last prior run")
+
+    # One prior run is enough: with this run appended it is two points, and two points are
+    # a direction. It is also the case the stored field most often holds.
+    lone = render(FIX / "rollup-20260716-160000.md")         # trend: [29], pct: 100
+    if "Health over the last 2 runs: 29, 100" not in lone:
+        failures.append("trend: a single prior run drew nothing, though with this run "
+                        "appended it is a two-point comparison")
+    if "this run and the run before" not in lone:
+        failures.append("trend: the one-prior-run caption is not written for one")
+    # No history is no chart — never a flat line implying a steady state nobody measured.
+    flat = render(FIX / "rollup-20260716-150000.md")         # trend: []
+    if "<polyline" in flat:
+        failures.append("trend: drew a chart for a first run with no history")
+    if 'aria-label="Health score 29 out of 100' not in flat:
+        failures.append("trend: the ring lost the current score")
+
     if failures:
         print("FAIL — render_html:")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — render_html (self-contained, deterministic, flipbook, findings, cuj banners, rollup dashboard, health)")
+    print("PASS — render_html (self-contained, deterministic, flipbook, findings, cuj banners, rollup dashboard, health, trend)")
     return 0
 
 

@@ -552,6 +552,19 @@ def check_rollup_skill() -> list[str]:
                  f"rollup skill: the go/no-go gate must name {tag.upper()}", errs)
     _require(".ux/audits" in low,
              "rollup skill: must write into .ux/audits", errs)
+    flat_body = _flatten(body)
+    # Every number on the roll-up is derived, and `trend` is the one that needs a COMMAND
+    # rather than a formula — the prior runs live in the directory, not in this file. It
+    # shipped with a documented source that held per-auditor rows and a template that
+    # hard-coded `trend: []`, so the skill must name the deriving command, not describe
+    # the intent. An instruction an agent cannot execute is how the field died the first
+    # time.
+    _require("--trend" in flat_body,
+             "rollup skill: must derive health.trend with `validate_report.py --trend`, "
+             "not by estimating it", errs)
+    _require("recomputed" in flat_body or "recompute" in flat_body,
+             "rollup skill: must say each trend point is recomputed from that run's "
+             "`summary`, since `pct` has not always meant the same thing", errs)
     _check_conformance_grading(_flatten(body), "rollup skill", errs)
     # A failed criterion graded `P2` is still reported. Lowering a priority must never
     # read as permission to drop the finding — that would turn this fix into a way of

@@ -177,7 +177,7 @@ Three native auditors plus one wrapped from **[web-quality-skills](https://githu
    health:                      # suite scorecard; trend holds PRIOR runs only
      pct: 83                    # DERIVED: the priority index over `summary` above (§4.1),
      band: Good                 # NOT the mean of `auditors` below. Write no `method:` key.
-     trend: []                  # [] when there is no history to read
+     trend: [71, 76]            # DERIVED from the prior rollup-*.md; [] on a first run
      auditors:                  # which lens found what — printed, never averaged
        - {auditor: usability, pct: 83, band: Good, unit: "Nielsen rubric"}
    ---
@@ -196,6 +196,20 @@ Three native auditors plus one wrapped from **[web-quality-skills](https://githu
    nothing; when **no** member graded anything, the roll-up's own `pct` is `null` and its
    band `Unscored`. `validate_report.py` recomputes all of this and fails a mismatch.
 
+   **`trend` is derived too — from the prior roll-ups, not from the index.** Run it; do not
+   estimate it:
+
+   ```
+   python3 scripts/validate_report.py --trend .ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md
+   ```
+
+   Before writing the file, to get the value; after, to confirm it. Each point is
+   **recomputed** from that prior run's `summary` rather than copied from its `pct`,
+   because `pct` has not always meant the same thing — it was the mean of the member
+   percentages until that was fixed, and a sparkline mixing the two scales shows a
+   movement that never happened. `[]` is correct and expected on a first run, or where
+   `.ux/audits/` is gitignored; it must never be faked to make the dial look busier.
+
    **The verdict is derived, not judged: `NO-GO` if `p0 > 0` or `p1 > 0`, else `GO`.**
    Apply the rule mechanically and put any nuance in `verdict_reason` — never invent a third
    verdict value like "GO with required fixes". A CUJ `P0` is a blocked journey and forces
@@ -211,8 +225,10 @@ Three native auditors plus one wrapped from **[web-quality-skills](https://githu
 
 7. **Self-check.** Validate every report, **the roll-up**, and the index with
    [`scripts/validate_report.py`](../../scripts/validate_report.py) — it dispatches on
-   `kind: rollup` and checks the roll-up against §9, including recomputing the verdict from
-   the merged counts — and confirm the safety
+   `kind: rollup` and checks the roll-up against §9, including recomputing the verdict and
+   `health.pct` from the merged counts. Confirm `health.trend` with the one check that needs
+   the directory rather than the file, `validate_report.py --trend <rollup>`. Then confirm
+   the safety
    invariant with [`scripts/audit_safety.py`](../../scripts/audit_safety.py) `<host-repo>`.
    It checks **both halves** of the invariant (SPEC §5.2) and exits 0 only if both
    hold: nothing changed outside `.ux/audits/`, **and** the writes you just made inside it

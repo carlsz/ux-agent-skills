@@ -586,8 +586,14 @@ rows):
 | 2026-07-15T14:30:00Z | usability | checkout flow | 0 | 1 | 1 | 0 | 83 | [report](usability-20260715-143000.md) |
 ```
 
-`Health` is the report's `health.pct` as a bare integer, so the index carries the trend the
-roll-up reads (§9). A report with no scorecard writes `—`.
+`Health` is the report's `health.pct` as a bare integer. A report with no scorecard
+writes `—`.
+
+This column is **per-auditor history**, and that is all it is. It used to be documented as
+the source of the roll-up's `trend` — but a row is appended once per *auditor* run and a
+roll-up appends none of its own, so the column holds member percentages and the suite's
+own history is not in this file. The trend is derived from the prior `rollup-*.md` files
+instead (§9).
 
 ## 8. Extending the contract for a new auditor
 
@@ -692,10 +698,40 @@ health:                      # the suite scorecard
   `Unscored` — not `0` (reads catastrophic), not `100` (reads like a clean pass).
 
   A `method:` key named the superseded computation and was read by nothing. It is gone; do
-  not write one. **`trend` holds PRIOR runs only**
-  — the current run's score is `pct`, not the last element — and it **must degrade to `[]`**
-  rather than to a broken chart: an authenticated run is advised to gitignore `.ux/audits/`
-  wholesale (see `auth-handoff.md` §6), so in those repos there is no history to read.
+  not write one.
+- **`trend` is derived from the prior `rollup-*.md` files beside this one, and each point is
+  recomputed from that run's `summary` — never copied from its `pct`.** Do not estimate it:
+
+  ```
+  python3 scripts/validate_report.py --trend .ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md
+  ```
+
+  Run it before writing the file to obtain the value, and again afterwards to confirm what
+  you wrote; it prints a `note:` for every roll-up it found and could not use, so a short
+  trend is never silently short. Ordering is by the **filename** timestamp, not mtime,
+  which a fresh checkout rewrites, and only runs strictly older than this one count — so
+  re-deriving an old report's trend in a directory that has since grown gives the same
+  answer it gave on the day. At most the eight most recent are kept; a longer series is
+  unreadable at the width the dial renders it.
+
+  **Recomputing is the point, not an implementation detail.** `pct` is not a stable scale:
+  it meant the mean of the member percentages until that was fixed, so a roll-up written
+  before then carries a number this one cannot be compared with — the warning above about
+  trending across a rubric change, realised inside the field meant to show the trend.
+  `summary` is raw merged counts and reconciles (`total == sum(p0..p3)`), so recomputing
+  puts the whole series on today's scale by construction and survives the next change too.
+
+  **`trend` holds PRIOR runs only** — the current run's score is `pct`, not the last
+  element — and it **must degrade to `[]`** rather than to a broken chart: an authenticated
+  run is advised to gitignore `.ux/audits/` wholesale (see `auth-handoff.md` §6), so in
+  those repos there is no history to read, and the first run of any suite has none either.
+
+  > **Why this one is spelled out.** `trend` shipped with a documented source —
+  > `index.md`'s `Health` column — that did not contain the data, and a workflow step whose
+  > template hard-coded `trend: []`. So every roll-up ever written carried an empty trend,
+  > and the one non-empty example in this repo's own fixtures, `[71, 76, 79]`, was on a run
+  > with no prior runs at all: three invented numbers. A field nothing can populate is
+  > worse than a missing one, because it reads as implemented.
 - `auditors_skipped` is required even when empty, and **every entry carries a `reason`**.
   The suite's rule is that a skipped auditor never reads as a clean pass; making the
   reason structural is what enforces it.
