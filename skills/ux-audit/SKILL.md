@@ -12,13 +12,13 @@ usability, accessibility, and cuj; web performance is opt-in (add `--only web-pe
 auditor writes the same schema into `.ux/audits/`, so their reports are comparable and can be
 rolled up into a single verdict.
 
-Two native auditors plus two wrapped from **[web-quality-skills](https://github.com/addyosmani/web-quality-skills)**
+Three native auditors plus one wrapped from **[web-quality-skills](https://github.com/addyosmani/web-quality-skills)**
 (the same-author companion to `agent-skills`, a coherent suite of web-quality checks):
 
 | Auditor | Source | Frameworks | Report `auditor` |
 |---------|--------|------------|------------------|
 | Usability | native `skills/usability-audit` | Nielsen / Shneiderman / AI / NPCIS | `usability` |
-| Accessibility | wrap `web-quality-skills:accessibility` | WCAG 2.2 | `accessibility` |
+| Accessibility | native `skills/accessibility-audit` | WCAG 2.2 | `accessibility` |
 | Web performance | wrap `web-quality-skills:performance` (+ `core-web-vitals`) **(opt-in — excluded from the default bundle; add via `--only web-performance` or `--all`)** | Core Web Vitals | `web-performance` |
 | Critical user journeys | native `skills/audit-cuj` **(conditional — needs `.ux/cujs/`)** | the host's own CUJ files | `cuj` |
 
@@ -96,8 +96,11 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 3. **Fan out.** Run each selected auditor against the same `target`/`--scope`:
    - **Usability** — invoke the native `usability-audit` skill; it already writes a
      contract report.
-   - **Accessibility** — invoke `web-quality-skills:accessibility`; capture its WCAG
-     findings.
+   - **Accessibility** — invoke the native `accessibility-audit` skill; it already writes
+     a contract report. (It reads `web-quality-skills:accessibility` for remediation
+     wording, but that skill is a *maker's* guide with no findings, no priorities and no
+     report shape — wrapping it directly is what this suite did until the auditor existed,
+     and it left the roll-up to improvise a persona per run.)
    - **Web performance** *(only when opted in via `--only web-performance` or `--all`)* —
      invoke `web-quality-skills:performance` (and `core-web-vitals`); capture its findings,
      respecting its metric-honesty rule (unmeasured = potential, never fabricated).
@@ -108,17 +111,36 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 4. **Normalize into the shared contract.** For each wrapped auditor, write a
    contract-conforming report at `.ux/audits/<auditor>-<YYYYMMDD>-<HHMMSS>.md` — same
    frontmatter schema, body layout, and appendix. **Map each tool's severity onto the
-   0–4 scale**:
-   - **Accessibility (WCAG):** blocker on a core flow / Level A name-role-value failure →
-     3–4; Level AA (e.g. 1.4.3 contrast) → 3; minor/AAA or edge → 2; cosmetic → 1.
-   - **Web performance:** a Core Web Vital in the "poor" band (measured) → 3; "needs
-     improvement" → 2; a structural anti-pattern with only *potential* impact → 1–2,
-     labeled potential per the metric-honesty rule.
-   - **Omit severity 0** (non-problems), same as usability.
+   `P0`-`P3` scale** (contract §4 — note the direction: `P0` is the worst):
+   - **Accessibility (WCAG):** nothing to remap — the native
+     [`accessibility-audit`](../accessibility-audit/SKILL.md) skill grades at source, by
+     **impact on the user the defect affects**, per
+     [§4's *A conformance level is not a priority*](../usability-audit/references/report-contract.md#a-conformance-level-is-not-a-priority).
+     Merge its counts as written. **Never re-grade its findings off their `A`/`AA`/`AAA`
+     level** on the way into the roll-up: the level is evidence, and mapping it onto the
+     scale — `Level AA → P1` — puts every real app past the `P1` gate and makes `GO`
+     unreachable. That mapping lived here, and this is where it has to stay gone. Every
+     failed criterion is still a finding at whatever priority it earned.
+   - **Web performance:** a Core Web Vital in the "poor" band (measured) → `P1`; "needs
+     improvement" → `P2`; a structural anti-pattern with only *potential* impact →
+     `P2`-`P3`, labeled potential per the metric-honesty rule.
+   - **Omit non-problems** (they get no tag), same as usability.
+   Each normalized report also carries a `health` scorecard in its own idiom (§4.1):
+   accessibility scores one item per WCAG criterion checked, web performance one per
+   metric measured, every item `of: 4`. **Do not grade the scorecard separately from the
+   findings** — an item's score is the P-number of the worst finding you filed against it
+   (`4` when none is), so the mapping you just did onto `P0`-`P3` decides the scorecard
+   too. The validator enforces it: the lowest item score must equal the worst priority in
+   `summary`. **`pct` is the priority index derived from `summary` (§4.1), never
+   `score / max`** — otherwise a lens that enumerates more criteria scores higher for the
+   same defects. An auditor that measured nothing gradable writes `pct: null, band:
+   Unscored` rather than a number it did not earn, and the roll-up carries that entry as
+   written (step 6).
    Set `auditor` and `frameworks` per the table above; carry the tool's evidence
    (screenshots, `file:line`, measured metrics) into the Evidence field.
-   The **native** auditors (usability, `cuj`) already emit contract reports — no external
-   remapping. **CUJ carries one exception the roll-up must respect: `total: 0` is a *pass*
+   The **native** auditors (usability, accessibility, `cuj`) already emit contract reports
+   — no external remapping; the mapping note above applies to the wrapped web-performance
+   findings and to any future wrapped member. **CUJ carries one exception the roll-up must respect: `total: 0` is a *pass*
    (every journey verified clean), not "found nothing".** Read the CUJ report's
    executive-summary counts and `frameworks` list to tell a clean pass from a run that
    verified nothing (`frameworks: [cuj-contract]` alone signals the latter), and never
@@ -127,17 +149,86 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 5. **Append the index.** Add one `.ux/audits/index.md` row per auditor run (append-only),
    exactly as a single-auditor run does.
 
-6. **Write the roll-up.** Create `.ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md`: a per-auditor
-   severity table, the auditors that ran vs. were skipped (with reasons — including a
-   CUJ run skipped for want of `.ux/cujs/`, and web performance skipped when not opted into,
-   with its opt-in reason), a merged top-issues list ordered by severity across all
-   auditors, and an overall **go/no-go verdict** (e.g. no-go if any sev4, or any auditor
-   reports a sev3 blocker — a CUJ sev4 is a blocked journey and forces no-go). A skipped CUJ
-   run, or a web-performance run not opted into, is disclosed, never scored as a pass. Link
-   to each individual report.
+6. **Write the roll-up.** Create `.ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md` to the
+   **roll-up frontmatter and body layout in
+   [report-contract.md §9](../usability-audit/references/report-contract.md#9-the-suite-roll-up-rollup-md)**
+   — read it before writing, and copy the key names exactly:
 
-7. **Self-check.** Validate every report and the index with
-   [`scripts/validate_report.py`](../../scripts/validate_report.py), and confirm the safety
+   ```yaml
+   ---
+   kind: rollup                 # exactly this — not `report:`, not `rollup: true`
+   schema: 3
+   version: <from .claude-plugin/plugin.json>
+   date: <ISO-8601 UTC>
+   target: <same target the auditors ran against>
+   scope: "<what the suite covered>"
+   verdict: GO                  # GO | NO-GO — a BARE TOKEN; prose goes below
+   verdict_reason: "<one line: why this verdict>"
+   auditors_ran: [usability, accessibility, cuj]
+   auditors_skipped:            # [] when none; every entry needs its reason
+     - auditor: web-performance
+       reason: "opt-in; run with --only web-performance or --all"
+   summary:                     # MERGED counts across every member report
+     total: 5
+     p0: 0
+     p1: 0
+     p2: 4
+     p3: 1
+   health:                      # suite scorecard; trend holds PRIOR runs only
+     pct: 83                    # DERIVED: the priority index over `summary` above (§4.1),
+     band: Good                 # NOT the mean of `auditors` below. Write no `method:` key.
+     trend: [71, 76]            # DERIVED from the prior rollup-*.md; [] on a first run
+     auditors:                  # which lens found what — printed, never averaged
+       - {auditor: usability, pct: 83, band: Good, unit: "Nielsen rubric"}
+   ---
+   ```
+
+   **`health.pct` is derived too, from the same place the verdict is.** It is the priority
+   index over the **merged** `summary` (§4.1) — the same function a member applies to its
+   own counts — and never the mean of the member percentages. Averaging them reintroduces,
+   one level up, the rubric dependence §4.1 removed: the headline would move with how the
+   findings happen to be split across auditors, so adding a member that finds nothing
+   raises suite health and moving one `P0` between lenses changes it, neither being a
+   change to the app. It also let the headline contradict the verdict beside it — the
+   fixture roll-up carrying one `P0` and two `P1`s under a `NO-GO` averaged to
+   **75% · Good** where the index reads **29% · Critical**. Carry each member's own `pct`
+   into `auditors` as written, including a `pct: null, band: Unscored` for one that graded
+   nothing; when **no** member graded anything, the roll-up's own `pct` is `null` and its
+   band `Unscored`. `validate_report.py` recomputes all of this and fails a mismatch.
+
+   **`trend` is derived too — from the prior roll-ups, not from the index.** Run it; do not
+   estimate it:
+
+   ```
+   python3 scripts/validate_report.py --trend .ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md
+   ```
+
+   Before writing the file, to get the value; after, to confirm it. Each point is
+   **recomputed** from that prior run's `summary` rather than copied from its `pct`,
+   because `pct` has not always meant the same thing — it was the mean of the member
+   percentages until that was fixed, and a sparkline mixing the two scales shows a
+   movement that never happened. `[]` is correct and expected on a first run, or where
+   `.ux/audits/` is gitignored; it must never be faked to make the dial look busier.
+
+   **The verdict is derived, not judged: `NO-GO` if `p0 > 0` or `p1 > 0`, else `GO`.**
+   Apply the rule mechanically and put any nuance in `verdict_reason` — never invent a third
+   verdict value like "GO with required fixes". A CUJ `P0` is a blocked journey and forces
+   no-go by the same rule. `validate_report.py` recomputes the verdict from `summary` and
+   fails the run on a mismatch.
+
+   The body carries the lead verdict paragraph, a per-auditor priority-and-health table, the auditors
+   that ran vs. were skipped (with reasons — including a CUJ run skipped for want of
+   `.ux/cujs/`, and web performance skipped when not opted into), a merged top-issues list
+   ordered by priority across all auditors, the verdict rationale, and `## Notes`. A skipped
+   CUJ run, or a web-performance run not opted into, is disclosed, never scored as a pass.
+   Link to each individual report.
+
+7. **Self-check.** Validate every report, **the roll-up**, and the index with
+   [`scripts/validate_report.py`](../../scripts/validate_report.py) — it dispatches on
+   `kind: rollup` and checks the roll-up against §9, including recomputing the verdict and
+   `health.pct` from the merged counts. Confirm `health.trend` with the one check that needs
+   the directory rather than the file, `validate_report.py --trend <rollup>`. Then confirm
+   the safety
    invariant with [`scripts/audit_safety.py`](../../scripts/audit_safety.py) `<host-repo>`.
    It checks **both halves** of the invariant (SPEC §5.2) and exits 0 only if both
    hold: nothing changed outside `.ux/audits/`, **and** the writes you just made inside it
@@ -170,7 +261,8 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 
 - Each selected, available auditor produced a contract-valid report under `.ux/audits/`,
   with one appended index row apiece.
-- A `rollup-<timestamp>.md` exists with the per-auditor table, skipped auditors (with
-  reasons), merged issues, and a go/no-go verdict.
+- A `rollup-<timestamp>.md` exists, conforming to §9: `kind: rollup`, a bare `GO`/`NO-GO`
+  `verdict` that matches what the merged counts derive, every skipped auditor carrying its
+  reason, plus the per-auditor table and merged issues in the body.
 - Every report validates; `audit_safety.py` exits 0 on **both** halves: nothing changed
   outside `.ux/audits/`, **and** the reports this run wrote inside it were observed.

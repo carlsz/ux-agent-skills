@@ -1,6 +1,6 @@
 ---
 name: cuj-auditor
-description: Replays a host app's stored critical user journeys step by step and reports the exact step that broke, as a severity-scored cuj report in .ux/audits. Trigger phrases include "verify my CUJs", "do the journeys still work", "journey regression check", "which step broke".
+description: Replays a host app's stored critical user journeys step by step and reports the exact step that broke, as a priority-scored cuj report in .ux/audits. Trigger phrases include "verify my CUJs", "do the journeys still work", "journey regression check", "which step broke".
 ---
 
 # CUJ Auditor
@@ -49,7 +49,7 @@ machine-readable statement of **how much this run could actually prove**:
 | Value | Claimable when |
 |-------|----------------|
 | `cuj-contract` | Always. The journey file was the rubric. A report without it isn't a CUJ verification. |
-| `task-completion` | **Only when the run actually completed — or actually failed to complete — the journey.** Live/hybrid only. It is what separates a sev4 from a sev3. |
+| `task-completion` | **Only when the run actually completed — or actually failed to complete — the journey.** Live/hybrid only. It is what separates a P0 from a P1. |
 | `success-criteria` | Only when the post-steps check actually ran. |
 
 A static run traces source; it does not complete the task and does not observe persistence.
@@ -57,40 +57,81 @@ It therefore emits `frameworks: [cuj-contract]` alone, and **cannot produce a ve
 
 ## Output format
 
-Produce a severity report conforming to the shared
+Produce a priority report conforming to the shared
 [report contract](../skills/usability-audit/references/report-contract.md), with
 `auditor: cuj`. Every finding has:
 
 1. **Issue Description** — what happened instead of what the journey said.
 2. **Framework Violation** — the journey and the step, cited exactly:
    `CUJ-001 "Add a task" — step 2 (cuj-contract); expected "…"`.
-3. **Severity (0–4)** — with a justification naming **both** stages (see below).
-4. **Evidence** — a screenshot under `.ux/audits/assets/`, a `file:line`, or repro steps.
+3. **Priority (P0–P3)** — with a justification naming **both** stages (see below).
+4. **Evidence** — a screenshot in this run's own asset directory
+   (`.ux/audits/assets/<report-stem>/`), a `file:line`, or repro steps.
 5. **Recommended Fix** — specific and actionable.
 
-### Severity: classify, then clamp
+### Priority: classify, then clamp
 
 Two stages, and every justification names both.
 
 **Stage 1 — classify the failure:**
 
-| Score | Class |
-|-------|-------|
-| 4 | **Journey blocked** — the expected outcome never occurs and the actor cannot reach `goal` by any route. No workaround. |
-| 3 | **Workaround required, or the success criteria fail while the flow appears to succeed** — the silent-data-loss class: every step passed, then it didn't persist. Rated 3, not 2, because the user *believes* they succeeded. |
-| 2 | **Observable mismatch, journey unaffected** — the goal is met, but `expect` is not what happened. |
-| 1 | **Cosmetic divergence** — label, copy, or ordering of a non-load-bearing element. |
-| 0 | **Match** — a pass. Not a finding. See below. |
+| Tag | Class |
+|-----|-------|
+| `P0` | **Journey blocked** — the expected outcome never occurs and the actor cannot reach `goal` by any route. No workaround. |
+| `P1` | **Workaround required, or the success criteria fail while the flow appears to succeed** — the silent-data-loss class: every step passed, then it didn't persist. Rated P1, not P2, because the user *believes* they succeeded. |
+| `P2` | **Observable mismatch, journey unaffected** — the goal is met, but `expect` is not what happened. |
+| `P3` | **Cosmetic divergence** — label, copy, or ordering of a non-load-bearing element. |
+| — | **Match** — a pass. Not a finding, and it carries no tag. See below. |
 
-**Stage 2 — clamp by the journey's own `criticality`:** `critical` / `high` → uncapped;
-`medium` → max 3; `low` → max 2. A blocked journey is only a *catastrophe* if the journey
-matters, and the author already ranked that. Reusing their ranking instead of substituting
-your own is the same discipline as grading against their verbatim `expect`.
+**Stage 2 — clamp by the journey's own `criticality`.** A blocked journey is only
+*blocking* if the journey matters, and the author already ranked that:
 
-### A passing step is severity 0, and severity 0 is **never as a finding**
+| `criticality` | Clamp |
+|---------------|-------|
+| `critical`, `high` | uncapped — `P0` is available |
+| `medium` | **never `P0`** — `P1` is the most severe available |
+| `low` | **never `P0` or `P1`** — `P2` is the most severe available |
 
-Passing steps are enumerated in the **Appendix**, never emitted as `[sev0]` findings. This
-is not a formatting preference — it is what makes `total: 0` mean something.
+**The clamp inverted with the scale.** Under the old 0–4 numbering this was a *ceiling*
+(`medium → max 3`); under P0–P3 the worst value is the *lowest* number, so the same rule is
+now a **floor** (`medium → no lower than P1`). Reusing the author's ranking instead of
+substituting your own is the same discipline as grading against their verbatim `expect`.
+
+### A passing step is not a finding
+
+Passing steps are enumerated in the **Appendix** and counted in the `health` scorecard —
+never emitted as findings, and they carry no priority tag. This is not a formatting
+preference; it is what makes `total: 0` mean something.
+
+### Score the journeys into `health`
+
+Grade one `health` item per step verified, `of: 4`, and **do not grade it a second time**:
+the score is the P-number of the worst finding you filed against that step — `4` when the
+step matched, `3` for a `P3`, `2` for a `P2`, `1` for a `P1`, `0` for a `P0` (§4.1). A
+verbatim step scores `4`, so a clean run reports **100% · Excellent** rather than a blank
+page.
+
+**Then one more item per journey whose `success_criteria` you evaluated**, named for the
+journey — `CUJ-001 success criteria` — scored the same way from the worst criteria finding,
+`4` when every criterion held. **A criteria failure lands on that item and never on a
+step.** This is not bookkeeping: the silent-data-loss `P1` below is a criteria failure on a
+journey whose every step passed, so without this item your worst finding has no row to
+deduct from, and the only ways to make the scorecard validate are to re-attribute the
+failure to a step that passed or to soften the `P1`. Both are lies about the evidence. If
+you did not evaluate a journey's criteria, it gets no criteria item — and you may not claim
+`success-criteria` in `frameworks` either.
+
+**This is the rule that replaced binary step scoring, and here is why.** `of: 1` made a
+step that matched its count, its plant stage and its progress bar but rendered one word of
+its hint differently score `0` — the same mark as a step that never ran at all — so a run
+whose only finding was a `P3` published **43% · Poor**. Your own grade of the divergence
+and your grade of the step have to be the same grade, because they are the same judgment.
+A run
+that verified *nothing* — static, or every journey skipped — has no gradable item: it sets
+`pct: null` and `band: Unscored` rather than a percentage it did not earn. Note that
+`pct` is the priority index over your `summary` (§4.1), not `score / max` — your step
+count must not move the headline. `0%` would read
+as catastrophic and `100%` as a clean pass; both would be lies.
 
 ## `total: 0` is your SUCCESS state
 
@@ -123,10 +164,14 @@ visible instead of silently absorbed. If everything skipped, say so in the first
   every finding **`potential — unverified`** in the Evidence field, with the reason, and
   emit `frameworks: [cuj-contract]` only.
 - **Capture the walk-through (live/hybrid).** Screenshot **every** step you replay — pass or
-  fail — with the stable name `cuj-<id>-step-<n>.png` under `.ux/audits/assets/`, **embed
-  each inline** (`![CUJ-<id> step <n>](./assets/…)`), and assemble them into a
-  `## Walkthrough` section: a per-step visual record of the journey (report contract §1, §5).
-  Static mode captures nothing, so it emits no walk-through.
+  fail — as `cuj-<id>-step-<n>.png` inside **this run's own** asset directory,
+  `.ux/audits/assets/<report-stem>/`, where `<report-stem>` is your report's filename without
+  its `.md`. **Embed each inline** (`![CUJ-<id> step <n>](./assets/<report-stem>/…)`) and
+  assemble them into a `## Walkthrough` section: a per-step visual record of the journey
+  (report contract §1, §5). The directory is per-run because your findings cite these images
+  as *evidence*: a shared one lets the next run overwrite the evidence under a report you
+  already filed, and nothing about the report would look wrong afterwards. Static mode
+  captures nothing, so it emits no walk-through.
 - **Never fabricate.** A step you did not observe is not a step that passed. If you could not
   check it, record it as skipped with the reason — a false pass is worse than an honest gap.
 - **Behind a login wall, the user signs in — never you.** The handshake is the auth handoff
@@ -147,7 +192,7 @@ visible instead of silently absorbed. If everything skipped, say so in the first
   recommend ignoring `.ux/audits/` wholesale, and prefer describing user data structurally
   ("the top invoice row") over quoting it verbatim. App-authored copy — labels, errors,
   placeholders — you still quote exactly; that is the evidence.
-- **A skip is not a finding**, and never a sev4. Failing to establish the starting state is
+- **A skip is not a finding**, and never a P0. Failing to establish the starting state is
   "couldn't run this", not "the journey is broken". Keeping those apart is the entire reason
   `preconditions` are not step 0.
 - **Report coverage honestly.** The Appendix names every step not observed and every journey

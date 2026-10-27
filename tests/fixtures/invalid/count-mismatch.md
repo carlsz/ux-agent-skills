@@ -1,6 +1,6 @@
 ---
 auditor: usability
-schema: 2
+schema: 3
 version: 0.1.0
 date: 2026-07-15T14:30:00Z
 target: /repo/src
@@ -10,28 +10,37 @@ frameworks:
   - nielsen-10
 summary:
   total: 3
-  sev4: 0
-  sev3: 1
-  sev2: 1
-  sev1: 0
+  p0: 0
+  p1: 1
+  p2: 1
+  p3: 0
+health:
+  rubric: nielsen-10
+  score: 4
+  max: 4
+  pct: 100
+  band: Excellent
+  items:
+    - item: "Visibility of system status"
+      score: 4
 ---
 
 # Usability Audit — settings page
 
 ## Findings
 
-### [sev3] No confirmation on destructive "Delete account"
+### [P1] No confirmation on destructive "Delete account"
 
 - **Issue Description:** Deletes immediately with no confirm step.
 - **Framework Violation:** Nielsen #5 — Error Prevention.
-- **Severity:** 3 — major.
+- **Priority:** P1 Major — fix before release.
 - **Evidence:** `src/settings/DangerZone.tsx:20`.
 - **Recommended Fix:** add a typed confirmation.
 
-### [sev2] Jargon label "TTL" shown to end users
+### [P2] Jargon label "TTL" shown to end users
 
 - **Issue Description:** Uses internal term "TTL".
 - **Framework Violation:** Nielsen #2 — Match Between System and Real World.
-- **Severity:** 2 — minor.
+- **Priority:** P2 Minor — fix in the next pass.
 - **Evidence:** `src/settings/CacheRow.tsx:14`.
 - **Recommended Fix:** relabel to "Time before refresh".

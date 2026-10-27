@@ -1,6 +1,6 @@
 ---
 name: usability-audit
-description: Run an expert heuristic usability evaluation of a host app and write a severity-scored report to .ux/audits. Use for "usability audit", "heuristic evaluation", "UX audit", or "usability review".
+description: Run an expert heuristic usability evaluation of a host app and write a priority-scored report to .ux/audits. Use for "usability audit", "heuristic evaluation", "UX audit", or "usability review".
 ---
 
 # Usability Audit
@@ -17,7 +17,7 @@ one issue, one finding, attributed to its primary framework (see step 4).
 
 **Evaluation modes:** `static` (read source), `live` (drive the running app in a
 browser), and `hybrid` (both). The modes differ only in how evidence is gathered — the
-frameworks, severity rubric, and report format are identical. Mode is auto-selected by
+frameworks, priority rubric, and report format are identical. Mode is auto-selected by
 default (see step 1); `--mode` forces one.
 
 ---
@@ -70,11 +70,13 @@ default (see step 1); `--mode` forces one.
    starting or restarting a dev server and before navigating the browser to any URL — do
    not launch a server or navigate unprompted.
    - **Navigate** to the target URL and walk the in-scope flow step by step.
-   - **Screenshot** each key state (initial, mid-flow, success, error, empty) and save the
-     images under `.ux/audits/assets/` with the stable name
-     `usability-<scope-slug>-<state>.png` (per the report contract's asset-naming rule, so a
-     re-run overwrites rather than accumulates). Embed them inline (`![alt](./assets/…)`) —
-     in findings for evidence, and assembled into the `## Walkthrough` section (step 6).
+   - **Screenshot** each key state (initial, mid-flow, success, error, empty) and save each
+     as `usability-<scope-slug>-<state>.png` inside **this run's own** asset directory,
+     `.ux/audits/assets/<report-stem>/` — the report filename you will write in step 6
+     without its `.md`, so the images and the report that cites them share one lifecycle and
+     no later run can overwrite them (report contract §1). Embed them inline
+     (`![alt](./assets/<report-stem>/…)`) — in findings for evidence, and assembled into the
+     `## Walkthrough` section (step 6).
    - **Exercise** real interactions — submit forms, trigger errors, click destructive
      actions — and observe the actual response and timing.
    - **Read the accessibility / DOM tree** to confirm labels, roles, and focus order.
@@ -97,10 +99,10 @@ default (see step 1); `--mode` forces one.
    often surfaces under several (e.g. missing feedback = Nielsen #1 = Shneiderman #3 =
    NPCIS Interaction). Merge those into **one finding**, attributed to the **primary**
    framework, noting the corroborating ones in the Framework Violation field — never file
-   a defect four times. Then apply the severity rubric from the contract (**omit severity
+   a defect four times. Then apply the priority rubric from the contract (**omit non-problems
    0**) and capture the five fields per finding: Issue Description, Framework Violation
-   (primary + corroborating), Severity, Evidence, Recommended Fix. Group findings by
-   framework in the report body if it aids readability; the severity ordering in the
+   (primary + corroborating), Priority, Evidence, Recommended Fix. Group findings by
+   framework in the report body if it aids readability; the priority ordering in the
    prioritized-fix list still governs.
 
 5. **Apply the render-vs-source honesty rule.** A claim about what a user *perceives at
@@ -113,8 +115,9 @@ default (see step 1); `--mode` forces one.
      behavior as fact. If something couldn't be checked, record it as skipped with the
      reason — a false pass is worse than an honest gap.
 
-6. **Write the report.** Create `.ux/`, `.ux/audits/`, and `.ux/audits/assets/` in the
-   host repo if absent. Write `.ux/audits/usability-<YYYYMMDD>-<HHMMSS>.md` (UTC clock)
+6. **Write the report.** Create `.ux/`, `.ux/audits/`, and this run's
+   `.ux/audits/assets/<report-stem>/` in the host repo if absent. Write
+   `.ux/audits/usability-<YYYYMMDD>-<HHMMSS>.md` (UTC clock)
    with the frontmatter schema, executive summary, prioritized fixes, findings, and an
    appendix. The appendix records the `mode` used, the frameworks applied, and — honestly
    — everything in scope you did **not** inspect. In **live/hybrid** mode, add a
@@ -125,11 +128,12 @@ default (see step 1); `--mode` forces one.
 7. **Append to the index.** Add one row for this run to `.ux/audits/index.md` — create the
    file with the contract's header if it doesn't exist. The index is **append-only**: add
    your row, never rewrite or reorder prior rows (they may belong to earlier runs or other
-   auditors). The row records date, auditor, scope, and the four severity counts, linking
+   auditors). The row records date, auditor, scope, the four priority counts and the
+   health percentage, linking
    to the report file.
 
 8. **Self-check before finishing.** Ensure `summary` counts reconcile with the findings in
-   the body and no `[sev0]` appears. Validate the report and index with
+   the body and no tag outside `P0`-`P3` appears. Validate the report and index with
    [`scripts/validate_report.py`](../../scripts/validate_report.py) — `validate_report.py
    <report>` and `validate_report.py --index .ux/audits/index.md`. Then confirm the safety
    invariant with [`scripts/audit_safety.py`](../../scripts/audit_safety.py)
@@ -179,13 +183,25 @@ default (see step 1); `--mode` forces one.
 - A timestamped report exists under `.ux/audits/` and validates against the contract.
 - One row was appended to `.ux/audits/index.md` (created if absent), with no prior rows
   rewritten.
-- Every reported finding has a framework citation (primary + any corroborating), a 0–4
-  severity, evidence, and a fix, with no issue filed under more than one finding.
+- Every reported finding has a framework citation (primary + any corroborating), a
+  `P0`-`P3` priority with its action, evidence, and a fix, with no issue filed under more
+  than one finding.
+- The `health` scorecard grades every heuristic in the rubric — including the ones that
+  passed — **plus one item per finding whose primary attribution falls outside the rubric
+  lens** (`Shneiderman #7 — locus of control`, `NPCIS — Strategy`), so no finding is
+  invisible and none has to be re-attributed to satisfy the floor (§4.1) —
+  **deriving each score from the findings rather than judging it a second time**
+  (§4.1: an item scores the P-number of the worst finding citing it, `4` when none does,
+  so the lowest item score equals the worst priority in `summary`), with a `note` on each
+  marked-down or n/a item naming the finding behind it. `score`/`max` reconcile with its
+  own items; **`pct` is the priority index over `summary`, not `score / max`** (§4.1),
+  so the headline means the same thing whatever size rubric the lens happens to have.
 - Runtime-perception findings are `verified` (live) or `potential — unverified` (static),
   matching the mode actually used.
-- Live-mode screenshots are saved under `.ux/audits/assets/` with their stable names,
+- Live-mode screenshots are saved under this run's own `.ux/audits/assets/<report-stem>/`,
   embedded inline in findings, and assembled into a `## Walkthrough` section (omitted in
-  static mode).
+  static mode). `validate_report.py` derives that directory from the report's filename, so an
+  embed pointing at another run's captures fails the report.
 - The appendix names all in-scope areas that were not inspected.
 - `audit_safety.py` exits 0 on **both** halves: nothing changed outside `.ux/audits/`,
   **and** the writes this run made inside it were observed and listed. (`git status` alone is

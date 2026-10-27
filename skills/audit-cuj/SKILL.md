@@ -45,7 +45,7 @@ one requested.
 **Before you write anything**, record what was already dirty:
 
 ```
-python3 scripts/audit_safety.py <host-repo> --snapshot > /tmp/ux-baseline.json
+python3 scripts/audit_safety.py <host-repo> --snapshot
 ```
 
 Git can tell you the tree differs from HEAD; it cannot tell you *who* made it differ. You
@@ -53,6 +53,11 @@ are most often run on a repo that is dirty **before you start** — "did my refa
 journey?" means the refactor is uncommitted, by definition. Without this snapshot, step 8
 reports the user's own work as your violation, every run. A check that cries wolf gets muted,
 and a muted check is a deleted one.
+
+**Do not redirect it to a file you pick.** The command saves the baseline itself, under a
+path derived from the host repo, and step 8 reads it back with `--baseline auto` — so
+neither step names a path and the two cannot disagree about one. Shell state does not
+survive between your steps anyway: a variable set here is gone by then.
 
 Then read `.ux/cujs/` in the host repo and apply `--cuj`. Record the **selected set** now: it
 is the denominator for every count you report later, and it never shrinks.
@@ -133,7 +138,7 @@ and, if a wall was met, the handoff outcome recorded.
 ### 4. Establish each journey's preconditions — the precondition ladder
 
 `preconditions` say what must already be **true**; they are not steps. This is what lets a run
-say *"skipped, `precondition unmet`"* honestly instead of reporting a severity-4 catastrophe
+say *"skipped, `precondition unmet`"* honestly instead of reporting a P0 blocker
 for what is really "couldn't run this".
 
 Walk the ladder in order. Stop at the first **rung** that succeeds, and record every rung you
@@ -190,7 +195,7 @@ and littering.
 reach their own starting state through the very flow they exist to test — CUJ-001's
 precondition is *"at least one existing task"*, and add-a-task is what CUJ-001 tests. Such a
 precondition is **self-referential**, and under a naive ladder, breaking add-task would turn
-CUJ-001 into a *skip* and the severity-4 would silently disappear.
+CUJ-001 into a *skip* and the P0 would silently disappear.
 
 So: **a self-referential precondition is never a skip.** Navigate to a bare `entry_point`,
 note the unmet precondition in the Appendix, run the steps, and grade normally — adding
@@ -207,15 +212,17 @@ named cause and its attempted rungs recorded.
 ### 5. Replay the steps in order
 
 Walk `steps` in `n` order against the app. For each, record the **verbatim** `expect`, what
-you actually observed, and evidence — a screenshot under `.ux/audits/assets/`, a `file:line`,
+you actually observed, and evidence — a screenshot in this run's own asset directory
+(`.ux/audits/assets/<report-stem>/`), a `file:line`,
 or repro steps. A step marked pass with no evidence is an assertion, not a verification.
 
 In **live/hybrid** mode, screenshot **every** step you replay — pass or fail — not only the
 one that broke: the passing steps are what turn the captures into a visual walk-through
-(step 7). Save each with the stable name `cuj-<id>-step-<n>.png` under `.ux/audits/assets/`
-(and criteria/other evidence as `cuj-<id>-<slug>.png`, e.g. `cuj-001-after-reload.png`).
-Stable names mean a re-run overwrites rather than accumulates — see the report contract's
-asset-naming rule.
+(step 7). Save each as `cuj-<id>-step-<n>.png` inside **this run's own** asset directory —
+`.ux/audits/assets/<report-stem>/`, the report filename you will write in step 6 without its
+`.md` — and criteria/other evidence as `cuj-<id>-<slug>.png` (e.g. `cuj-001-after-reload.png`)
+beside it. One directory per run: the names only have to be unique within it, and no later
+run can overwrite what this report cites. See the report contract's asset-naming rule.
 
 Run **setup journeys before the journeys that depend on them**. A finding discovered while
 running a setup journey outside the selection is still reported — never discard a real
@@ -232,7 +239,7 @@ passes.
 Criteria are evaluated **after** the journey completes, once, and they are not the last step's
 `expect`. A journey can pass every step and still fail here: the row appears, the user
 believes they succeeded, and it is gone after a reload. That class is invisible if you skip
-this, and it grades **3, not 2** (step 7).
+this, and it grades **`P1`, not `P2`** (step 7).
 
 **An absence criterion needs a non-empty baseline.** A criterion like *"'Buy milk' is absent
 from the active list after a reload"* is **vacuously true** when 'Buy milk' was never there —
@@ -246,14 +253,20 @@ baseline that makes the score falsifiable.
 
 ### 7. Grade, then write one report per run
 
-Grade each failure in two stages, naming **both** in the justification: classify (4 blocked /
-3 workaround-or-criteria-fail / 2 observable mismatch / 1 cosmetic / 0 match), then **clamp**
-by the journey's own `criticality` — `critical`/`high` uncapped, `medium` max 3, `low` max 2.
-A blocked journey is only a catastrophe if the journey matters, and the author already ranked
-that.
+Grade each failure in two stages, naming **both** in the justification: classify (`P0`
+blocked / `P1` workaround-or-criteria-fail / `P2` observable mismatch / `P3` cosmetic / match
+→ omit), then **clamp** by the journey's own `criticality` — `critical`/`high` uncapped,
+`medium` **never `P0`**, `low` **never `P0` or `P1`**. A blocked journey is only *blocking* if
+the journey matters, and the author already ranked that.
 
-A **match is severity 0, and severity 0 is never a finding** — passing steps are enumerated in
-the Appendix. And **a skip is not a finding** either: it carries no severity at all.
+**The clamp is a floor, not a ceiling.** `P0` is the worst value and the lowest number, the
+reverse of the 0–4 scale this replaced, so the clamp raises the tag's floor rather than
+capping it. Writing it as "`medium` max `P1`" inverts the rule and escalates exactly the
+journeys the author marked least important.
+
+A **match is not a finding and carries no priority tag** — passing steps are enumerated in
+the Appendix and counted in the `health` scorecard. And **a skip is not a finding** either:
+it carries no priority at all.
 
 **On a cascade, do not open a second finding.** When CUJ-002 was skipped because CUJ-001 broke,
 the bug is already reported against CUJ-001 — CUJ-002 reports
@@ -294,7 +307,8 @@ and which rung established it; setup journeys run outside the selection; and
 **In live/hybrid mode, assemble the step captures into a `## Walkthrough` section** (report
 contract §5), after `## Findings` and before `## Appendix`. One `### Step <n> — <action>` per
 step in `n` order, each embedding its screenshot inline —
-`![CUJ-<id> step <n>](./assets/cuj-<id>-step-<n>.png)` — with a one-line expected-vs-observed.
+`![CUJ-<id> step <n>](./assets/<report-stem>/cuj-<id>-step-<n>.png)` — with a one-line
+expected-vs-observed.
 This is the visual walk-through of the journey; a bare path is not enough, the embed must
 render. Omit the section entirely in static mode (nothing was captured).
 
@@ -319,7 +333,7 @@ check below is unaffected. (Also available on demand via `/ux-review`.)
 ### 8. Confirm your footprint
 
 ```
-python3 scripts/audit_safety.py <host-repo> --baseline /tmp/ux-baseline.json
+python3 scripts/audit_safety.py <host-repo> --baseline auto
 ```
 
 The **default `audit` profile**, deliberately. You are an auditor: `.ux/audits/` is the only
@@ -327,7 +341,9 @@ place you write. `.ux/cujs/` and `SPEC.md` are **violations** for this skill eve
 `/ux-spec` may write them — that asymmetry is the mechanical form of "never repair the journey
 you are grading". Show the real output.
 
-Pass step 1's baseline so this measures **your** footprint rather than the state of the repo
+`auto` is the literal — it resolves to the baseline step 1 saved for *this* host repo, so
+a second audit running beside yours cannot hand you its tree by mistake. Passing step 1's
+baseline is what makes this measure **your** footprint rather than the state of the repo
 you walked into. The baseline forgives pre-existing dirt only while its bytes are unchanged —
 so if you touched a file that was already modified, this still catches you, which is the point.
 
@@ -370,11 +386,18 @@ work as your violation, and do not quietly dismiss a real one as "probably their
   self-referential, or skipped with a named cause.
 - Every step has a verdict backed by evidence; unobserved steps are listed as not observed.
 - `success_criteria` were scored separately, and every absence criterion has a baseline.
-- Every finding names its journey and step, and its justification names both severity stages.
+- Every finding names its journey and step, and its justification names both priority stages.
+- Every journey whose `success_criteria` were evaluated carries its own
+  `CUJ-<id> success criteria` item, and a criteria failure is scored there rather than
+  against a step that passed (§4.1).
+- Each step's `health` item scores the P-number of the worst finding against that step
+  (`4` for a verbatim match), `of: 4` — not a binary pass/fail, which marked a step that
+  diverged by one word of copy the same `0` as a step that never ran.
 - One report per run under `.ux/audits/`, validating against the report contract, with an
   index row appended.
-- In live/hybrid mode, each replayed step was screenshot with its stable name and the
-  captures were assembled into a `## Walkthrough` section (omitted in static mode).
+- In live/hybrid mode, each replayed step was screenshot into this run's own
+  `.ux/audits/assets/<report-stem>/` directory and the captures were assembled into a
+  `## Walkthrough` section (omitted in static mode).
 - The executive summary leads with `P/N journeys passed, S skipped, M of T steps verified`,
   where `N` is the journeys selected.
 - `frameworks` claims only what the run proved.

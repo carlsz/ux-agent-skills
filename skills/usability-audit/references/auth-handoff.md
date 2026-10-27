@@ -59,7 +59,8 @@ do not proceed on silence. One interruption, and it must carry all of:
 1. **The wall you observed**, verbatim.
 2. **What it unblocks** — the journey ids and criticality, or the scope.
 3. **The hygiene ask**: *use a throwaway or seeded account, not production* — with the
-   reason, that every step is about to be screenshotted into `.ux/audits/assets/`.
+   reason, that every step is about to be screenshotted into `.ux/audits/assets/`
+   (this run's own subdirectory there, which does nothing to narrow the exposure).
 4. **The artifact posture** for this repo (§6), including the `.gitignore` line and the
    fact that **you cannot apply it yourself**.
 5. **The way out** — declining is a first-class answer that produces an honest skip, not a

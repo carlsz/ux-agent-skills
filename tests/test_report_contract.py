@@ -8,15 +8,55 @@ conforming report passes while known-malformed reports fail.
 
 Run: `python3 tests/test_report_contract.py` (exit 0 = pass, 1 = fail).
 """
+import contextlib
+import io
+import os
+import re
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from validate_report import validate, validate_index  # noqa: E402
+import validate_report  # noqa: E402
+from validate_report import (PRIORITY_KEYS, TREND_MAX, derive_verdict,  # noqa: E402
+                             priority_index, trend_for, unattainable, validate,
+                             validate_index)
 
 FIXTURES = ROOT / "tests" / "fixtures"
+
+
+def _frontmatter(path: Path) -> dict:
+    """The report's frontmatter as a mapping ({} when it does not parse)."""
+    fm, _ = validate_report._split_frontmatter(path.read_text(encoding="utf-8"))
+    return fm if isinstance(fm, dict) else {}
+
+
+def _flat(text: str) -> str:
+    """Collapse hard-wrapped prose (and blockquote markers) so probes match content."""
+    return re.sub(r"\s+", " ", text.replace("> ", " "))
+
+
+def _trend_cli(report: Path) -> int:
+    """`validate_report.py --trend <report>`, through main() so an unwired mode fails."""
+    sink = io.StringIO()
+    with contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
+        return validate_report.main(["--trend", str(report)])
+
+
+def _mini_rollup(*, p0: int = 0, p1: int = 0, p2: int = 0, p3: int = 0,
+                 trend: str | None = None) -> str:
+    """The least a file needs to count as a prior run: `kind: rollup` plus merged counts.
+
+    `trend_for` recomputes from `summary` and never reads `pct`, so these carry none —
+    which is also the point being tested.
+    """
+    extra = f"  trend: {trend}\n" if trend is not None else ""
+    return ("---\nkind: rollup\nschema: 3\n"
+            f"summary:\n  total: {p0 + p1 + p2 + p3}\n"
+            f"  p0: {p0}\n  p1: {p1}\n  p2: {p2}\n  p3: {p3}\n"
+            f"health:\n{extra}---\n\n# prior run\n")
 
 
 def _expect_valid(path: Path) -> list[str]:
@@ -51,6 +91,108 @@ def _expect_invalid_index(path: Path, needle: str) -> list[str]:
     return []
 
 
+
+CONTRACT = ROOT / "skills" / "usability-audit" / "references" / "report-contract.md"
+
+
+def _fenced_blocks(text: str) -> list[str]:
+    """Every ```-fenced block body in `text`, outermost fences only."""
+    blocks, cur = [], None
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            if cur is None:
+                cur = []
+            else:
+                blocks.append("\n".join(cur))
+                cur = None
+            continue
+        if cur is not None:
+            cur.append(line)
+    return blocks
+
+
+def _check_contract_examples() -> list[str]:
+    """The contract's OWN examples must obey the contract.
+
+    This exists because five of them stopped obeying it and nothing noticed. Two semantic
+    changes landed without their examples following: `pct` became a priority index while
+    the §4.1 example kept printing a `score / max` number, and assets became run-scoped
+    while the §5 walkthrough examples kept their flat paths. Both produced a document that
+    reads as authoritative and teaches a report the validator rejects — and an auditor
+    copying an example is the single most likely thing an auditor does.
+
+    The contract itself records why this matters, in the `version` field's note: an auditor
+    once copied the literal `0.1.0` from an example and "did exactly what it was told; the
+    instruction was the bug". That lesson was written down and then not applied to the
+    examples around it.
+
+    Three probes, each one a defect a real run hit:
+
+    1. Every image embed is run-scoped. A flat `./assets/<name>.png` is what §1 forbids.
+    2. The prescriptive `score / max` formula for `pct` appears nowhere. Prose that
+       *negates* it ("why not `score / max`") is the point and stays legal; it is the
+       formula written as an instruction that sent a run to a rejected report — and, on a
+       narrow rubric, to a different band.
+    3. The §4.1 health example's `pct` equals the priority index over the §3 `summary`
+       example. Scoped to the AUDITOR health block (the one with a `rubric:`), because the
+       §9 roll-up's `pct` is a mean of its members and obeys a different rule.
+
+    Probe 3 assumes one `summary:` example and one `rubric:`-bearing `health:` example. Add
+    a second and this needs to pair them deliberately rather than by document order.
+    """
+    import re
+
+    if not CONTRACT.exists():
+        return [f"missing the contract: {CONTRACT}"]
+    text = CONTRACT.read_text(encoding="utf-8")
+    errors: list[str] = []
+
+    # 1. Run-scoped embeds.
+    for path in (m.group(1).strip() for m in re.finditer(r"!\[[^\]]*\]\(([^)]+)\)", text)):
+        rel = path[2:] if path.startswith("./") else path
+        if not rel.startswith("assets/"):
+            errors.append(f"contract example embeds a non-./assets/ path: {path!r}")
+        elif rel.count("/") < 2:
+            errors.append(
+                f"contract example embeds a FLAT asset path: {path!r} — §1 requires "
+                f"./assets/<report-stem>/<name>, and the validator rejects this")
+
+    # 2. No prescriptive score/max formula for pct.
+    if "round(100 * score / max)" in text:
+        errors.append(
+            "contract still prescribes `round(100 * score / max)` for `pct`; §4.1 makes it "
+            "the priority index over `summary`, and the validator enforces that")
+
+    # 3. The example numbers agree with the rule.
+    blocks = _fenced_blocks(text)
+    summaries = [b for b in blocks if re.search(r"^\s*summary:", b, re.MULTILINE)]
+    healths = [b for b in blocks
+               if re.search(r"^\s*rubric:", b, re.MULTILINE)
+               and re.search(r"^\s*pct:", b, re.MULTILINE)]
+    if not summaries:
+        errors.append("contract has no `summary:` example to check `pct` against")
+    elif not healths:
+        errors.append("contract has no auditor `health:` example (one with a `rubric:`)")
+    else:
+        counts = {}
+        for key in PRIORITY_KEYS:
+            m = re.search(rf"^\s*{key}:\s*(\d+)", summaries[0], re.MULTILINE)
+            counts[key] = int(m.group(1)) if m else 0
+        shown = int(re.search(r"^\s*pct:\s*(\d+)", healths[0], re.MULTILINE).group(1))
+        want = priority_index(counts)
+        if shown != want:
+            errors.append(
+                f"contract's health example prints pct: {shown}, but the priority index "
+                f"over its own summary example ({counts}) is {want} — copying the example "
+                f"produces a report the validator rejects")
+
+    # The bundle's default members are not "future".
+    if "future accessibility" in text:
+        errors.append("contract still calls accessibility 'future'; it is a default member "
+                      "of the /ux-audit bundle")
+    return errors
+
+
 def main() -> int:
     failures: list[str] = []
 
@@ -74,7 +216,12 @@ def main() -> int:
     failures += _expect_valid(FIXTURES / "valid" / "cuj-20260716-140000.md")
 
     # Each malformed report must be rejected for the right reason.
-    failures += _expect_invalid(FIXTURES / "invalid" / "sev0-present.md", "sev0")
+    # Schema 3 inverted the old `sev0` rule. The scale used to have no zero, so a `[sev0]`
+    # heading was the error; it now STARTS at zero, so the two failures worth catching are
+    # a tag above the top (P4) and frontmatter still counting on the superseded scale.
+    failures += _expect_invalid(FIXTURES / "invalid" / "priority-out-of-range.md", "[P4]")
+    failures += _expect_invalid(FIXTURES / "invalid" / "stale-severity-scale.md",
+                                "superseded severity scale")
     failures += _expect_invalid(FIXTURES / "invalid" / "count-mismatch.md", "summary")
     failures += _expect_invalid(FIXTURES / "invalid" / "missing-key.md", "auditor")
     # Coverage honesty: a report with no appendix / not-inspected section is rejected.
@@ -89,7 +236,441 @@ def main() -> int:
     # whose image is an external URL (or any non-`./assets/` path) is rejected — the light
     # check that keeps the walk-through inside the auditor's write boundary.
     failures += _expect_invalid(FIXTURES / "invalid" / "walkthrough-bad-path.md",
-                                "walkthrough image path")
+                                "image path must be relative")
+
+    # --- assets belong to the run that captured them (§1) ---------------------------------
+    # Assets live in `./assets/<report-stem>/`, a directory DERIVED from the report's own
+    # filename — which is the only reason this is checkable at all. The probe changes nothing
+    # but the name of the file: identical bytes validate under the name whose stem matches
+    # their embeds and are rejected under any other. Flat `assets/` names (the earlier
+    # layout) carried no run identity, so a re-run's `cuj-001-step-1.png` overwrote the image
+    # a kept report embedded — every path still resolved, so an existence check saw nothing
+    # wrong, and the HTML companion then base64-welded the newer screenshot into the older
+    # report. Only the filename can tell those apart.
+    _cuj = FIXTURES / "valid" / "cuj-20260716-120000.md"
+    _body = _cuj.read_text(encoding="utf-8")
+    with tempfile.TemporaryDirectory() as _d:
+        _same = Path(_d) / _cuj.name
+        _same.write_text(_body, encoding="utf-8")
+        failures += _expect_valid(_same)
+        # One run earlier, same bytes. Every embed now points into a sibling run's directory.
+        _other = Path(_d) / "cuj-20260716-110000.md"
+        _other.write_text(_body, encoding="utf-8")
+        failures += _expect_invalid(_other, "run's own asset directory")
+    # The rule covers the WHOLE body, not just `## Walkthrough` — a finding's `Evidence:`
+    # embed is evidence in the strictest sense. The usability fixture cites two of its
+    # screenshots inside findings, so a walkthrough-only check would have let those through.
+    _use = FIXTURES / "valid" / "usability-20260715-143000.md"
+    _mangled = _use.read_text(encoding="utf-8").replace(
+        "live capture ![place order idle](./assets/usability-20260715-143000/",
+        "live capture ![place order idle](./assets/usability-20260101-000000/", 1)
+    with tempfile.TemporaryDirectory() as _d:
+        _p = Path(_d) / _use.name
+        _p.write_text(_mangled, encoding="utf-8")
+        failures += _expect_invalid(_p, "run's own asset directory")
+
+    # --- the suite roll-up (§9) ----------------------------------------------------------
+    # A roll-up is a SIBLING document type, not an auditor report: no `auditor`, no `mode`,
+    # no `frameworks`, no finding blocks, `## Notes` instead of `## Appendix`. It must
+    # validate through its own path rather than being rejected for the keys it correctly
+    # lacks — `validate()` dispatches on the `kind: rollup` discriminator.
+    failures += _expect_valid(FIXTURES / "valid" / "rollup-20260716-150000.md")
+    # ...and the GO case, which also carries three skipped auditors each with its reason.
+    failures += _expect_valid(FIXTURES / "valid" / "rollup-20260716-160000.md")
+
+    # The discriminator is `kind: rollup` and nothing else. `report: rollup` is READ as a
+    # roll-up so historical files still render (see test_render_html), but writing one is a
+    # violation — this fixture is what keeps "tolerated on read" from becoming "allowed".
+    failures += _expect_invalid(FIXTURES / "invalid" / "rollup-legacy-kind.md",
+                                "kind: rollup")
+    # `verdict` is a bare token; prose belongs in `verdict_reason`. This is the shape that
+    # made every real roll-up render as a red NO-GO: the renderer tests this value, and
+    # "GO — all journeys pass" equals neither verdict.
+    failures += _expect_invalid(FIXTURES / "invalid" / "rollup-verdict-prose.md", "verdict")
+    # The gate is mechanical: NO-GO iff p0 or p1 is non-zero. A roll-up that declares GO
+    # over a P1 is rejected rather than left to the auditor's judgment — two real runs
+    # reached opposite verdicts from identical counts before this rule existed.
+    failures += _expect_invalid(FIXTURES / "invalid" / "rollup-verdict-mismatch.md",
+                                "derive")
+    # A skipped auditor without a reason reads as a clean pass; the reason is structural.
+    failures += _expect_invalid(FIXTURES / "invalid" / "rollup-skip-no-reason.md", "reason")
+
+    # --- the health scorecard (§4.1) ------------------------------------------------------
+    # `score`, `max`, `pct` and `band` are DERIVED, so the headline is checked against the
+    # rows it is made of. A number nobody can reconcile with its items is the kind of
+    # unfalsifiable claim this suite exists to avoid.
+    failures += _expect_invalid(FIXTURES / "invalid" / "health-derived-mismatch.md",
+                                "its items derive")
+    # A weak score is an assertion until it says what it is based on — the same rule as a
+    # skipped auditor needing a reason.
+    failures += _expect_invalid(FIXTURES / "invalid" / "health-unexplained-low.md", "note")
+    # --- the findings floor (§4.1) --------------------------------------------------------
+    # An item's score IS the P-number of the worst finding against it, so the scorecard and
+    # the findings are two views of one judgment. Both directions have to be enforced, and
+    # a real run failed each of them:
+    #   * a scorecard that outruns its findings — two `P0`s filed, 70% `Good` published;
+    #   * a scorecard that sinks below them — one cosmetic `P3`, four steps marked `0`,
+    #     43% `Poor` published over a product whose journeys all completed.
+    # The second is the one that made the dial read backwards against severity, which is
+    # worse than a number being merely wrong: a reader who trusts it concludes the opposite
+    # of the truth.
+    failures += _expect_invalid(FIXTURES / "invalid" / "health-floor-unreached.md",
+                                "has to land on one of them")
+    failures += _expect_invalid(FIXTURES / "invalid" / "health-below-floor.md",
+                                "lowest item score must be 3")
+
+    # --- a `success_criteria` failure needs an item of its own (§4.1) ---------------------
+    # The `cuj` auditor's proudest failure class is the silent-data-loss `P1`: every step
+    # matched, and then the data did not persist. `success_criteria` are explicitly NOT
+    # steps — they are evaluated once, after the journey completes — so while items were
+    # steps only, that report was UNWRITABLE. The floor demanded an item at 1 and no step
+    # had failed, and all three ways out were falsehoods: invent a non-step item,
+    # re-attribute the failure to a step that passed, or soften the P1.
+    #
+    # The suite shipped the second one. THIS fixture used to score `CUJ-001 step 2` a `1`
+    # for a finding whose Framework Violation field reads `success-criteria` and whose text
+    # says "Steps 1 and 2 both passed". So asserting it validates is not enough — validity
+    # is exactly what the misattribution bought. The ATTRIBUTION is what this pins.
+    _cuj = (FIXTURES / "valid" / "cuj-20260716-120000.md").read_text(encoding="utf-8")
+    _items = re.findall(r'- item: "([^"]+)"\n\s+score: (\d+|null)', _cuj)
+    if not _items:
+        failures.append("criteria-item probe: could not parse the cuj fixture's items")
+    else:
+        _crit = [(n, v) for n, v in _items if "success criteria" in n.lower()]
+        _steps = [(n, v) for n, v in _items if " step " in n.lower()]
+        if not _crit:
+            failures.append(
+                "the cuj fixture files a success-criteria P1 but carries no "
+                "'<journey> success criteria' item for it to land on")
+        if any(v != "4" for _, v in _steps):
+            failures.append(
+                f"a criteria failure must not mark a STEP down — these steps passed and "
+                f"are scored below 4: {[n for n, v in _steps if v != '4']}")
+        if not any(v == "1" for _, v in _crit):
+            failures.append(
+                f"the P1 must land on the criteria item, got {_crit}")
+
+    # ...and the dead end itself: the same report with the criteria item removed must be
+    # rejected, and the message must name the way out. Without the hint an auditor's only
+    # visible options are the three falsehoods above — which is how the fixture got written.
+    _stripped = _cuj.replace("""    - item: "CUJ-001 success criteria"
+      score: 1
+      note: "P1 - the captured task does not survive a reload; both steps passed"
+""", "").replace("  score: 21", "  score: 20").replace("  max: 24", "  max: 20")
+    if _stripped == _cuj:
+        failures.append("criteria-hint probe: could not strip the criteria item")
+    with tempfile.TemporaryDirectory() as _d:
+        _p = Path(_d) / "cuj-20260716-120000.md"
+        _p.write_text(_stripped, encoding="utf-8")
+        failures += _expect_invalid(_p, "success criteria` item, not on a step that passed")
+
+    # --- a finding attributed outside the rubric needs an item too (§4.1) ----------------
+    # The same hole, in the auditor that carries four lenses. The usability persona reserves
+    # standalone citations for what Shneiderman, the AI heuristics and NPCIS uniquely
+    # express, and then grades ten NIELSEN heuristics — so a finding attributed to
+    # Shneiderman has no row. It is invisible in the scorecard, and if it is the worst
+    # finding the floor cannot be met at all.
+    #
+    # A real run hit this and resolved it the wrong way: its P1 belonged to Shneiderman #7
+    # locus of control, no Nielsen item could carry the 1, so it re-filed the finding under
+    # Nielsen #1. The schema steered the attribution. This fixture is that run done honestly
+    # — the P1 stays on Shneiderman and brings its own item — and the assertions pin the
+    # ATTRIBUTION, not the validity, because validity is exactly what re-filing bought.
+    _xfix = FIXTURES / "valid" / "usability-20260718-110000.md"
+    _xf = _xfix.read_text(encoding="utf-8")
+    failures += _expect_valid(_xfix)
+    _xitems = re.findall(r'- item: "([^"]+)"\n\s+score: (\d+|null)', _xf)
+    _outside = [(n, v) for n, v in _xitems if "shneiderman" in n.lower()]
+    if not _outside:
+        failures.append(
+            "the cross-framework fixture files a Shneiderman-attributed P1 but carries no "
+            "Shneiderman item for it to land on")
+    elif not any(v == "1" for _, v in _outside):
+        failures.append(f"the P1 must land on the Shneiderman item, got {_outside}")
+    if any(v == "1" for n, v in _xitems if "shneiderman" not in n.lower()):
+        failures.append(
+            "a Shneiderman-attributed P1 must not mark a NIELSEN item down to 1 — that is "
+            "the re-attribution this fixture exists to rule out")
+
+    # The dead end: remove the out-of-rubric item and the report is unwritable again.
+    _target = ('    - item: "Shneiderman #7 - locus of control"\n'
+               '      score: 1\n'
+               '      note: "P1 - the user is the responder to an autosave they cannot '
+               'initiate or stop"\n')
+    _xstripped = (_xf.replace(_target, "")
+                     .replace("  score: 39", "  score: 38")
+                     .replace("  max: 44", "  max: 40"))
+    if _xstripped == _xf:
+        failures.append("cross-framework probe: could not strip the Shneiderman item")
+    with tempfile.TemporaryDirectory() as _d:
+        _p = Path(_d) / _xfix.name
+        _p.write_text(_xstripped, encoding="utf-8")
+        failures += _expect_invalid(_p, "lowest item score must be 1")
+    # --- `pct` is rubric-size independent (§4.1) ------------------------------------------
+    # The headline is a priority index over `summary`, not `score / max`, and this is the
+    # assertion that says why: take a valid report and GROW its rubric with passing items.
+    # Under the old mean-of-rubric formula each one pulled the number toward 100, which is
+    # how an accessibility run carrying two P0s read 79% while a usability run carrying
+    # none read 50% — the lenses enumerate different numbers of things. Same findings must
+    # now mean the same percentage however large the rubric.
+    _fix = FIXTURES / "valid" / "usability-20260715-143000.md"
+    _src = _fix.read_text(encoding="utf-8")
+    _grown = _src.replace(
+        '    - item: "Help and documentation"',
+        "".join(f'    - item: "Padding heuristic {i}"\n      score: 4\n' for i in range(12))
+        + '    - item: "Help and documentation"', 1)
+    if _grown == _src:
+        failures.append("rubric-size probe: could not grow the fixture's rubric")
+    with tempfile.TemporaryDirectory() as _d:
+        # Keeps the fixture's own filename: its asset paths are run-scoped to that stem.
+        _p = Path(_d) / _fix.name
+        # score/max move with the rubric (they are the rubric view); pct must not.
+        _p.write_text(_grown.replace("  score: 31\n", "  score: 79\n")
+                             .replace("  max: 36\n", "  max: 84\n"), encoding="utf-8")
+        _errs = validate(_p)
+        if _errs:
+            failures.append(f"rubric-size probe: 12 passing items changed the verdict: {_errs}")
+    # One 0-4 scale for every auditor is what makes the floor checkable and the percentage
+    # comparable; a per-item `of` let a binary rubric mark a cosmetic divergence `0/1`.
+    _binary = (FIXTURES / "valid" / "cuj-20260716-130000.md").read_text(encoding="utf-8")
+    _binary = _binary.replace("      score: 4\n", "      score: 1\n      of: 1\n")
+    with tempfile.TemporaryDirectory() as _d:
+        _p = Path(_d) / "binary-of.md"
+        _p.write_text(_binary, encoding="utf-8")
+        failures += _expect_invalid(_p, "'of' must be 4")
+    # The scorecard cannot cite a lens the run never applied.
+    failures += _expect_invalid(FIXTURES / "invalid" / "health-rubric-not-applied.md",
+                                "not in 'frameworks'")
+    # "Unscored" is reserved for a run with nothing gradable; it is not an opt-out.
+    failures += _expect_invalid(FIXTURES / "invalid" / "health-false-unscored.md",
+                                "Unscored")
+
+    # --- the contract's own examples (they are the most-copied text in the repo) ---
+    failures += _check_contract_examples()
+
+    # --- a conformance level is not a priority (§4) --------------------------------
+    #
+    # `ux-audit` normalized external accessibility findings with a lookup: "Level AA
+    # (e.g. 1.4.3 contrast) -> `P1`". Since essentially every real web app fails some AA
+    # criterion, and §9's gate blocks on any `P1`, that line made `GO` unreachable for
+    # real apps while grading on a different axis from every other auditor.
+    contract = (ROOT / "skills" / "usability-audit" / "references"
+                / "report-contract.md").read_text(encoding="utf-8")
+    flat = re.sub(r"\s+", " ", contract).lower()
+    for probe in ("a conformance level is not a priority",
+                  "evidence, not input",
+                  # The reachability consequence, kept because without it the rule reads
+                  # like style and the lookup looks like a harmless simplification.
+                  "unreachable in practice",
+                  # And the half that stops the fix becoming a way to publish less.
+                  "always a finding"):
+        if probe not in flat:
+            failures.append(f"contract §4: must state {probe!r}")
+    # §9 must send a disproportionate NO-GO back to the grades, not to a third verdict.
+    if "grading problem, not a gate problem" not in flat:
+        failures.append("contract §9: a disproportionate NO-GO must point at the grades")
+
+    # The gate is REACHABLE with real conformance failures present. Two AA failures priced
+    # by impact derive `GO`; the same two priced off their level derive `NO-GO`. This is
+    # the whole defect in four lines.
+    by_impact = {"total": 2, "p0": 0, "p1": 0, "p2": 1, "p3": 1}
+    by_level = {"total": 2, "p0": 0, "p1": 2, "p2": 0, "p3": 0}
+    if derive_verdict(by_impact) != "GO":
+        failures.append("gate: AA failures graded by impact must still be able to reach GO")
+    if derive_verdict(by_level) != "NO-GO":
+        failures.append("gate: a P1 must still block — the gate is not what was wrong")
+
+    # The accessibility fixture is the worked example, and it diverges from a level lookup
+    # in BOTH directions: its Level AA contrast failure is `P0` because the primary action
+    # is unreadable, and its Level A name-role-value failure is `P2` because the field it
+    # affects is optional. Priority tracks impact, not the letter.
+    acc = (FIXTURES / "valid" / "accessibility-20260716-090000.md").read_text(encoding="utf-8")
+    for heading, level, want in (
+        ("### [P0] \"Place order\" button text fails contrast", "Level AA", "P0"),
+        ("### [P2] Promo-code input has no programmatic label", "Level A", "P2"),
+    ):
+        if heading not in acc:
+            failures.append(f"conformance fixture: lost {want} finding {heading!r}")
+            continue
+        block_text = acc.split(heading, 1)[1].split("\n### ", 1)[0]
+        if level not in block_text:
+            failures.append(f"conformance fixture: {want} finding must cite {level}")
+    if "Level A." not in acc or "Level AA." not in acc:
+        failures.append("conformance fixture: must carry both an A and an AA citation, so "
+                        "the two gradings can disagree with a level lookup")
+
+    # --- the suite scorecard is derived from the merged counts, not averaged ---------
+    #
+    # `health.pct` used to be the mean of the member percentages, and the validator
+    # enforced that. It is the rubric-independence bug one level up: the index exists so
+    # two auditors finding the same things score the same whatever their lens enumerates,
+    # and averaging the members makes the headline move with how the findings happen to be
+    # partitioned across auditors instead.
+    failures += _expect_valid(FIXTURES / "valid" / "rollup-20260716-150000.md")
+    failures += _expect_invalid(FIXTURES / "invalid" / "rollup-health-mean.md",
+                                "not averaged across")
+    # Partition independence, stated as the arithmetic. The SAME three findings, split two
+    # ways across two members: the mean of the member indices moves, the index over the
+    # merged counts does not. That gap is the bug — a headline that changes when findings
+    # are reattributed between lenses is describing the rubric set, not the app.
+    def _mean(*members: dict) -> int:
+        return round(sum(priority_index(m) for m in members) / len(members))
+
+    merged = {"total": 3, "p0": 1, "p1": 1, "p2": 1, "p3": 0}
+    one_sided = ({"total": 3, "p0": 1, "p1": 1, "p2": 1, "p3": 0},
+                 {"total": 0, "p0": 0, "p1": 0, "p2": 0, "p3": 0})
+    split = ({"total": 2, "p0": 1, "p1": 0, "p2": 1, "p3": 0},
+             {"total": 1, "p0": 0, "p1": 1, "p2": 0, "p3": 0})
+    if _mean(*one_sided) == _mean(*split):
+        failures.append("suite health: the partition probe is not discriminating - pick "
+                        "splits whose member means actually differ")
+    for members in (one_sided, split):
+        if priority_index(merged) == _mean(*members):
+            failures.append(
+                f"suite health: the index over the merged counts ({priority_index(merged)}) "
+                f"coincides with this partition's mean ({_mean(*members)}), so this probe "
+                f"cannot tell the two rules apart")
+    # The partition-sensitivity the mean had, stated as the test it fails: three members
+    # at 100/100/40 average 80, while the same findings merged index far lower. A
+    # roll-up's headline must not be readable as "Good" over a P0.
+    blocking = {"total": 4, "p0": 1, "p1": 0, "p2": 3, "p3": 0}
+    idx = priority_index(blocking)
+    if idx >= 70:
+        failures.append(f"suite health: a merged summary with a P0 indexes {idx} — the "
+                        f"headline would still read Good or better")
+    if derive_verdict(blocking) != "NO-GO":
+        failures.append("suite health: a merged P0 must still derive NO-GO")
+
+    # A member that graded nothing carries `pct: null, band: Unscored` — the shape §4.1
+    # mandates and the mean could not represent, which made a suite run including a static
+    # or all-skipped `cuj` auditor unwritable.
+    failures += _expect_valid(FIXTURES / "valid" / "rollup-20260720-100000.md")
+    # And when NO member graded anything, the roll-up itself is Unscored: not 0 (reads
+    # catastrophic), not 100 (reads like a clean pass). Same rule as §4.1.
+    failures += _expect_invalid(FIXTURES / "invalid" / "rollup-health-unscored.md",
+                                "no member graded anything")
+
+    # `method:` named the superseded computation and was read by nothing. A fixture that
+    # still carries it is asserting a rule that no longer exists.
+    for fx in sorted((FIXTURES).rglob("rollup-*.md")):
+        if "method:" in fx.read_text(encoding="utf-8"):
+            failures.append(f"suite health: {fx.name} still declares a `method:` key")
+
+    # ---- health.trend: derived from the prior roll-ups, recomputed, never estimated ----
+    # The field shipped with a documented source that did not contain the data (`index.md`'s
+    # `Health` column, whose rows are per-AUDITOR) and a workflow template that hard-coded
+    # `trend: []`. So the only non-empty trend in this repo was three invented numbers on a
+    # run with no prior runs. These assertions are about where a point COMES FROM.
+
+    # 1. The valid roll-up fixtures are a real history: each one's declared trend is what
+    #    the directory beside it derives. Add a roll-up fixture and this keeps you honest —
+    #    run `validate_report.py --trend tests/fixtures/valid/rollup-*.md` and paste.
+    chain = sorted((FIXTURES / "valid").glob("rollup-*.md"))
+    derived_any = False
+    for fx in chain:
+        want, _ = trend_for(fx)
+        got = ((_frontmatter(fx).get("health") or {}).get("trend"))
+        if list(got or []) != want:
+            failures.append(
+                f"trend: {fx.name} declares {got!r} but the prior roll-ups beside it derive "
+                f"{want!r} - run `validate_report.py --trend` and paste what it prints")
+        derived_any = derived_any or bool(want)
+    if len(chain) < 3 or not derived_any:
+        failures.append(
+            "trend: the valid fixtures no longer form a history with a non-empty trend in "
+            "it, so the assertion above cannot fail - restore the chain")
+
+    # 2. Ordering is by the FILENAME timestamp, not mtime, which a fresh checkout rewrites.
+    #    Scramble the mtimes and the answer must not move.
+    with tempfile.TemporaryDirectory() as td:
+        box = Path(td)
+        for i, fx in enumerate(chain):
+            copy = box / fx.name
+            copy.write_text(fx.read_text(encoding="utf-8"), encoding="utf-8")
+            os.utime(copy, (1_600_000_000 - i * 86400,) * 2)  # newest file, oldest mtime
+        for fx in chain:
+            if trend_for(box / fx.name)[0] != trend_for(fx)[0]:
+                failures.append(f"trend: {fx.name} changed when mtimes were scrambled - "
+                                f"the ordering key must be the filename timestamp")
+
+    # 3. Only runs strictly OLDER count, and every roll-up found-but-unused is explained.
+    with tempfile.TemporaryDirectory() as td:
+        box = Path(td)
+        (box / "rollup-20260101-000000.md").write_text(
+            _mini_rollup(p2=1), encoding="utf-8")                      # older, usable -> 90
+        (box / "rollup-20260601-000000.md").write_text(
+            _mini_rollup(), encoding="utf-8")                          # older, clean  -> 100
+        (box / "rollup-20270101-000000.md").write_text(
+            _mini_rollup(p0=1), encoding="utf-8")                      # LATER - excluded
+        (box / "rollup-nostamp.md").write_text(_mini_rollup(), encoding="utf-8")
+        (box / "rollup-20250101-000000.md").write_text(
+            "---\nkind: rollup\nschema: 3\n---\n", encoding="utf-8")  # no summary
+        (box / "usability-20260101-000000.md").write_text(
+            _mini_rollup(p0=9), encoding="utf-8")                      # not a roll-up name
+        got, notes = trend_for(box / "rollup-20260715-120000.md")
+        if got != [90, 100]:
+            failures.append(f"trend: expected [90, 100] from the two older usable runs, "
+                            f"got {got!r} (later runs, unparseable ones and non-roll-up "
+                            f"files must all stay out)")
+        blob = " ".join(notes)
+        for expect in ("rollup-nostamp.md", "rollup-20250101-000000.md"):
+            if expect not in blob:
+                failures.append(f"trend: {expect} was skipped without a note - a short "
+                                f"trend must never be silently short")
+        if "usability-20260101-000000.md" in blob or "20270101" in blob:
+            failures.append("trend: noted a file that is not a prior roll-up at all")
+
+        # 4. The cap keeps the eight most recent, and says so.
+        for day in range(10, 28):
+            (box / f"rollup-202602{day}-000000.md").write_text(
+                _mini_rollup(p3=1), encoding="utf-8")
+        capped, notes = trend_for(box / "rollup-20270601-000000.md")
+        if len(capped) != TREND_MAX:
+            failures.append(f"trend: {len(capped)} points past the cap of {TREND_MAX}")
+        if not any("most recent" in n for n in notes):
+            failures.append("trend: truncated to the cap without saying so")
+
+    # 5. The mismatch is reported through the CLI, because that is the only place it runs:
+    #    every other rule is decidable from the file alone, which is what lets a report be
+    #    validated in isolation. Assert through main(), so an unwired mode fails here.
+    with tempfile.TemporaryDirectory() as td:
+        box = Path(td)
+        (box / "rollup-20260101-000000.md").write_text(_mini_rollup(p2=1), encoding="utf-8")
+        liar = box / "rollup-20260601-000000.md"
+        liar.write_text(_mini_rollup(trend="[71, 76, 79]"), encoding="utf-8")
+        if _trend_cli(liar) == 0:
+            failures.append("trend: --trend accepted a declared trend that the prior runs "
+                            "beside it do not derive")
+        # The liar is itself a prior run of the next one, and it is clean -> 100.
+        honest = box / "rollup-20260901-000000.md"
+        honest.write_text(_mini_rollup(trend="[90, 100]"), encoding="utf-8")
+        if _trend_cli(honest) != 0:
+            failures.append("trend: --trend rejected a correctly derived trend")
+        if _trend_cli(box / "rollup-20280101-000000.md") != 0:
+            failures.append("trend: --trend failed on a report that does not exist yet - a "
+                            "run must be able to derive its trend before writing its file")
+
+    # 6. A point the index cannot produce was typed, not derived. The gap is narrow by
+    #    design (a clean run is 100; the cheapest finding costs 3) but it is the only
+    #    evidence available without reading the directory.
+    for pct, want_gap in ((100, False), (97, False), (98, True), (99, True), (29, False)):
+        if unattainable(pct) != want_gap:
+            failures.append(f"trend: unattainable({pct}) should be {want_gap}")
+    failures += _expect_invalid(FIXTURES / "invalid" / "rollup-trend-invented.md",
+                                "cannot produce")
+    failures += _expect_invalid(FIXTURES / "invalid" / "rollup-trend-toolong.md",
+                                "most recent")
+
+    # 7. The superseded source must be gone from the contract, not merely supplemented:
+    #    the sentence that sent an agent to `index.md` is why nobody noticed for months.
+    contract = _flat((ROOT / "skills" / "usability-audit" / "references"
+                      / "report-contract.md").read_text(encoding="utf-8"))
+    if "carries the trend the roll-up reads" in contract:
+        failures.append("trend: the contract still tells the roll-up to read `index.md`'s "
+                        "Health column, which holds per-auditor rows")
+    for phrase in ("--trend", "recomputed from that run's `summary`"):
+        if phrase not in contract:
+            failures.append(f"trend: the contract does not state {phrase!r} as the source")
 
     # index.md: a conforming index passes; a malformed one is rejected.
     failures += _expect_valid_index(FIXTURES / "valid" / "index.md")
@@ -100,7 +681,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (12 checks)")
+    print("PASS — report contract (62 checks)")
     return 0
 
 

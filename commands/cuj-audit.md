@@ -1,6 +1,6 @@
 ---
 name: cuj-audit
-description: Replay your stored critical user journeys against the running app and report the exact step that broke, as a severity-scored cuj report in .ux/audits. Invokes the cuj-auditor persona via the audit-cuj skill.
+description: Replay your stored critical user journeys against the running app and report the exact step that broke, as a priority-scored cuj report in .ux/audits. Invokes the cuj-auditor persona via the audit-cuj skill.
 argument-hint: "[target] [--cuj <id|all|critical>] [--mode static|live|hybrid]"
 ---
 

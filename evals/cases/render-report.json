@@ -25,7 +25,7 @@
         "Writes one <report>.html beside each existing <report>.md under Sprout/.ux/audits, plus index.html — and does NOT create, edit, or delete any .md report or the report contract",
         "Every generated .html is self-contained: images are inlined as data: URIs and there are no external (http/https/protocol-relative) src or href references, so it opens offline from disk",
         "The cuj report with total: 0 renders a 'verified pass' banner (never an empty 'no findings'), and its walkthrough renders as an interactive flipbook grouped by journey",
-        "The rollup-*.md renders as a dashboard with the go/no-go verdict and a per-auditor severity table whose report links point at the .html views",
+        "The rollup-*.md renders as a dashboard with the go/no-go verdict and a per-auditor priority-and-health table whose report links point at the .html views",
         "Re-running /ux-review on an unchanged report produces a byte-identical .html (deterministic — no diff churn)",
         "All writes are confined to Sprout/.ux/audits/ — no host application code is touched, and audit_safety.py <sprout> reports no violation"
       ],

@@ -7,6 +7,8 @@ to self-check its output before finalizing a report, and by the contract test su
 
 Usage:
     python3 scripts/validate_report.py <report.md> [<report.md> ...]
+    python3 scripts/validate_report.py --index <index.md>
+    python3 scripts/validate_report.py --trend <rollup.md>   # derive/confirm health.trend
 
 Exit code 0 = all valid; 1 = at least one report has errors (printed to stderr).
 """
@@ -20,7 +22,7 @@ from pathlib import Path
 import yaml
 
 REQUIRED_KEYS = ["auditor", "schema", "version", "date", "target", "mode", "scope",
-                 "frameworks", "summary"]
+                 "frameworks", "summary", "health"]
 KNOWN_MODES = {"live", "static", "hybrid"}
 
 # Framework vocabulary is PER-AUDITOR — the contract is auditor-agnostic, so each suite
@@ -38,15 +40,188 @@ FRAMEWORKS_BY_AUDITOR = {
     # traced source without completing the task or observing persistence.
     "cuj": {"cuj-contract", "task-completion", "success-criteria"},
 }
-SEVERITY_KEYS = ["sev4", "sev3", "sev2", "sev1"]  # sev0 is intentionally absent
+# Schema 3: P0-P3 replaces sev4-sev1. The tag says what to DO, not just how bad it is.
+# Named once, because both document types check it and the roll-up skill's copy-this-exactly
+# template is compared against it by tests/test_components.py — a second literal is a third
+# place to forget, which is how that template stayed at 2 through the schema-3 migration.
+SCHEMA = 3
+PRIORITY_KEYS = ["p0", "p1", "p2", "p3"]
+# The one health scale (§4.1). An item's score IS the P-number of the worst finding
+# against it, so the priority scale and the health scale are deliberately the same scale:
+# P0 -> 0 ... P3 -> 3, and 4 when nothing was filed against the item.
+ITEM_OF = 4
+PRIORITY_ACTION = {"p0": "fix immediately", "p1": "fix before release",
+                   "p2": "fix in the next pass", "p3": "fix if time allows"}
+# `health.pct` is a PRIORITY INDEX derived from `summary`, not from `score / max` (§4.1).
+# The worst finding sets the floor; every additional finding adds to it. It depends only on
+# what was found, never on how many items the rubric holds — which is what makes one report's
+# percentage mean the same thing as another's when the two lenses enumerate different
+# numbers of things (WCAG's criteria vs Nielsen's ten).
+INDEX_WORST = {0: 55, 1: 25, 2: 10, 3: 3}
+INDEX_EACH = {0: 15, 1: 6, 2: 2, 3: 1}
+# Band thresholds for `health.pct` (contract §4.1), highest floor first.
+BANDS = [(90, "Excellent"), (70, "Good"), (50, "Acceptable"), (30, "Poor"), (0, "Critical")]
+# A run with nothing gradable is "Unscored" — never 0% (reads catastrophic) and never
+# 100% (reads like a clean pass). See `_check_health`.
+UNSCORED = "Unscored"
 
-# A finding is a level-3 heading tagged with its severity, e.g. "### [sev3] Foo".
-FINDING_RE = re.compile(r"^###\s+\[sev([0-4])\]", re.MULTILINE)
+
+def band_for(pct: int) -> str:
+    """The band a health percentage falls into."""
+    return next(name for floor, name in BANDS if pct >= floor)
+
+# --- roll-up vocabulary (contract §9) ----------------------------------------------------
+
+# A suite roll-up is a sibling document type, not an auditor report: it has no single
+# `auditor`, `mode`, or `frameworks`, so it validates through its own path.
+ROLLUP_REQUIRED_KEYS = ["kind", "schema", "version", "date", "target", "scope", "verdict",
+                        "verdict_reason", "auditors_ran", "auditors_skipped", "summary",
+                        "health"]
+ROLLUP_VERDICTS = {"GO", "NO-GO"}
+
+
+def is_rollup(fm: dict) -> bool:
+    """True when this frontmatter describes a suite roll-up rather than an auditor report.
+
+    The contract (§9) specifies `kind: rollup`. Two other spellings are *read* because
+    reports are append-only historical records and roll-ups predating §9 must keep
+    rendering: `report: rollup`, and the `rollup: true` the HTML renderer originally
+    looked for. Writing either is still a contract violation — `validate_rollup` rejects
+    them. Tolerated on read, never blessed on write.
+    """
+    if fm.get("rollup"):
+        return True
+    return any(str(fm.get(k, "")).strip().lower() == "rollup" for k in ("kind", "report"))
+
+
+def worst_priority(summary: dict) -> int | None:
+    """The P-number of the most severe finding in `summary`, or None for a clean run.
+
+    `P0` is the worst and is also the lowest number, so this is simply the first priority
+    key that carries a non-zero count. It doubles as the health floor (§4.1): the lowest
+    item score a report may carry is exactly this number.
+    """
+    if not isinstance(summary, dict):
+        return None
+    for level, key in enumerate(PRIORITY_KEYS):
+        if isinstance(summary.get(key), int) and summary[key] > 0:
+            return level
+    return None
+
+
+def priority_index(summary: dict) -> int:
+    """`health.pct` for these priority counts: 100 for a clean run, 0 at worst.
+
+    Deliberately independent of the rubric: two auditors that find the same things score
+    the same, whether their lens enumerates ten heuristics or fifty-six criteria.
+    """
+    found = [level for level, key in enumerate(PRIORITY_KEYS)
+             for _ in range(max(0, int(summary.get(key) or 0)))]
+    if not found:
+        return 100
+    found.sort()
+    deduction = INDEX_WORST[found[0]] + sum(INDEX_EACH[p] for p in found[1:])
+    return max(0, 100 - deduction)
+
+
+def derive_verdict(summary: dict) -> str:
+    """The go/no-go gate, as a function of the counts rather than a judgment call.
+
+    Any P0 (fix immediately) or P1 (fix before release) blocks; everything else ships.
+    The gate reads straight off the rubric rather than reinterpreting it.
+    This is deliberately total and mechanical: five runs of the same app produced five
+    different verdicts from the same facts — two of them opposite on identical counts —
+    because the gate lived in prose ("any auditor reports a sev3 blocker") and left the
+    auditor to decide what counted as a blocker. A derived verdict cannot drift.
+    """
+    return "NO-GO" if (summary.get("p0") or summary.get("p1")) else "GO"
+
+TREND_MAX = 8
+# `rollup-<YYYYMMDD>-<HHMMSS>.md` — the contract's filename shape (§9). The timestamp in
+# the NAME is the ordering key, because mtime is rewritten by a fresh checkout.
+ROLLUP_NAME_RE = re.compile(r"^rollup-(\d{8})-(\d{6})\.md$")
+# The index can never land in this gap: a clean run is exactly 100, and the cheapest
+# possible finding — one lone P3 — already costs `INDEX_WORST[3]`. A score inside the gap
+# is not one any combination of counts can produce, so it was typed rather than derived.
+_INDEX_GAP = range(101 - min(INDEX_WORST.values()), 100)
+
+
+def unattainable(pct: int) -> bool:
+    """True when no combination of priority counts yields this index (§4.1)."""
+    return pct in _INDEX_GAP
+
+
+def trend_for(report: str | Path, *, limit: int = TREND_MAX) -> tuple[list[int], list[str]]:
+    """`health.trend` for a roll-up: the priority index of each PRIOR run beside it.
+
+    Returns `(trend, notes)` — oldest → newest, at most `limit` points, `[]` when there is
+    no history. `notes` names every roll-up that was found and not used, so a short trend
+    is never silently short. The report itself need not exist yet: the filename supplies
+    the cutoff, so a run can derive its trend before writing its own file.
+
+    **The source is the sibling `rollup-*.md` files, and each point is RECOMPUTED from that
+    run's `summary` rather than copied from its `pct`.** Both halves were wrong before.
+
+    The source was documented as `index.md`'s `Health` column — §7 claimed it "carries the
+    trend the roll-up reads". It does not. Index rows are appended one per *auditor* run
+    and a roll-up appends no row of its own, so that column holds member percentages and
+    the suite's own history was never written down anywhere. Nor did anything try to read
+    it: step 6 of the roll-up workflow hard-coded `trend: []` in its template, which is
+    what every roll-up ever written carried. A field whose documented source does not
+    contain it is worse than an absent field, because it reads as implemented.
+
+    Recomputing matters because `pct` is not a stable scale. It meant the mean of the
+    member percentages until that was fixed, so a roll-up written before then carries a
+    number the current one cannot be compared with — the contract's own warning about
+    trending across a rubric change, realised. `summary` is raw merged counts and the
+    validator reconciles it (`total == sum(p0..p3)`), so recomputing puts the whole series
+    on today's scale by construction, and survives the next change to the scale too.
+
+    Only runs strictly older than this one count, so re-deriving an old report's trend in a
+    directory that has since grown gives the same answer it gave on the day.
+    """
+    path = Path(report)
+    here = ROLLUP_NAME_RE.match(path.name)
+    if not here:
+        return [], [f"{path.name} is not a rollup-<YYYYMMDD>-<HHMMSS>.md name, so prior "
+                    f"runs cannot be ordered against it"]
+    cutoff = here.group(1) + here.group(2)
+    notes: list[str] = []
+    points: list[tuple[str, int]] = []
+    for sibling in sorted(path.parent.glob("rollup-*.md")):
+        found = ROLLUP_NAME_RE.match(sibling.name)
+        if not found:
+            notes.append(f"skipped {sibling.name}: not a contract roll-up filename")
+            continue
+        stamp = found.group(1) + found.group(2)
+        if stamp >= cutoff:
+            continue  # itself, or a later run — a trend never holds future history
+        fm, _ = _split_frontmatter(sibling.read_text(encoding="utf-8"))
+        if not isinstance(fm, dict) or not is_rollup(fm):
+            notes.append(f"skipped {sibling.name}: does not read as a roll-up")
+            continue
+        summary = fm.get("summary")
+        if not isinstance(summary, dict) or not all(
+                isinstance(summary.get(k), int) for k in PRIORITY_KEYS):
+            notes.append(f"skipped {sibling.name}: no usable `summary` to recompute from")
+            continue
+        points.append((stamp, priority_index(summary)))
+    points.sort()
+    if len(points) > limit:
+        notes.append(f"kept the {limit} most recent of {len(points)} prior runs")
+        points = points[-limit:]
+    return [pct for _, pct in points], notes
+
+
+# A finding is a level-3 heading tagged with its priority, e.g. "### [P1] Foo".
+FINDING_RE = re.compile(r"^###\s+\[P([0-3])\]", re.MULTILINE)
+# Tags from the superseded schema-2 scale, and out-of-range P-levels. Detected so a stale
+# report fails with "this is the old scale" rather than a baffling count mismatch.
+LEGACY_TAG_RE = re.compile(r"^###\s+\[(sev\d|P[4-9]|P\d\d+)\]", re.MULTILINE | re.IGNORECASE)
 # The optional `## Walkthrough` section (§5) and the markdown images inside it.
-WALKTHROUGH_RE = re.compile(r"^##\s+Walkthrough\s*$", re.MULTILINE | re.IGNORECASE)
 IMAGE_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 # The five labelled fields every finding block must contain.
-FINDING_FIELDS = ["Issue Description", "Framework Violation", "Severity",
+FINDING_FIELDS = ["Issue Description", "Framework Violation", "Priority",
                   "Evidence", "Recommended Fix"]
 
 
@@ -73,8 +248,8 @@ def _check_frontmatter(fm: dict) -> list[str]:
         if key not in fm:
             errors.append(f"frontmatter missing required key: {key!r}")
 
-    if fm.get("schema") != 2:
-        errors.append("frontmatter 'schema' must equal 2")
+    if fm.get("schema") != SCHEMA:
+        errors.append(f"frontmatter 'schema' must equal {SCHEMA}")
 
     mode = fm.get("mode")
     if mode not in KNOWN_MODES:
@@ -121,37 +296,185 @@ def _check_summary(fm: dict, body: str) -> list[str]:
         errors.append("frontmatter 'summary' must be a mapping")
         return errors
 
-    if "sev0" in summary:
-        errors.append("summary must not contain 'sev0' (severity 0 findings are omitted)")
+    stale = [k for k in summary if re.fullmatch(r"sev\d", str(k), re.IGNORECASE)]
+    if stale:
+        errors.append(
+            f"summary uses the superseded severity scale {sorted(stale)}; schema 3 counts "
+            f"are {PRIORITY_KEYS} (sev4->p0, sev3->p1, sev2->p2, sev1->p3)")
 
-    for key in ["total"] + SEVERITY_KEYS:
+    for key in ["total"] + PRIORITY_KEYS:
         if key not in summary:
             errors.append(f"summary missing required key: {key!r}")
         elif not isinstance(summary[key], int) or summary[key] < 0:
             errors.append(f"summary {key!r} must be a non-negative integer")
 
-    # Counts must reconcile: total == sum of per-severity counts.
-    if all(isinstance(summary.get(k), int) for k in ["total"] + SEVERITY_KEYS):
-        by_sev = sum(summary[k] for k in SEVERITY_KEYS)
-        if summary["total"] != by_sev:
+    # A tag outside P0-P3 is reported for what it is, not as a count mismatch.
+    for tag in sorted(set(LEGACY_TAG_RE.findall(body))):
+        errors.append(
+            f"body contains a [{tag}] finding; schema 3 tags findings P0-P3 (§4)")
+
+    if all(isinstance(summary.get(k), int) for k in ["total"] + PRIORITY_KEYS):
+        by_pri = sum(summary[k] for k in PRIORITY_KEYS)
+        if summary["total"] != by_pri:
             errors.append(
-                f"summary 'total' ({summary['total']}) != sum of sev1-4 ({by_sev})")
+                f"summary 'total' ({summary['total']}) != sum of p0-p3 ({by_pri})")
 
         # Findings in the body must match the declared counts.
         found = FINDING_RE.findall(body)
-        if any(sev == "0" for sev in found):
-            errors.append("body contains a [sev0] finding; severity 0 must be omitted")
-        graded = [s for s in found if s != "0"]
-        if len(graded) != summary["total"]:
+        if len(found) != summary["total"]:
             errors.append(
-                f"summary 'total' ({summary['total']}) != findings in body ({len(graded)})")
-        for sev_key in SEVERITY_KEYS:
-            n = sum(1 for s in graded if s == sev_key[-1])
-            if n != summary[sev_key]:
+                f"summary 'total' ({summary['total']}) != findings in body ({len(found)})")
+        for key in PRIORITY_KEYS:
+            n = sum(1 for level in found if level == key[-1])
+            if n != summary[key]:
                 errors.append(
-                    f"summary {sev_key!r} ({summary[sev_key]}) != [sev{sev_key[-1]}] "
-                    f"findings in body ({n})")
+                    f"summary {key!r} ({summary[key]}) != [{key.upper()}] findings in "
+                    f"body ({n})")
 
+    return errors
+
+
+def _check_health(fm: dict) -> list[str]:
+    """Validate the `health` scorecard (contract §4.1) against its own items AND findings.
+
+    `score`, `max`, `pct` and `band` are all DERIVED. Checking them against `items` is the
+    whole point: a headline number nobody can reconcile with its rows is exactly the kind
+    of unfalsifiable claim this suite exists to avoid.
+
+    The items themselves are derived too. An item's score is the P-number of the worst
+    finding filed against it, so the scorecard and the findings list are two views of one
+    judgment rather than two independent passes that can disagree. They did disagree, in
+    both directions at once: a run whose worst finding was a `P3` scored four items `0`
+    and published 43% **Poor**, while a run carrying two `P0`s published 70% **Good** —
+    the dial reading backwards against severity. Enforcing the floor here is what makes
+    that unrepresentable.
+    """
+    errors: list[str] = []
+    health = fm.get("health")
+    if not isinstance(health, dict):
+        if "health" in fm:
+            errors.append("frontmatter 'health' must be a mapping")
+        return errors
+
+    items = health.get("items")
+    if not isinstance(items, list) or not items:
+        errors.append("health 'items' must be a non-empty list")
+        return errors
+
+    rubric = health.get("rubric")
+    frameworks = fm.get("frameworks") or []
+    if not (isinstance(rubric, str) and rubric.strip()):
+        errors.append("health 'rubric' must be a non-empty string")
+    elif isinstance(frameworks, list) and rubric not in frameworks:
+        errors.append(
+            f"health 'rubric' ({rubric!r}) is not in 'frameworks' {frameworks}; the "
+            f"scorecard cannot cite a lens the run did not apply")
+
+    score = maximum = 0
+    graded: list[tuple[str, int]] = []
+    for idx, item in enumerate(items):
+        where = f"health item {idx}"
+        if not isinstance(item, dict) or not str(item.get("item", "")).strip():
+            errors.append(f"{where} must be a mapping with a non-empty 'item'")
+            continue
+        where = f"health item {item['item']!r}"
+        of = item.get("of", 4)
+        if of != ITEM_OF:
+            errors.append(
+                f"{where}: 'of' must be {ITEM_OF} — every auditor grades its own items on "
+                f"the one 0-{ITEM_OF} scale, which is what makes the percentage comparable")
+            continue
+        got = item.get("score", "missing")
+        note = str(item.get("note", "")).strip()
+        if got is None:                       # not applicable
+            if not note:
+                errors.append(f"{where}: an n/a item must carry a 'note' saying why")
+            continue
+        if not isinstance(got, int) or not 0 <= got <= of:
+            errors.append(f"{where}: 'score' must be null or an integer in 0..{of}")
+            continue
+        # Without finding ids in the schema, the note is the only thread from a marked-down
+        # row back to the finding that marked it down. Required on EVERY deduction now, not
+        # just the bottom half: under the derived scale a 3/4 means a real P3 was filed.
+        if got < of and not note:
+            errors.append(
+                f"{where}: scored {got}/{of} and must carry a 'note' naming the finding "
+                f"that took it down")
+        score += got
+        maximum += of
+        graded.append((item["item"], got))
+
+    if errors:
+        # A per-item failure makes every aggregate below meaningless: a rejected item is
+        # not counted, so `maximum` under-reports and the derived score, the band and the
+        # findings floor all cascade into noise that buries the one error worth reading.
+        return errors
+
+    if maximum == 0:
+        # Every item n/a: the run inspected nothing it could grade. That is a real state —
+        # a static or all-skipped run — and it must be sayable WITHOUT inventing a number.
+        # 0% would read as catastrophic and 100% as a clean pass; both are lies. The honest
+        # record is an explicit "unscored", which the roll-up can then refuse to average in.
+        for key, want in (("score", 0), ("max", 0), ("pct", None), ("band", "Unscored")):
+            if health.get(key) != want:
+                errors.append(
+                    f"health has no applicable items, so {key!r} must be {want!r} "
+                    f"(got {health.get(key)!r}) — an unscored run says so rather than "
+                    f"reporting a percentage it did not earn")
+        return errors
+
+    if health.get("band") == "Unscored" or health.get("pct") is None:
+        errors.append(
+            f"health is marked unscored but {maximum // 1} point(s) were applicable; "
+            f"'Unscored' is only for a run with no gradable item")
+        return errors
+
+    # --- the findings floor (§4.1) ---------------------------------------------------
+    # The worst finding must land somewhere, and nothing may sink below it. Both halves
+    # matter: without the first, a report can file a P0 and still show a flawless
+    # scorecard; without the second, a cosmetic P3 can drag items to 0 and publish
+    # "Poor" over a healthy product. The second is the one that actually bit.
+    worst = worst_priority(fm.get("summary") or {})
+    lowest = min(got for _, got in graded)
+    if worst is None:
+        if lowest != ITEM_OF:
+            low = [name for name, got in graded if got < ITEM_OF]
+            errors.append(
+                f"health: the run reports no findings, so every applicable item scores "
+                f"{ITEM_OF}; these are marked down with nothing filed against them: {low}")
+    else:
+        if lowest != worst:
+            # The dead end this message has to open: for `cuj`, a `success_criteria`
+            # failure is not a step failure, so an auditor grading only steps has no row
+            # for its worst finding. Naming the criteria item here is the difference
+            # between adding the missing row and re-attributing the failure to a step
+            # that passed — which is what the suite's own early fixture did (§4.1).
+            hint = ""
+            if fm.get("auditor") == "cuj":
+                hint = (" A `success_criteria` failure lands on that journey's "
+                        "`CUJ-<id> success criteria` item, not on a step that passed; add "
+                        "the criteria item rather than marking a step down (§4.1).")
+            errors.append(
+                f"health: the worst finding is P{worst}, so the lowest item score must be "
+                f"{worst} (got {lowest}) — an item's score is the P-number of the worst "
+                f"finding against it, and the worst finding has to land on one of them."
+                f"{hint}")
+
+    # `score`/`max` still reconcile with the rows; `pct` is the priority index, which the
+    # rows cannot produce — see §4.1 on why the two answer different questions.
+    pct = priority_index(fm.get("summary") or {})
+    for key, want in (("score", score), ("max", maximum)):
+        if health.get(key) != want:
+            errors.append(
+                f"health {key!r} is {health.get(key)!r} but its items derive {want}")
+    if health.get("pct") != pct:
+        errors.append(
+            f"health 'pct' is {health.get('pct')!r} but its findings derive {pct} — `pct` "
+            f"is the priority index from `summary` (§4.1), not score/max, so that it means "
+            f"the same thing whatever size rubric the auditor used")
+    if health.get("band") != band_for(pct):
+        errors.append(
+            f"health 'band' is {health.get('band')!r} but {pct}% is {band_for(pct)!r}")
     return errors
 
 
@@ -188,33 +511,299 @@ def _check_coverage(body: str) -> list[str]:
     return errors
 
 
-def _check_walkthrough(body: str) -> list[str]:
-    """Light validation of the optional `## Walkthrough` section (§5).
+def _check_assets(body: str, stem: str) -> list[str]:
+    """Validate every embedded image path against the asset layout (§1).
 
-    The section is optional (live/hybrid only) — its absence is never an error. When
-    present, every embedded image path must be relative and under `./assets/`, so the
-    walk-through stays inside the auditor's write boundary and renders from the report's
-    own directory. This checks the reference shape, not that the file exists on disk.
+    Two rules, and the second is the reason this takes `stem`. Every path must be
+    relative and under `./assets/`, so an embed stays inside the auditor's write
+    boundary and renders from the report's own directory. And it must be under
+    `./assets/<stem>/` — the run's **own** directory, derived from this file's name —
+    so a report embeds the captures of the run that wrote it and no other.
+
+    The second rule is checkable only because the directory name is derived rather
+    than chosen: the alternative is a flat `assets/` where each run overwrites the
+    last, which keeps every path resolving while silently replacing the evidence under
+    reports nobody deleted. An existence check cannot catch that — the file is always
+    there. Comparing the path to the filename can.
+
+    This checks the whole body, not just `## Walkthrough`: a finding's `Evidence:`
+    embed is evidence in the strictest sense and has exactly the same problem.
+    It checks the reference shape, not that the file exists on disk.
     """
-    m = WALKTHROUGH_RE.search(body)
-    if m is None:
-        return []
-    # Section runs from its heading to the next `## ` heading (or end of body).
-    start = m.end()
-    nxt = re.search(r"^##\s", body[start:], re.MULTILINE)
-    section = body[start:start + nxt.start()] if nxt else body[start:]
-
+    prefix = f"assets/{stem}/"
     errors: list[str] = []
-    for path in (p.strip() for p in IMAGE_RE.findall(section)):
-        under_assets = path.startswith("./assets/") or path.startswith("assets/")
-        if not under_assets or ".." in path:
+    for raw in IMAGE_RE.findall(body):
+        path = raw.strip()
+        rel = path[2:] if path.startswith("./") else path
+        if not rel.startswith("assets/") or ".." in path:
             errors.append(
-                f"walkthrough image path must be relative and under './assets/': {path!r}")
+                f"image path must be relative and under './assets/': {path!r}")
+        elif not rel.startswith(prefix):
+            errors.append(
+                f"image path must be under this run's own asset directory "
+                f"'./assets/{stem}/': {path!r}. A report embeds the captures of the "
+                f"run that wrote it, never another run's (§1)")
     return errors
 
 
+def _check_rollup_frontmatter(fm: dict) -> list[str]:
+    """Validate a suite roll-up's frontmatter against contract §9."""
+    errors: list[str] = []
+
+    for key in ROLLUP_REQUIRED_KEYS:
+        if key not in fm:
+            errors.append(f"rollup frontmatter missing required key: {key!r}")
+
+    # The discriminator itself: `kind: rollup` is the spelling. `report:`/`rollup:` still
+    # READ as a roll-up (see `is_rollup`) so historical files render, but writing one is a
+    # violation — otherwise the drift that broke the dashboard quietly re-accumulates.
+    if str(fm.get("kind", "")).strip().lower() != "rollup":
+        legacy = [k for k in ("report", "rollup") if fm.get(k)]
+        errors.append(
+            f"rollup must carry 'kind: rollup'"
+            + (f" (found the legacy discriminator {legacy[0]!r} instead)" if legacy else ""))
+
+    if fm.get("schema") != SCHEMA:
+        errors.append(f"rollup frontmatter 'schema' must equal {SCHEMA}")
+
+    date = fm.get("date")
+    if isinstance(date, datetime):
+        pass
+    elif isinstance(date, str):
+        try:
+            datetime.fromisoformat(date.replace("Z", "+00:00"))
+        except ValueError:
+            errors.append(f"rollup frontmatter 'date' is not ISO-8601: {date!r}")
+    else:
+        errors.append("rollup frontmatter 'date' must be an ISO-8601 string")
+
+    for field in ("target", "scope", "verdict_reason"):
+        if field in fm and not (isinstance(fm[field], str) and fm[field].strip()):
+            errors.append(f"rollup frontmatter {field!r} must be a non-empty string")
+
+    # `verdict` is a bare machine-readable token. Prose belongs in `verdict_reason`: the
+    # renderer tests this value to colour the go/no-go banner, so "GO — all journeys pass"
+    # is not a GO to a machine, and every roll-up written that way rendered as a red NO-GO.
+    verdict = fm.get("verdict")
+    if verdict is not None:
+        token = str(verdict).strip().upper()
+        if token not in ROLLUP_VERDICTS:
+            hint = ""
+            if token.split(" ")[0].split("—")[0].strip() in ROLLUP_VERDICTS:
+                hint = " — put the explanation in 'verdict_reason', not here"
+            errors.append(
+                f"rollup 'verdict' must be one of {sorted(ROLLUP_VERDICTS)}, "
+                f"got {str(verdict)!r}{hint}")
+
+    ran = fm.get("auditors_ran")
+    if "auditors_ran" in fm and (not isinstance(ran, list) or not ran):
+        errors.append("rollup 'auditors_ran' must be a non-empty list")
+
+    # Every skipped auditor carries its reason. The suite's rule is that a skipped auditor
+    # must never read as a clean pass; making the reason structural is what enforces it.
+    skipped = fm.get("auditors_skipped")
+    if "auditors_skipped" in fm:
+        if not isinstance(skipped, list):
+            errors.append("rollup 'auditors_skipped' must be a list (empty when none)")
+        else:
+            for entry in skipped:
+                if not isinstance(entry, dict) or not str(entry.get("auditor", "")).strip():
+                    errors.append(
+                        f"rollup 'auditors_skipped' entry must be a mapping with an "
+                        f"'auditor' key: {entry!r}")
+                elif not str(entry.get("reason", "")).strip():
+                    errors.append(
+                        f"rollup skipped auditor {entry.get('auditor')!r} has no 'reason'; "
+                        f"a silent skip reads as a pass")
+
+    return errors
+
+
+def _check_rollup_summary(fm: dict) -> list[str]:
+    """Counts reconcile, and the verdict follows from them."""
+    errors: list[str] = []
+    summary = fm.get("summary")
+    if not isinstance(summary, dict):
+        if "summary" in fm:
+            errors.append("rollup 'summary' must be a mapping")
+        return errors
+
+    stale = [k for k in summary if re.fullmatch(r"sev\d", str(k), re.IGNORECASE)]
+    if stale:
+        errors.append(
+            f"rollup summary uses the superseded severity scale {sorted(stale)}; "
+            f"schema 3 counts are {PRIORITY_KEYS}")
+
+    for key in ["total"] + PRIORITY_KEYS:
+        if key not in summary:
+            errors.append(f"rollup summary missing required key: {key!r}")
+        elif not isinstance(summary[key], int) or summary[key] < 0:
+            errors.append(f"rollup summary {key!r} must be a non-negative integer")
+
+    if not all(isinstance(summary.get(k), int) for k in ["total"] + PRIORITY_KEYS):
+        return errors
+
+    by_pri = sum(summary[k] for k in PRIORITY_KEYS)
+    if summary["total"] != by_pri:
+        errors.append(
+            f"rollup summary 'total' ({summary['total']}) != sum of p0-p3 ({by_pri})")
+
+    verdict = str(fm.get("verdict", "")).strip().upper()
+    if verdict in ROLLUP_VERDICTS:
+        expected = derive_verdict(summary)
+        if verdict != expected:
+            errors.append(
+                f"rollup 'verdict' is {verdict!r} but the counts derive {expected!r} "
+                f"(p0={summary['p0']}, p1={summary['p1']}); the gate is mechanical")
+    return errors
+
+
+def _check_rollup_health(fm: dict) -> list[str]:
+    """The suite scorecard: the priority index over the MERGED counts, and a trend.
+
+    `pct` is `priority_index(summary)` — the same function over the same shape of input as
+    a member's own `pct` (§4.1). It used to be the mean of the member percentages, and that
+    was the rubric-independence bug in a new coordinate.
+
+    The index exists so that two auditors who find the same things score the same, whether
+    their lens enumerates ten heuristics or fifty-six criteria. Averaging the members'
+    indices reintroduces exactly the dependence it removed, one level up: the headline then
+    moves with **how the findings were partitioned across auditors**, which is a fact about
+    the rubric set and not about the app. Add a member that finds nothing and suite health
+    rises; move one P0 from usability to accessibility and it changes again.
+
+    It also let the headline contradict the verdict printed beside it. The repo's own
+    roll-up fixture — one P0, two P1s, `NO-GO` — averaged to **75%, "Good"**, while the
+    index over its merged counts is **29%, "Critical"**. Both numbers were on one screen.
+
+    `auditors` stays: which lens found what is worth printing, it is simply not the source
+    of the headline. A member that graded nothing carries `pct: null, band: Unscored`,
+    which the mean could not represent at all — it rejected the shape §4.1 mandates, so a
+    suite run including a static or skipped `cuj` auditor was unwritable.
+
+    `trend` holds PRIOR runs only. It is allowed to be `[]` — an authenticated run is
+    advised to gitignore `.ux/audits/` wholesale, so in those repos there is no history to
+    read, and an absent trend must degrade to "no prior runs" rather than look broken.
+    """
+    errors: list[str] = []
+    health = fm.get("health")
+    if not isinstance(health, dict):
+        if "health" in fm:
+            errors.append("rollup 'health' must be a mapping")
+        return errors
+
+    auditors = health.get("auditors")
+    if not isinstance(auditors, list) or not auditors:
+        errors.append("rollup health 'auditors' must be a non-empty list")
+        auditors = []
+
+    pcts = []
+    for entry in auditors:
+        if not isinstance(entry, dict) or not str(entry.get("auditor", "")).strip():
+            errors.append(f"rollup health auditor entry needs an 'auditor': {entry!r}")
+            continue
+        pct = entry.get("pct")
+        if pct is None:
+            # A member that graded nothing — a static or all-skipped run (§4.1). The mean
+            # could not represent this at all, which made such a suite run unwritable.
+            if entry.get("band") != UNSCORED:
+                errors.append(
+                    f"rollup health {entry['auditor']!r}: 'pct' is null, so 'band' must be "
+                    f"{UNSCORED!r} (a member that graded nothing is not 0%)")
+            continue
+        if not isinstance(pct, int) or not 0 <= pct <= 100:
+            errors.append(f"rollup health {entry['auditor']!r}: 'pct' must be 0..100, or "
+                          f"null with band {UNSCORED!r}")
+            continue
+        if unattainable(pct):
+            # A member's `pct` is the priority index over its own counts (§4.1), and this
+            # roll-up carries no copy of those counts to check it against — so the gap is
+            # the only evidence available that the number was derived and not estimated.
+            errors.append(
+                f"rollup health {entry['auditor']!r}: {pct}% is not a score the priority "
+                f"index can produce — read it from that member's own report")
+            continue
+        if entry.get("band") != band_for(pct):
+            errors.append(
+                f"rollup health {entry['auditor']!r}: band is {entry.get('band')!r} but "
+                f"{pct}% is {band_for(pct)!r}")
+        pcts.append(pct)
+
+    if not pcts:
+        # Nothing gradable ran. Same rule as §4.1: not 0% (reads catastrophic), not 100%
+        # (reads like a clean pass) — a suite that verified nothing has no percentage.
+        if health.get("pct") is not None:
+            errors.append(
+                f"rollup health 'pct' is {health.get('pct')!r} but no member graded "
+                f"anything — it must be null with band {UNSCORED!r}")
+        elif health.get("band") != UNSCORED:
+            errors.append(f"rollup health 'band' must be {UNSCORED!r} when 'pct' is null")
+    else:
+        # DERIVED, like the verdict beside it: the priority index over the MERGED counts,
+        # the same function a member applies to its own. Never the mean of the members —
+        # see this function's docstring for the two ways that went wrong.
+        summary = fm.get("summary")
+        if isinstance(summary, dict):
+            want = priority_index(summary)
+            if health.get("pct") != want:
+                errors.append(
+                    f"rollup health 'pct' is {health.get('pct')!r} but the priority index "
+                    f"over its merged summary is {want}. `pct` is derived from `summary`, "
+                    f"not averaged across `auditors` (§9)")
+        if isinstance(health.get("pct"), int) and health.get("band") != band_for(health["pct"]):
+            errors.append(
+                f"rollup health 'band' is {health.get('band')!r} but "
+                f"{health['pct']}% is {band_for(health['pct'])!r}")
+
+    trend = health.get("trend")
+    if not isinstance(trend, list):
+        errors.append("rollup health 'trend' must be a list ([] when there is no history)")
+    elif any(not isinstance(t, int) or not 0 <= t <= 100 for t in trend):
+        errors.append("rollup health 'trend' entries must be integers in 0..100")
+    elif trend and health.get("pct") in trend[-1:]:
+        errors.append(
+            "rollup health 'trend' ends with this run's own 'pct'; trend holds PRIOR runs "
+            "only, so the current score is not repeated in it")
+    elif len(trend) > TREND_MAX:
+        errors.append(
+            f"rollup health 'trend' holds {len(trend)} points; keep the {TREND_MAX} most "
+            f"recent prior runs (`validate_report.py --trend <report>` truncates for you) "
+            f"— a longer series is unreadable at the width the dial renders")
+    elif [t for t in trend if unattainable(t)]:
+        # Shape-checkable evidence that a point was typed rather than derived. The real
+        # check is `--trend`, which needs the directory; this one needs only the file.
+        errors.append(
+            f"rollup health 'trend' contains {[t for t in trend if unattainable(t)]}, "
+            f"which the priority index cannot produce: a run is either clean (100) or has "
+            f"a finding, and the cheapest one costs {min(INDEX_WORST.values())}. Derive the "
+            f"trend with `validate_report.py --trend <report>`; do not estimate it")
+    return errors
+
+
+def validate_rollup(path: str | Path) -> list[str]:
+    """Return contract violations for a `rollup-*.md` suite roll-up ([] = valid).
+
+    A roll-up is not an auditor report: it has no `auditor`, `mode`, or `frameworks`, it
+    carries no `[sevN]` finding blocks of its own (it links to the member reports that
+    own them), and it has `## Notes` where a report has `## Appendix` — so the coverage
+    and finding-field checks do not apply to it.
+    """
+    path = Path(path)
+    if not path.exists():
+        return [f"file not found: {path}"]
+    fm, body = _split_frontmatter(path.read_text(encoding="utf-8"))
+    if fm is None:
+        return [body]
+    return (_check_rollup_frontmatter(fm) + _check_rollup_summary(fm)
+            + _check_rollup_health(fm))
+
+
 def validate(path: str | Path) -> list[str]:
-    """Return a list of contract violations for the report at `path` ([] = valid)."""
+    """Return a list of contract violations for the report at `path` ([] = valid).
+
+    Dispatches on the document type: a suite roll-up (§9) validates through
+    `validate_rollup`, everything else as an auditor report (§3-§6).
+    """
     path = Path(path)
     if not path.exists():
         return [f"file not found: {path}"]
@@ -224,15 +813,20 @@ def validate(path: str | Path) -> list[str]:
     if fm is None:
         return [body]  # body holds the error message in the failure case
 
+    if is_rollup(fm):
+        return (_check_rollup_frontmatter(fm) + _check_rollup_summary(fm)
+                + _check_rollup_health(fm))
+
     errors = _check_frontmatter(fm)
     errors += _check_summary(fm, body)
+    errors += _check_health(fm)
     errors += _check_finding_fields(body)
     errors += _check_coverage(body)
-    errors += _check_walkthrough(body)
+    errors += _check_assets(body, path.stem)
     return errors
 
 
-INDEX_COLUMNS = ["Date (UTC)", "Auditor", "Scope", "Sev4", "Sev3", "Sev2", "Sev1",
+INDEX_COLUMNS = ["Date (UTC)", "Auditor", "Scope", "P0", "P1", "P2", "P3", "Health",
                  "Report"]
 
 
@@ -271,13 +865,46 @@ def validate_index(path: str | Path) -> list[str]:
             errors.append(
                 f"index row has {len(cells)} columns, expected {len(INDEX_COLUMNS)}: {ln!r}")
             continue
-        for sev_cell in cells[3:7]:  # Sev4..Sev1
-            if not sev_cell.isdigit():
-                errors.append(f"index severity cell not an integer: {sev_cell!r} in {ln!r}")
+        for cell in cells[3:7]:  # P0..P3
+            if not cell.isdigit():
+                errors.append(f"index priority cell not an integer: {cell!r} in {ln!r}")
+        health = cells[7]
+        # A report with no scorecard writes an em dash; anything else must be a percentage.
+        if health != "\u2014" and not (health.isdigit() and 0 <= int(health) <= 100):
+            errors.append(
+                f"index health cell must be 0-100 or '\u2014': {health!r} in {ln!r}")
     return errors
 
 
 def main(argv: list[str]) -> int:
+    if argv and argv[0] == "--trend":
+        # The one check that needs the DIRECTORY, not the file. Every other rule in this
+        # module is decidable from a report alone, which is what lets one be validated in
+        # isolation, in a fixtures directory, or after its siblings have been archived or
+        # gitignored. History is not, so it is a separate mode the workflow runs inside a
+        # real `.ux/audits/` — first to obtain the value, then to confirm what it wrote.
+        rest = argv[1:]
+        if not rest:
+            print("usage: validate_report.py --trend <rollup.md> [...]", file=sys.stderr)
+            return 2
+        ok = True
+        for arg in rest:
+            trend, notes = trend_for(arg)
+            print(f"{arg}: trend: {trend}")
+            for note in notes:
+                print(f"  note: {note}")
+            path = Path(arg)
+            if not path.exists():
+                continue  # deriving before writing — there is nothing to compare yet
+            fm, _ = _split_frontmatter(path.read_text(encoding="utf-8"))
+            health = (fm or {}).get("health")
+            declared = health.get("trend") if isinstance(health, dict) else None
+            if declared is not None and list(declared) != trend:
+                ok = False
+                print(f"INVALID trend: {arg}", file=sys.stderr)
+                print(f"  - declares {list(declared)!r} but the prior runs beside it "
+                      f"derive {trend!r}", file=sys.stderr)
+        return 0 if ok else 1
     if argv and argv[0] == "--index":
         rest = argv[1:] or ["index.md"]
         ok = True
@@ -292,19 +919,29 @@ def main(argv: list[str]) -> int:
                 print(f"valid index: {arg}")
         return 0 if ok else 1
     if not argv:
-        print("usage: validate_report.py <report.md> [...]  |  --index <index.md>",
-              file=sys.stderr)
+        print("usage: validate_report.py <report.md> [...]  |  --index <index.md>  |  "
+              "--trend <rollup.md>", file=sys.stderr)
         return 2
     ok = True
     for arg in argv:
-        errors = validate(arg)
+        # `.ux/audits/*.md` is how the skills tell an agent to validate a run, and that
+        # glob necessarily sweeps up `index.md` — which is a table, not a report, and has
+        # no frontmatter by design (§7). Dispatching on the name rather than making the
+        # caller special-case it stops the documented command from reporting a perfectly
+        # valid index as INVALID, which reads as a failed run and costs a debugging cycle.
+        if Path(arg).name == "index.md":
+            errors = validate_index(arg)
+            label, bad = "valid index", "INVALID index"
+        else:
+            errors = validate(arg)
+            label, bad = "valid", "INVALID"
         if errors:
             ok = False
-            print(f"INVALID: {arg}", file=sys.stderr)
+            print(f"{bad}: {arg}", file=sys.stderr)
             for e in errors:
                 print(f"  - {e}", file=sys.stderr)
         else:
-            print(f"valid: {arg}")
+            print(f"{label}: {arg}")
     return 0 if ok else 1
 
 

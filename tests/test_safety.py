@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import subprocess
 import sys
 import tempfile
@@ -24,7 +25,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import audit_safety  # noqa: E402
 from audit_safety import (  # noqa: E402
-    EXTRA_BY_PROFILE, changes_confined_to, snapshot, writes_under,
+    EXTRA_BY_PROFILE, baseline_path, changes_confined_to, snapshot, writes_under,
 )
 
 # Bind to the PROFILES, not to the function's defaults. The profiles are what the CLI
@@ -255,6 +256,25 @@ def main() -> int:
         if not any("usability-20260824-090000.md" in x for x in w):
             failures.append(f"writes must be observable when the prefix is NOT ignored: {w}")
 
+        # 14. Screenshots live two directories deep now — `.ux/audits/assets/<report-stem>/`
+        #     (report contract §1) — so the positive half has to see a nested write, not
+        #     just files sitting directly under the prefix. Both commands behind
+        #     `writes_under()` are git pathspecs and recurse, so this holds for free; it is
+        #     asserted because the layout change made nested the NORMAL case, and a
+        #     "writes were observed" that silently stopped covering the images would
+        #     certify a run whose entire walk-through went missing.
+        shot = repo / ".ux" / "audits" / "assets" / "usability-20260824-090000"
+        shot.mkdir(parents=True, exist_ok=True)
+        (shot / "usability-sprout-initial.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+        w = writes_under(repo, ".ux/audits/")
+        if not any("usability-sprout-initial.png" in x for x in w):
+            failures.append(f"a nested asset write must be observed: {w}")
+        # (Scoped to asset paths: case 13 rewrote `.gitignore`, which is a real change
+        #  outside the prefix and nothing to do with this one.)
+        v = changes_confined_to(repo, ".ux/audits/", allow=AUDIT)
+        if any("assets" in x for x in v):
+            failures.append(f"a run's own asset directory is confined, not an escape: {v}")
+
     # ---------------------------------------------------------------------------------
     # The positive half must be reachable from the COMMAND LINE. Every skill's self-check
     # step runs `python3 scripts/audit_safety.py <host-repo>`; a `writes_under()` that only
@@ -395,13 +415,105 @@ def main() -> int:
                 failures.append(f"a C-quoted path must survive verbatim "
                                 f"(ignored={ignored}): {w}")
 
+    # ---- where the baseline lives (found by the /tmp shakedown) --------------------
+    # The skill used to say `--snapshot > /tmp/ux-baseline.json` and read that same fixed
+    # name back. One name in a world-writable directory, shared by every run on the
+    # machine. These assertions are about the PATH, not the snapshot's contents.
+    with tempfile.TemporaryDirectory() as sandbox:
+        real_tmp, tempfile.tempdir = tempfile.tempdir, sandbox
+        try:
+            a, b = Path(sandbox) / "repo-a", Path(sandbox) / "repo-b"
+            for repo in (a, b):
+                repo.mkdir()
+                _init_repo(repo)
+
+            # 26. Derived from the repo, so both ends compute it without being told —
+            #     the constraint that rules out $(mktemp): shell state does not survive
+            #     between a skill's steps, so step 8 must be able to re-derive it.
+            if baseline_path(a) != baseline_path(a):
+                failures.append("baseline_path is not stable for one repo, so step 8 "
+                                "cannot find what step 1 saved")
+            if baseline_path(a) == baseline_path(b):
+                failures.append("two repos share one baseline file - this is the bug: "
+                                "concurrent audits overwrite each other's")
+
+            # 27. Private directory, and not one somebody else planted. `mkdir(0o700,
+            #     exist_ok=True)` is satisfied by a symlink to a directory, so the mode
+            #     alone is decoration.
+            home = baseline_path(a).parent
+            if home.stat().st_mode & 0o077:
+                failures.append(f"the baseline directory is not private: "
+                                f"{oct(home.stat().st_mode)}")
+            decoy = Path(sandbox) / "decoy"
+            decoy.mkdir()
+            planted = Path(sandbox) / f"ux-audit-{audit_safety._whoami()}-planted"
+            planted.symlink_to(decoy, target_is_directory=True)
+            saved_whoami = audit_safety._whoami
+            audit_safety._whoami = lambda: f"{saved_whoami()}-planted"
+            try:
+                baseline_path(a)
+                failures.append("baseline_path wrote through a symlinked directory - the "
+                                "0o700 above is decoration without this check")
+            except RuntimeError:
+                pass
+            finally:
+                audit_safety._whoami = saved_whoami
+
+            # 28. `--snapshot` saves it AND still prints JSON, so an explicit
+            #     `> file` + `--baseline <path>` keeps working for anyone holding it.
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+                audit_safety.main([str(a), "--snapshot"])
+            if not baseline_path(a).exists():
+                failures.append("--snapshot did not save a baseline for the repo")
+            try:
+                json.loads(out.getvalue())
+            except ValueError:
+                failures.append("--snapshot no longer prints pure JSON on stdout, so "
+                                "redirecting it to a file has stopped working")
+
+            # 29. THE REGRESSION TEST. A dirty repo-a, audited while repo-b is also
+            #     snapshotting: a real escape into host code must still be caught. Under
+            #     one shared filename b's baseline answered for a, and an agent editing
+            #     the app reported `safe` — the findings-only invariant, silently off.
+            # repo-b's user has app.tsx dirty; repo-a's does not. Under one shared
+            # filename, b's snapshot records app.tsx as pre-existing and a's check then
+            # FORGIVES a's agent for editing it. The baseline must be a's own.
+            (b / "app.tsx").write_text("// b's user had this uncommitted\n")
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                audit_safety.main([str(b), "--snapshot"])      # the interfering run
+            (a / "app.tsx").write_text("// b's user had this uncommitted\n")  # a's agent
+            _write_report(a, "usability-20260101-000000.md")
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                code = audit_safety.main([str(a), "--baseline", "auto"])
+            if code == 0:
+                failures.append("a write to app.tsx was forgiven after another repo took "
+                                "a snapshot - the baselines are sharing a file again")
+
+            # 30. `auto` with nothing saved must fail loudly. Falling back to "no
+            #     baseline" would re-enable the strict check and blame the user's own
+            #     dirt on the agent - the false positive the baseline exists to remove.
+            fresh = Path(sandbox) / "repo-c"
+            fresh.mkdir()
+            _init_repo(fresh)
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                code = audit_safety.main([str(fresh), "--baseline", "auto"])
+            if code != 2:
+                failures.append(f"--baseline auto with nothing saved returned {code}, not "
+                                f"a usage error - it must never silently run unbaselined")
+        finally:
+            tempfile.tempdir = real_tmp
+
     if failures:
         print("FAIL — safety:")
         for f in failures:
             print(f"  - {f}")
         return 1
     print("PASS — safety (invariant + idempotency + writes_under + CLI wiring "
-          "+ ignored escapes)")
+          "+ ignored escapes + baseline paths)")
     return 0
 
 

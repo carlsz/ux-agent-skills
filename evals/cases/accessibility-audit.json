@@ -1,0 +1,51 @@
+{
+  "_comment": "Routing here is deliberately narrow. `web-quality-skills:accessibility` is the REMEDIATION skill for the same standard — 'audit and improve', with the corrected markup beside every rule — so the two descriptions share most of their vocabulary and only the verb separates them. The negatives below are the remediation asks: a user who says 'make my site accessible' or 'fix the contrast' wants the maker, not this findings-only auditor.",
+  "skill_name": "accessibility-audit",
+  "trigger": {
+    "positive": [
+      { "prompt": "Run an accessibility audit of my checkout flow and write up what fails", "top_k": 1 },
+      { "prompt": "Audit this app against WCAG 2.2 and give me a prioritized report", "top_k": 3 },
+      { "prompt": "I need an a11y report on the signup screen before we ship", "top_k": 3 }
+    ],
+    "negative": [
+      { "prompt": "Fix the color contrast on my buttons and add the missing ARIA labels", "owner": "web-quality-skills:accessibility" },
+      { "prompt": "Optimize Core Web Vitals and reduce my layout shift", "owner": "web-quality-skills:core-web-vitals" }
+    ]
+  },
+  "behavioral_target": {
+    "name": "sprout",
+    "repo": "https://github.com/carlsz/sprout",
+    "run": "npm install && npm run dev"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Clone and run https://github.com/carlsz/sprout, then run a live accessibility audit of its add / edit / complete / delete task flows.",
+      "expected_output": "A contract-valid accessibility report under Sprout/.ux/audits/ whose findings each cite a WCAG 2.2 criterion with its level, carry a P0-P3 priority justified by impact on the affected user, and are backed by measurements or accessibility-tree evidence; one health item per criterion actually checked.",
+      "expectations": [
+        "Writes a report to Sprout/.ux/audits/accessibility-<timestamp>.md that validates against the shared report contract, with auditor: accessibility",
+        "Every finding cites its criterion by number, name and level (e.g. 'WCAG 2.2 — 1.4.3 Contrast (Minimum), Level AA')",
+        "No finding's priority is taken from its conformance level: each Priority field names the affected user and the tie-breaker that decided it",
+        "The health scorecard carries one item per criterion actually checked and no others — criteria that were not evaluated appear in the appendix coverage list instead",
+        "Runtime-bound findings (contrast, focus order, focus visibility, target size) are stated as verified in live mode, backed by a measurement, screenshot or accessibility-tree excerpt",
+        "If automated tooling was run, the appendix says what it covered and no '0 violations' result is reported as 'accessible'",
+        "Does not edit any of Sprout's application code, however small the fix looks",
+        "All writes are confined to Sprout/.ux/audits/"
+      ],
+      "trust_level": "provisional"
+    },
+    {
+      "id": 2,
+      "prompt": "Run a static accessibility audit of https://github.com/carlsz/sprout from source only, without starting the app.",
+      "expected_output": "A contract-valid static report that settles the markup-bound criteria and labels every runtime-bound finding 'potential — unverified', stating in the appendix that a static run cannot establish conformance.",
+      "expectations": [
+        "Reports mode: static in the frontmatter and the appendix",
+        "Markup-bound criteria (1.1.1, 1.3.1, 3.1.1, 3.3.2, 4.1.2) are settled from source with file:line evidence",
+        "Every runtime-bound finding — contrast, focus order, focus visibility, target size, live regions — is labeled 'potential — unverified' with the reason",
+        "The appendix states that a static run cannot establish conformance",
+        "No contrast ratio is asserted as a measurement without a computed render"
+      ],
+      "trust_level": "provisional"
+    }
+  ]
+}

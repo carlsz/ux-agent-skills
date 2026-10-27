@@ -1,0 +1,39 @@
+---
+auditor: usability
+schema: 3
+version: 0.1.0
+date: 2026-07-15T14:30:00Z
+target: https://localhost:3000/checkout
+mode: static
+scope: "checkout flow"
+frameworks:
+  - nielsen-10
+summary:
+  total: 0
+  p0: 0
+  p1: 0
+  p2: 0
+  p3: 0
+health:
+  rubric: nielsen-10
+  score: 8
+  max: 8
+  pct: 100
+  band: Excellent
+  items:
+    - item: "Visibility of system status"
+      score: 4
+    - item: "Error prevention"
+      score: 2
+      note: "nothing guards a double submit"
+---
+
+# Usability Audit — checkout flow
+
+## Findings
+
+None.
+
+## Appendix
+
+- **Coverage / not inspected:** nothing out of scope.

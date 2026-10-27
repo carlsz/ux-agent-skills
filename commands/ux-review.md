@@ -7,7 +7,7 @@ argument-hint: "[target] [--index]"
 # /ux-review
 
 Turn the audit reports already sitting in your `.ux/audits/` into **self-contained HTML** you
-can open in a browser or share — no server, no build. Findings render as severity-badged cards,
+can open in a browser or share — no server, no build. Findings render as priority-badged cards,
 the captured screenshots become an interactive **walk-through flipbook**, the roll-up becomes a
 **go/no-go dashboard**, and an `index.html` ties every run together. Thin entry point — the
 [`render-report`](../skills/render-report/SKILL.md) skill does the work.

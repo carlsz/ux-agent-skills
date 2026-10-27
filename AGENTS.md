@@ -28,9 +28,10 @@ ux-agent-skills/
 ├── .claude-plugin/
 │   ├── plugin.json         # plugin manifest — metadata only, no component lists
 │   └── marketplace.json    # marketplace catalog (self-lists this plugin)
-├── agents/                 # personas — the who (usability-auditor, cuj-author, cuj-auditor)
+├── agents/                 # personas — the who (usability-, accessibility-, cuj-auditor, cuj-author)
 ├── skills/                 # skills — the how
 │   ├── usability-audit/        # usability audit workflow + framework lenses & report contract
+│   ├── accessibility-audit/    # WCAG 2.2 audit workflow + the WCAG audit lens
 │   ├── ux-audit/               # the suite roll-up (fan-out + normalize + verdict)
 │   ├── spec-cuj/               # author critical user journeys by interview (+ cuj-contract)
 │   ├── audit-cuj/              # replay journeys, report the step that broke
@@ -64,7 +65,7 @@ the shape from [`agents/usability-auditor.md`](agents/usability-auditor.md):
 
 ```yaml
 description: Senior UX auditor that runs expert heuristic evaluation of a host app and writes a
-  severity-scored report to .ux/audits. Trigger phrases include "usability audit", "heuristic
+  priority-scored report to .ux/audits. Trigger phrases include "usability audit", "heuristic
   evaluation", "UX audit", "usability review".
 ```
 
@@ -78,7 +79,8 @@ The suite is deliberately uniform: every auditor emits the same
 conformance work. In order:
 
 1. **`agents/<x>-auditor.md`** — the persona. Body must state the findings-only boundary, the
-   render-vs-source honesty rule, the 0–4 severity format, and point at its frameworks.
+   render-vs-source honesty rule, the `P0`-`P3` priority format with its action column,
+   the `health` scorecard it must grade, and point at its frameworks.
 2. **`skills/<x>-audit/SKILL.md`** — the workflow. Numbered steps with **explicit exit criteria**.
    Must cover static/live/hybrid modes, writing under `.ux/audits/`, and the coverage-gap rule.
 3. **`skills/<x>-audit/references/`** — the framework lenses, self-contained. Personas point here;
@@ -94,6 +96,52 @@ conformance work. In order:
    auditor list in `check_rollup_skill()`.
 8. **Docs** — add the file to `DOC_FILES` in `tests/test_docs.py` so its links get checked, and
    update the catalog in the relevant subdirectory README.
+
+## The accessibility auditor — the recipe's first worked instance
+
+`accessibility-auditor` / `accessibility-audit` / `/accessibility-audit` is what the
+eight-step recipe above produces, and it was added late, which is the interesting part.
+The suite named accessibility a **default member of the `/ux-audit` bundle** for its whole
+life while shipping no persona, no skill, no lens and no command for it — the fan-out
+wrapped `web-quality-skills:accessibility` and called that an auditor.
+
+It is not one. That skill contains no occurrence of *finding*, *report*, *priority* or
+`.ux/`: it is a **remediation guide**, pairing each rule with the corrected markup in a
+❌/✅ idiom meant to be applied. So the roll-up was asking an agent to improvise an entire
+auditor per run — the point of view, the grading, the coverage rule, the report shape —
+and the improvisation showed. Across five real runs the same criterion, `1.4.3`, was
+graded `P1`, `P2` and `P3`, twice within one report. Three severity vocabularies were in
+play at once: the contract's `P0`–`P3`, the roll-up's own `Level AA → P1` lookup, and the
+wrapped skill's *Critical / Serious / Moderate* list, which files contrast under
+**Critical**. None of them agreed.
+
+Three things to keep straight when you touch it:
+
+- **It reads the external skill and rejects its posture.** The remediation wording is
+  genuinely useful and belongs in the Recommended Fix field. The ❌/✅ idiom is a work
+  order, and this is a findings-only suite — the boundary is under more pressure here than
+  anywhere else, because an accessibility defect usually has an obvious three-line fix
+  sitting next to it.
+- **Its rubric is the only one that is not fixed.** Usability grades ten Nielsen
+  heuristics, `cuj` grades the journey's steps; both enumerations are known before the run.
+  Accessibility grades **the criteria it actually checked**, so the scorecard can lie by
+  getting longer — fifty-six rows after examining nine reads as thoroughness. Hence
+  `check_accessibility_skill()`'s probe for *and no others*, and the rule that an
+  unevaluated criterion belongs in the appendix's coverage list, never in `health`.
+- **Mode is not cosmetic here.** Most of WCAG is a runtime property — contrast against the
+  computed background, focus order, focus visibility, target size, live-region timing — so
+  a static run finds markup that looks wrong and **cannot establish conformance**. It has
+  to say that in its own appendix. The same goes for automated tooling: axe and Lighthouse
+  cover a minority of criteria and almost none of the judgement-bound ones, so
+  *"0 violations"* is a statement about the tool, never about the app. `_check_tool_honesty()`
+  is wired into both components for that one sentence.
+
+**It trips both test traps, and that is the whole lesson.** `evals/cases/accessibility-audit.json`
+had to exist the moment `SKILL.md` did (the loud one), and `check_accessibility_persona()`,
+`check_accessibility_skill()` and `check_accessibility_command()` had to be hand-written
+into `CHECKS` (the silent one). Nothing globs them. A fourth auditor added by wrapping
+somebody's guide and skipping both would look exactly as finished as this one did for
+months.
 
 ## The CUJ family (a second triad)
 
@@ -123,19 +171,62 @@ Two capabilities were layered onto the report contract without changing the find
 shape. Know both before you touch reporting.
 
 - **The `## Walkthrough` section (report contract schema 2).** Live/hybrid auditors capture
-  screenshots — per journey step (cuj), per key state (usability) — into `.ux/audits/assets/`
-  with **stable names** (`cuj-<id>-step-<n>.png`, `usability-<scope>-<state>.png`), so a re-run
-  overwrites rather than accumulates (prune-to-latest). They're embedded inline and assembled
-  into an optional `## Walkthrough` section (after `## Findings`, before `## Appendix`, **live/
-  hybrid only**). `validate_report.py` requires `schema == 2` and light-checks that walkthrough
-  image paths are relative and under `./assets/`. Full spec: [SPEC.md](SPEC.md) §10.1–10.5.
+  screenshots — per journey step (cuj), per key state (usability) — into
+  `.ux/audits/assets/<report-stem>/`: **one directory per run**, named after the report that
+  cites it. They're embedded inline and assembled into an optional `## Walkthrough` section
+  (after `## Findings`, before `## Appendix`, **live/hybrid only**). `validate_report.py`
+  requires `schema == 3` and checks that **every** image path in the body is relative and
+  under *this* report's asset directory. Full spec: [SPEC.md](SPEC.md) §10.1–10.5.
+
+  **The run-scoping is the whole point, and it reads like an accident.** The layout used to
+  be flat `assets/` with one stable name per thing captured, so a re-run overwrote rather
+  than accumulated — bounding the directory by captures instead of runs. It also made a
+  report's evidence mutable after the fact: `cuj-001-step-2.png` carried no run identity, so
+  a later run silently replaced the image an earlier report embeds, and the HTML companion
+  base64-welded the newer screenshot in on the next render. Nothing looked wrong, because
+  the path still resolved — which is why the check compares the path against the **report's
+  filename** rather than looking for a missing file. Keep the directory name derived; choose
+  it, and the invariant stops being checkable.
 
 - **The HTML companion (`scripts/render_report_html.py`).** A **deterministic, derived** view:
-  it renders any report `.md` into a self-contained `.html` beside it (findings as cards, the
-  walkthrough as an interactive flipbook, a `rollup-*.md` as a go/no-go dashboard, `index.md` as
-  a landing page) — everything inlined, opens offline. The audit skills call it as their final
-  step; `/ux-review` → the `render-report` skill render on demand. **The Markdown stays the
-  source of truth**; the `.html` is never validated against or in place of it. Full spec: §10.6.
+  it renders any report `.md` into a self-contained `.html` beside it (a brief, findings as
+  cards with an apparatus rail, the walkthrough as an interactive flipbook, a `rollup-*.md` as
+  a go/no-go dashboard, `index.md` as a landing page) — everything inlined, opens offline. The
+  audit skills call it as their final step; `/ux-review` → the `render-report` skill render on
+  demand. **The Markdown stays the source of truth**; the `.html` is never validated against or
+  in place of it. Full spec: §10.6–10.7.
+
+  Four things about it are easy to break. **The brief absorbs `## Executive summary` and
+  `## Design health`**, so those sections render from frontmatter and are skipped in the body —
+  un-skip either and the page states the same numbers twice. And **the renderer is read-tolerant
+  where the validator is write-strict**: it reads `[sevN]` finding tags, `sevN:` counts, the
+  `Severity:` field name, `totals:`, and `report: rollup`, none of which validate on write. Every
+  one of those exists because a report is append-only history; drop one and the suite's own
+  back-catalogue renders as empty. And **the anchors are GitHub's, not the renderer's**:
+  every finding card and section heading carries the slug its Markdown heading would get on
+  GitHub, because that is what the roll-up's merged top issues and a report's prioritized
+  fixes link to. The two absorbed sections above keep their anchors on the blocks that
+  absorbed them. Mint a scheme of your own and every deep link in the suite goes dead —
+  which is what the renderer did until it emitted no `id` at all. And **the health
+  sparkline draws one more point than `health.trend` holds**: the stored field is prior
+  runs only, so the renderer appends this run's `pct` and marks it with a dot. Drop that
+  and the line stops short of today while the ring beside it shows today — a chart that
+  reads as a plateau at the exact moment the score moved.
+
+**A derived field needs a command, not a sentence.** `health.trend` is the cautionary
+case. It shipped with a documented source — `index.md`'s `Health` column — that did not
+contain the data, because index rows are appended per *auditor* and a roll-up appends none
+of its own. Nothing read it either: the workflow template hard-coded `trend: []`. So the
+field was empty in every roll-up ever written, and the one non-empty example, in this
+repo's own fixtures, was three invented numbers on a run that had no prior runs at all.
+It is now `validate_report.py --trend <report>`, which the workflow *runs* — before
+writing, to get the value, and after, to confirm it — and each point is **recomputed from
+that run's `summary`** rather than copied from its `pct`, because `pct` meant the mean of
+the member percentages until recently and a sparkline mixing two definitions shows a
+movement that never happened. It is also the one check that needs the **directory**: every
+other rule in `validate_report.py` is decidable from a single file, which is what lets a
+report be validated in isolation or after its siblings are gitignored. When you add a
+derived field, ask which command produces it. If the answer is a sentence, nothing will.
 
 **`render-report` is the suite's one non-auditor skill** — so the "adding an auditor" recipe
 above does *not* apply to it: no persona (a mechanical transform holds no point of view), no
@@ -176,6 +267,17 @@ Three things to keep straight when you touch it:
   `snapshot()` sweeps the write prefixes with `writes_under()` so ignored prior reports are
   digested rather than mistaken for the current run's output.
 
+- **The baseline's path is derived, never named.** `--snapshot` saves it under a path
+  computed from the host repo, in a private per-user directory, and `--baseline auto`
+  recomputes the same path — so the two steps name no file. They cannot: a skill's steps
+  are separate tool calls and shell state does not survive between them, which is why the
+  superseded instruction hardcoded `/tmp/ux-baseline.json` and why `$(mktemp)` would have
+  been a regression. One shared filename meant two concurrent audits overwrote each
+  other's baseline, and the check then measured one repo against the other's tree — in the
+  reproduction, an agent editing host application code reported **`safe`**. The sweep in
+  `check_no_hardcoded_temp_paths()` keeps a fixed temp path out of every component, because
+  a component is a prompt: "pick a unique path" would be improvised differently each run.
+
 - **`_dirty_paths()` never gets `--ignored`, and the second pass is why it doesn't have to.**
   `changes_confined_to()` looks for ignored escapes through a pathspec-scoped sweep of
   `_ALL_PROFILE_PATHS` — the union of every profile's paths, so an ignored `.ux/cujs/`
@@ -198,18 +300,33 @@ the continuation carries a `> ` as well. Match content, never the wrap.
 ## The two test traps
 
 The authoring rules aren't written down anywhere except the tests — and the two most important ones
-fail in **opposite** directions. Know both before you add a skill.
+fail in **opposite** directions. Know both before you add a skill — and note that the
+second one only started failing loudly once an auditor had already gone missing for months.
 
 **`test_evals.py` globs, and fails loud.** It computes `skills/*/SKILL.md` against the eval cases on
 disk and requires the set difference to be empty. The moment a new `SKILL.md` exists without a
 matching `evals/cases/<name>.json`, **CI goes red** — before you've written a line of the workflow.
 Author the eval case alongside the skill, not after.
 
-**`test_components.py` does not glob, and fails silent.** Every check is a hardcoded function —
-`check_persona()`, `check_skill()`, `check_command()`, `check_references()`, `check_rollup_skill()`,
-`check_rollup_command()` — composed by name in `main()`. A new auditor is **not** covered until you
-hand-write its `check_*()` and add it there. Nothing warns you; the suite just passes while your
-component goes unverified. This is the quieter and more dangerous of the two.
+**`test_components.py` does not glob — it used to fail silent, and now it tells you.** Every
+check is still a hardcoded function — `check_persona()`, `check_skill()`, `check_command()`,
+`check_references()`, `check_rollup_skill()`, `check_rollup_command()` — composed by name in
+`CHECKS`. A new auditor is **not** covered until you hand-write its `check_*()` and add it
+there, and the hand-writing is the point: these checks assert what a component *means*, which
+no glob can.
+
+What changed is that forgetting now fails. `check_wiring()` sweeps both halves: every
+`check_*` defined in the file must appear in `CHECKS` (the check you wrote but never
+composed), and **every component file must be named somewhere in the file's own source**
+(the check you never wrote at all). A path in a string literal is the weakest possible
+evidence that somebody looked at a component — which is exactly the right bar, because it
+cannot be satisfied by accident or by adding the component alone.
+
+It took the accessibility auditor to make that worth building. `accessibility` was a
+default member of the `/ux-audit` bundle from the beginning and had no persona, no skill,
+no lens and no command; the suite was green the whole time, because nothing in this file
+enumerated what *should* exist. Treat `check_wiring()` as a smoke alarm, not a safety net:
+it tells you a check is missing, never that the one you wrote is any good.
 
 The same shape shows up in `test_docs.py`: `DOC_FILES` is a hardcoded list, and a path that doesn't
 exist is silently skipped rather than flagged. It link-checks what it's told about — no more.

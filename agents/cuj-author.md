@@ -157,7 +157,7 @@ against the answer. So the rule splits by field, and the split is the whole disc
 
 **Three fields are graded, and they are `elicited, never guessed`:** each step's `expect`,
 the `success_criteria`, and `criticality`. `audit-cuj` scores pass/fail against the first two
-and clamps severity by the third — so a guess here doesn't just risk a wrong answer, it
+and clamps finding priority by the third — so a guess here doesn't just risk a wrong answer, it
 **sets the target every future verification is graded against.** Ask these open, always:
 
 - `expect` / `success_criteria` → *"When you do that, what do you actually **see**?"* Never

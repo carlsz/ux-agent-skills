@@ -59,10 +59,14 @@ unchanged, and the moment the agent touches that same file it is a violation aga
 """
 from __future__ import annotations
 
+import getpass
 import hashlib
 import json
+import os
+import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 DEFAULT_PREFIX = ".ux/audits/"
@@ -314,14 +318,65 @@ Baseline — who made the mess:
   baseline this assumes the repo started clean, so a dirty working tree reads as an
   agent violation. Take --snapshot at run START and pass it back with --baseline:
 
-    audit_safety.py <repo> --snapshot > /tmp/base.json     # before the run
-    audit_safety.py <repo> --baseline /tmp/base.json       # after the run
+    audit_safety.py <repo> --snapshot          # before the run — saves it for this repo
+    audit_safety.py <repo> --baseline auto     # after the run — reads that one back
+
+  `--snapshot` also prints the JSON, so `> base.json` plus `--baseline base.json` still
+  works when you want to hold the file yourself. Prefer `auto`: it needs no path, so the
+  two ends cannot disagree about one, and each repo gets its own in a private per-user
+  directory. A shared fixed name let two concurrent audits overwrite each other's
+  baseline and measure one repo against the other's tree.
 
   Only the delta is the agent's. Pre-existing dirt is forgiven while its content is
   unchanged — touch one of those files and it is a violation again.
 
 Exit 0 = confined (safe), 1 = a change escaped the profile or no writes were
 observed, 2 = usage."""
+
+
+def baseline_path(repo: str | Path) -> Path:
+    """Where `--snapshot` saves this repo's baseline and `--baseline auto` reads it back.
+
+    Derived from the repo, so **both ends compute it without being told**. That is the
+    whole constraint: a skill's steps are separate tool calls and shell state does not
+    survive between them, so a path captured in a variable at step 1 is gone by step 8.
+    It is why the superseded instruction named one fixed file, `/tmp/ux-baseline.json`,
+    and why `$(mktemp)` would have been a regression rather than a fix.
+
+    A fixed name in a shared directory is wrong in three ways, worst first:
+
+    1. **It collides.** Two audits at once — different repos, or the same repo in two
+       worktrees — overwrite each other's baseline, and the check then measures this
+       repo against that one's tree. It forgives a real escape or invents one; the check
+       that catches mistakes was making one, silently, with no symptom to notice.
+    2. **There is no `/tmp` on Windows**, and the suite ships wherever Claude Code runs.
+    3. **A predictable path in a world-writable directory is the insecure-temp-file
+       shape.** The skill wrote it by shell redirection, which follows a symlink someone
+       else planted there.
+
+    So: a private per-user directory, one file per repo, named by digest so two checkouts
+    of the same project do not share one. Two concurrent runs of the *same* repo still
+    do — which is correct, they are measuring the same tree.
+    """
+    home = Path(tempfile.gettempdir()) / f"ux-audit-{_whoami()}"
+    home.mkdir(mode=0o700, exist_ok=True)
+    # mkdir(exist_ok=True) is satisfied by a symlink to a directory, which is exactly what
+    # the attack plants — so the 0o700 above is decoration unless this runs too.
+    if home.is_symlink():
+        raise RuntimeError(f"{home} is a symlink; refusing to write a baseline through it")
+    if not home.is_dir():
+        raise RuntimeError(f"{home} exists and is not a directory")
+    if hasattr(os, "getuid") and home.stat().st_uid != os.getuid():
+        raise RuntimeError(f"{home} is not owned by this user; refusing to use it")
+    key = hashlib.sha256(str(Path(repo).resolve()).encode("utf-8")).hexdigest()[:16]
+    return home / f"baseline-{key}.json"
+
+
+def _whoami() -> str:
+    """A per-user component for the baseline directory name, on any platform."""
+    if hasattr(os, "getuid"):
+        return str(os.getuid())
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", getpass.getuser() or "user")
 
 
 def main(argv: list[str]) -> int:
@@ -352,16 +407,16 @@ def main(argv: list[str]) -> int:
         args.remove("--allow-no-writes")
 
     baseline: dict[str, str] | None = None
-    baseline_path: str | None = None
+    baseline_arg: str | None = None
     if "--baseline" in args:
         i = args.index("--baseline")
         if i + 1 >= len(args):
             print(USAGE, file=sys.stderr)
             return 2
-        baseline_path = args[i + 1]
+        baseline_arg = args[i + 1]
         del args[i:i + 2]
 
-    if take_snapshot and baseline_path is not None:
+    if take_snapshot and baseline_arg is not None:
         print("--snapshot records a baseline; --baseline consumes one. Pick one.\n",
               file=sys.stderr)
         print(USAGE, file=sys.stderr)
@@ -385,18 +440,43 @@ def main(argv: list[str]) -> int:
         # Sweeps every profile's write targets, not just `git status` and not just this
         # profile's — those are the paths both halves may look at, and where they are
         # ignored `_dirty_paths()` cannot see what was already there. See `snapshot()`.
-        json.dump(snapshot(repo), sys.stdout, indent=2, sort_keys=True)
+        taken = snapshot(repo)
+        # Saved as well as printed, so the other end can find it by deriving the same path
+        # instead of being handed one. stdout stays pure JSON: redirecting it still works,
+        # and the note goes to stderr where it cannot corrupt a `> file`.
+        try:
+            saved = baseline_path(repo)
+            saved.write_text(json.dumps(taken, indent=2, sort_keys=True) + "\n",
+                             encoding="utf-8")
+            print(f"baseline saved for this repo; read it back with `--baseline auto` "
+                  f"({saved})", file=sys.stderr)
+        except (OSError, RuntimeError) as exc:
+            # Not fatal: the JSON is on stdout either way, and an explicit
+            # `--baseline <path>` still works. But say so, because `--baseline auto` is
+            # about to fail and the reason belongs here, not three steps later.
+            print(f"could not save the baseline ({exc}); redirect stdout and pass the "
+                  f"file back with `--baseline <path>`", file=sys.stderr)
+        json.dump(taken, sys.stdout, indent=2, sort_keys=True)
         sys.stdout.write("\n")
         return 0
 
-    if baseline_path is not None:
+    if baseline_arg is not None:
+        if baseline_arg == "auto":
+            # The literal, not a path — so the skill's two steps name no file at all.
+            # (A file genuinely called `auto` is reachable as `./auto`.)
+            try:
+                baseline_arg = str(baseline_path(repo))
+            except (OSError, RuntimeError) as exc:
+                print(f"could not locate this repo's baseline: {exc}\n", file=sys.stderr)
+                print(USAGE, file=sys.stderr)
+                return 2
         try:
-            baseline = json.loads(Path(baseline_path).read_text(encoding="utf-8"))
+            baseline = json.loads(Path(baseline_arg).read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             # Never fall back to baseline=None here. That would silently re-enable the
             # strict check and blame the user's own dirt on the agent — the exact
             # false positive the baseline exists to remove, reappearing as a typo'd path.
-            print(f"could not read baseline {baseline_path!r}: {exc}\n", file=sys.stderr)
+            print(f"could not read baseline {baseline_arg!r}: {exc}\n", file=sys.stderr)
             print(USAGE, file=sys.stderr)
             return 2
 

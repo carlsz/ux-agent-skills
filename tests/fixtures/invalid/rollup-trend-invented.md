@@ -1,0 +1,71 @@
+---
+kind: rollup
+schema: 3
+version: 0.5.1
+date: 2026-07-16T16:00:00Z
+target: http://localhost:3000
+scope: "demo app — journeys only"
+verdict: GO
+verdict_reason: "all journeys verified live; nothing blocking and no majors anywhere in the suite"
+auditors_ran: [cuj]
+auditors_skipped:
+  - auditor: usability
+    reason: "not selected; --only cuj was passed"
+  - auditor: accessibility
+    reason: "not selected; --only cuj was passed"
+  - auditor: web-performance
+    reason: "opt-in; run with --only web-performance or --all"
+summary:
+  total: 0
+  p0: 0
+  p1: 0
+  p2: 0
+  p3: 0
+health:
+  pct: 100
+  band: Excellent
+  trend: [71, 76, 98]
+  auditors:
+    - {auditor: cuj, pct: 100, band: Excellent, unit: "steps verified"}
+---
+
+# UX Audit Roll-up — demo app
+
+<!-- INVALID: `98` is not a score the priority index can
+produce — a clean run is 100 and the cheapest finding costs 3. A typed number. -->
+
+**Verdict: GO.** The CUJ auditor replayed every stored journey live and all of them passed.
+Three auditors were skipped and are disclosed below — none of them was scored as a pass.
+
+## Per-auditor results
+
+| Auditor | Mode | P0 | P1 | P2 | P3 | Total | Result |
+|---------|------|------|------|------|------|-------|--------|
+| [cuj](cuj-20260716-130000.md) | live | 0 | 0 | 0 | 0 | 0 | **PASS** — verified clean |
+| **Suite** | | **0** | **0** | **0** | **0** | **0** | **GO** |
+
+> The CUJ `total: 0` is a **verified clean pass**, not an empty run — its `frameworks` list
+> carries `task-completion` and `success-criteria`, the signal that the journeys were
+> actually completed and graded.
+
+## Auditors that ran vs. skipped
+
+- **Ran:** cuj (native, live).
+- **Skipped:** usability (not selected; `--only cuj`), accessibility
+  (`web-quality-skills:accessibility` not installed), web-performance (opt-in).
+
+## Merged top issues
+
+None — no auditor reported a finding.
+
+## Verdict rationale
+
+- `p0 == 0` and `p1 == 0` → neither gate trips; the derived verdict is **GO**.
+- The one auditor that ran is a verified pass, not a skip and not an empty run.
+- Three skipped auditors are disclosed with reasons; the verdict covers only what ran.
+
+## Notes
+
+- **Coverage:** this run verified journeys only. A `GO` here is not a statement about
+  usability or accessibility — neither auditor ran.
+- **Member reports:** [cuj](cuj-20260716-130000.md).
