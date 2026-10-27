@@ -48,6 +48,30 @@ IMG_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 CODE_RE = re.compile(r"`([^`]+)`")
 BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+# `***both***` — matched before `**`, which would otherwise consume the first two stars and
+# strand the third outside its own `<strong>`, crossing the tags.
+BOLD_ITALIC_RE = re.compile(r"\*\*\*(.+?)\*\*\*")
+# `*emphasis*`, and deliberately NOT `_emphasis_`. Every auditor writes emphasis in prose —
+# *potential*, journeys *selected*, *not* audited — and with no rule for it the stars reached
+# the page as literal punctuation, which reads as a typo in a document whose whole job is to
+# look credible. The guards are what stop it eating things that are not emphasis: no
+# whitespace just inside either star (so `2 * 3`, and a trailing footnote marker, are left
+# alone), no star or newline inside the span, and no word character immediately outside (so
+# `file*.png` stays intact). `_` is left out on purpose — these reports are full of bare
+# `snake_case` identifiers in prose, and an underscore rule turns half of one into italics.
+ITALIC_RE = re.compile(r"(?<![\w*])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![\w*])")
+
+
+def _emphasis(escaped: str) -> str:
+    """Apply bold/italic to ALREADY-ESCAPED text, widest delimiter first.
+
+    Link labels get this too. A label is escaped and stashed whole by `_inline`, so emphasis
+    inside one — `[*linked* label](x.md)` — would otherwise be the one place the stars still
+    reached the page after everything else stopped leaking them.
+    """
+    escaped = BOLD_ITALIC_RE.sub(lambda m: f"<strong><em>{m.group(1)}</em></strong>", escaped)
+    escaped = BOLD_RE.sub(lambda m: f"<strong>{m.group(1)}</strong>", escaped)
+    return ITALIC_RE.sub(lambda m: f"<em>{m.group(1)}</em>", escaped)
 
 IMAGE_MIME = {
     ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -109,7 +133,8 @@ def _inline(text: str, report_dir: Path) -> str:
     """Render inline Markdown (images, code, links, bold) to safe HTML.
 
     Images / code / links are rendered first and stashed behind sentinels so their content
-    is not re-escaped; the remaining text is HTML-escaped; bold is applied last.
+    is not re-escaped; the remaining text is HTML-escaped; emphasis is applied last, widest
+    delimiter first so `***x***` is not torn in half by the `**` rule.
     """
     tokens: list[str] = []
 
@@ -121,12 +146,12 @@ def _inline(text: str, report_dir: Path) -> str:
     text = CODE_RE.sub(lambda m: stash(f"<code>{html.escape(m.group(1))}</code>"), text)
     text = LINK_RE.sub(
         lambda m: stash(
-            f'<a href="{html.escape(m.group(2).strip())}">{html.escape(m.group(1))}</a>'
+            f'<a href="{html.escape(m.group(2).strip())}">'
+            f"{_emphasis(html.escape(m.group(1)))}</a>"
         ),
         text,
     )
-    text = html.escape(text)
-    text = BOLD_RE.sub(lambda m: f"<strong>{m.group(1)}</strong>", text)
+    text = _emphasis(html.escape(text))
     text = re.sub(r"\x00(\d+)\x00", lambda m: tokens[int(m.group(1))], text)
     return text
 

@@ -8,6 +8,34 @@ All notable changes to this project are documented here. The format is based on
 
 
 ### Fixed
+- **`*Italics*` reached the HTML as literal asterisks.** `_inline` rendered images, code,
+  links and `**bold**`, and had no rule for `*emphasis*` at all — so every phrase an auditor
+  emphasised arrived with its stars intact. Across the real Sprout run and the four
+  variance-study runs that is 10 stray asterisks in rendered prose; after the fix, **0 in
+  all six sample sets**. It is a small defect that does outsized damage: the stars read as a
+  typo, in a document whose whole job is to look credible to someone opening it cold.
+
+  Emphasis now renders, widest delimiter first — `***x***` before `**x**` before `*x*`,
+  because running the `**` rule first strands the third star outside its own `<strong>` and
+  crosses the tags. The italic rule is deliberately guarded rather than a bare
+  `\*(.+?)\*`: no whitespace just inside either star, no star or newline within the span,
+  and no word character immediately outside. These reports quote globs, arithmetic and
+  footnote markers, and `2 * 3 * 4` or `file*.png` turning into italics would be a new
+  defect standing where the old one was. **`_emphasis_` is not supported on purpose** — the
+  reports are full of bare `snake_case` and `_leading_underscore` identifiers in prose, and
+  an underscore rule renders half of one in italics and eats the rest.
+
+  Link labels get the same treatment. A label is escaped and stashed whole by `_inline`,
+  so `[*linked* label](x.md)` was the one remaining place a star could still reach the page
+  once everything else stopped leaking.
+
+  The check is the measurement: every fixture page is reduced to its rendered body text —
+  stylesheet, script and code spans removed, tags stripped — and a single surviving `*` is
+  a failure. As with the deep links, it **fails if the fixtures contain fewer than three
+  `<em>` spans**, because a corpus with no emphasis in it would pass such a check having
+  proved nothing. Alongside it sit the unit cases for what must become emphasis and, more
+  importantly, the five shapes that must not.
+
 - **Every deep link in the HTML companion was dead, because the renderer emitted no `id`
   attribute anywhere.** The suite writes two kinds of fragment link and answered neither: a
   roll-up's `## Merged top issues` points each issue at `member.md#p1-…`, and a report's own

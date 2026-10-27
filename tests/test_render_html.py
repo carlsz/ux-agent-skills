@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from render_report_html import _slug, render, render_index  # noqa: E402
+from render_report_html import _inline, _slug, render, render_index  # noqa: E402
 from validate_report import _split_frontmatter  # noqa: E402
 
 FIX = ROOT / "tests" / "fixtures" / "valid"
@@ -96,6 +96,16 @@ _INDEX_MD = """# Audit index
 | 2026-01-01T00:00:00Z | usability | temp | 0 | 0 | 1 | 0 | 50 | [report](usability-20260101-000000.md) |
 """
 
+
+# Rendered BODY text: the inline stylesheet, the script and code spans removed, then tags
+# stripped. A literal `*` surviving this is one the reader sees as punctuation.
+_NON_PROSE_RE = re.compile(
+    r"<style\b.*?</style>|<script\b.*?</script>|<code>.*?</code>|<pre>.*?</pre>", re.DOTALL)
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _body_text(page: str) -> str:
+    return _TAG_RE.sub(" ", _NON_PROSE_RE.sub(" ", page))
 
 def render_text(md: str) -> str:
     """Render a report given as a string, for cases no fixture should carry."""
@@ -548,6 +558,54 @@ def main() -> int:
     for want in ('id="p2-the-same-heading-twice"', 'id="p2-the-same-heading-twice-1"'):
         if want not in dup:
             failures.append(f"deep link: repeated heading did not get {want}")
+
+    # --- emphasis: `*italics*` must not reach the page as punctuation ------------------
+    #
+    # `_inline` rendered images, code, links and `**bold**` and had no rule for `*italic*`
+    # at all, so every emphasised phrase an auditor wrote — *potential*, journeys
+    # *selected*, *not* audited — arrived with its stars intact. In a document whose whole
+    # job is to look credible to someone reading it cold, that reads as a typo.
+    starred = 0
+    for page_name, page in rendered.items():
+        leaked = _body_text(page).count("*")
+        if leaked:
+            failures.append(f"emphasis: {leaked} literal asterisk(s) in {page_name} prose")
+        starred += page.count("<em>")
+    # Vacuity guard, as for the deep links: a fixture set with no emphasis in it would pass
+    # the loop above having proved nothing.
+    if starred < 3:
+        failures.append(f"emphasis: only {starred} <em> spans across the fixtures — some "
+                        "report must actually use italics or this check is empty")
+
+    # The pairs that must become emphasis, and the asterisks that must NOT. The second
+    # group is why the rule is guarded rather than a bare `\*(.+?)\*`: these reports quote
+    # globs and arithmetic, and turning `file*.png` into italics would be a new defect in
+    # place of the old one.
+    here = Path(".")
+    for src, want in (
+        ("a *potential* risk", "a <em>potential</em> risk"),
+        ("journeys *selected*, so a *skipped* run",
+         "journeys <em>selected</em>, so a <em>skipped</em> run"),
+        # Widest delimiter first; `**` run first would strand the third star outside the
+        # `<strong>` and cross the tags.
+        ("***both at once***", "<strong><em>both at once</em></strong>"),
+        ("**bold** and *italic*", "<strong>bold</strong> and <em>italic</em>"),
+        # A label is escaped and stashed whole, so emphasis inside one is the last place
+        # the stars could still leak.
+        ("a [*linked* label](x.md)", 'a <a href="x.md"><em>linked</em> label</a>'),
+    ):
+        got = _inline(src, here)
+        if got != want:
+            failures.append(f"emphasis: _inline({src!r}) == {got!r}, want {want!r}")
+    for src in ("2 * 3 * 4", "see note* here", "file*.png stays", "a trailing star *",
+                "snake_case_name untouched",
+                # `_` is not an emphasis delimiter here, and this is the case that decides
+                # it: a leading-underscore identifier written bare in prose would otherwise
+                # be rendered as italics with half its name eaten.
+                "call _dirty_paths and _flatten first"):
+        got = _inline(src, here)
+        if "<em>" in got:
+            failures.append(f"emphasis: _inline({src!r}) == {got!r} — that is not emphasis")
 
     # The index landing repoints run links from .md to .html and stays self-contained.
     with tempfile.TemporaryDirectory() as d:
