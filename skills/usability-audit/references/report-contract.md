@@ -168,7 +168,7 @@ rating is a blend of them, not a single impression. Rate each, then combine:
 - **Persistence** — a one-time obstacle a user learns around, or one that bites on every visit?
 
 **The Severity field's justification must name these factors**, not merely assert a number.
-`sev3 — major` is not a justification. `sev3 — every keyboard user meets it (frequency), there
+`S3 — major` is not a justification. `S3 — every keyboard user meets it (frequency), there
 is no way around it (impact), and it recurs on every visit (persistence)` is.
 
 > **Why the method is load-bearing.** Nielsen's ratings were designed to be *averaged across
@@ -288,7 +288,7 @@ to exist, nor that the file is present on disk.
 
 ### Count reconciliation
 The number of `[PN]` findings in the body must exactly equal `summary.total`, and the
-per-priority body counts must match `summary.p0..p3`. *(Schema 2: `[sevN]` headings against
+per-priority body counts must match `summary.P0..P3`. *(Schema 2: `[sevN]` headings against
 `summary.sev1..4`.)* The validator enforces this.
 
 ## 6. Render-vs-source honesty rule

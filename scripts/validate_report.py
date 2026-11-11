@@ -72,10 +72,6 @@ RATING = {
     },
 }
 
-# Retained for `render_report_html.py`, which still reads schema-2 reports only. The
-# validator dispatches through RATING; the renderer becomes schema-aware in its own slice,
-# and until then a schema-3 report renders without its findings rather than wrongly.
-FINDING_RE = RATING[2]["pattern"]
 # The optional `## Walkthrough` section (§5) and the markdown images inside it.
 WALKTHROUGH_RE = re.compile(r"^##\s+Walkthrough\s*$", re.MULTILINE | re.IGNORECASE)
 IMAGE_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
@@ -105,10 +101,11 @@ def _check_frontmatter(fm: dict) -> list[str]:
         if key not in fm:
             errors.append(f"frontmatter missing required key: {key!r}")
 
-    if fm.get("schema") not in KNOWN_SCHEMAS:
+    schema = fm.get("schema")
+    if type(schema) is not int or schema not in KNOWN_SCHEMAS:
         errors.append(
-            f"frontmatter 'schema' must be one of {list(KNOWN_SCHEMAS)}, "
-            f"got {fm.get('schema')!r}")
+            f"frontmatter 'schema' must be one of {list(KNOWN_SCHEMAS)} "
+            f"(an integer), got {schema!r}")
 
     mode = fm.get("mode")
     if mode not in KNOWN_MODES:
@@ -181,7 +178,18 @@ def _check_summary(fm: dict, body: str) -> list[str]:
 
     for key in ["total"] + keys:
         if key not in summary:
-            errors.append(f"summary missing required key: {key!r}")
+            # Name casing as the cause when that is what it is. The keys are `P0`-`P3`
+            # while the ROLL-UP's own `priorities:` map used to be lowercase, so `p0:` is
+            # the natural slip -- and a bare "missing required key" sent the author looking
+            # for an absent key rather than a miscased one.
+            wrong_case = next((k for k in summary if str(k).lower() == key.lower()
+                               and str(k) != key), None)
+            if wrong_case is not None:
+                errors.append(
+                    f"summary has {wrong_case!r} but the key is {key!r} "
+                    f"(summary keys are case-sensitive)")
+            else:
+                errors.append(f"summary missing required key: {key!r}")
         elif not isinstance(summary[key], int) or summary[key] < 0:
             errors.append(f"summary {key!r} must be a non-negative integer")
 
@@ -313,7 +321,6 @@ INDEX_COLUMNS_BY_SHAPE = {
                  "Report"],
     "priority": ["Date (UTC)", "Auditor", "Scope", "P0", "P1", "P2", "P3", "Report"],
 }
-INDEX_COLUMNS = INDEX_COLUMNS_BY_SHAPE["severity"]  # legacy alias
 
 
 def _table_cells(line: str) -> list[str]:
@@ -337,7 +344,8 @@ def validate_index(path: str | Path) -> list[str]:
     lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
     header_idxs = [i for i, ln in enumerate(lines)
-                   if "Date (UTC)" in ln and "Report" in ln]
+                   if ln.lstrip().startswith("|")
+                   and "Date (UTC)" in ln and "Report" in ln]
     if not header_idxs:
         return ["index missing the table header row (columns: "
                 f"{INDEX_COLUMNS_BY_SHAPE['priority']})"]

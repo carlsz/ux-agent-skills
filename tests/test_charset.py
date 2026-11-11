@@ -65,7 +65,9 @@ def _describe(ch: str) -> str:
 def scan_text(label: str, text: str) -> list[str]:
     """Return one finding per offending character, with file:line:col and its name."""
     findings: list[str] = []
-    for lineno, line in enumerate(text.splitlines(), 1):
+    # `split("\n")`, not `splitlines()`: the latter also splits on U+2028, U+2029 and
+    # U+0085, consuming the exact characters this guard exists to flag.
+    for lineno, line in enumerate(text.split("\n"), 1):
         for col, ch in enumerate(line, 1):
             if ord(ch) < 128:
                 continue
@@ -77,7 +79,7 @@ def scan_text(label: str, text: str) -> list[str]:
                     f"{label}:{lineno}:{col} foreign-script letter {_describe(ch)} "
                     f"— a slip or a homoglyph; use the ASCII letter"
                 )
-            elif category in ("Cf", "Zs", "Cc") and ch not in _ASCII_WHITESPACE:
+            elif category in ("Cf", "Zs", "Cc", "Zl", "Zp") and ch not in _ASCII_WHITESPACE:
                 if ch in ALLOWED_INVISIBLE:
                     continue
                 findings.append(
@@ -124,6 +126,9 @@ def _self_check() -> list[str]:
     nbsp = "P0" + chr(0x00A0) + "blocks"
     bidi_override = "amount = 100" + chr(0x202E)  # Trojan Source: right-to-left override
     homoglyph = "us" + chr(0x430) + "bility"      # Cyrillic a, visually identical
+    line_sep = "first" + chr(0x2028) + "second"   # U+2028, eaten by splitlines()
+    para_sep = "first" + chr(0x2029) + "second"   # U+2029, likewise
+    next_line = "first" + chr(0x0085) + "second"  # U+0085 NEL, likewise
 
     for name, sample, want in (
         ("a foreign-script word", cyrillic, 6),
@@ -131,6 +136,9 @@ def _self_check() -> list[str]:
         ("a zero-width space", zero_width, 1),
         ("a non-breaking space", nbsp, 1),
         ("a bidi override", bidi_override, 1),
+        ("a line separator", line_sep, 1),
+        ("a paragraph separator", para_sep, 1),
+        ("a next-line control", next_line, 1),
     ):
         got = len(scan_text("<self-check>", sample))
         if got != want:
@@ -155,6 +163,13 @@ def main() -> int:
     files = tracked_text_files()
     if not files:
         failures.append("no tracked text files found — the glob is broken, not the repo clean")
+    # _self_check() constrains the scanner; this constrains DISCOVERY. A narrowed suffix
+    # filter or a broken `git ls-files` call would otherwise scan nothing of interest and
+    # still report PASS, which is the same "green because it never looked" failure the
+    # self-check exists to rule out.
+    for required in ("AGENTS.md", "agents/usability-auditor.md", "scripts/validate_report.py"):
+        if (ROOT / required) not in files:
+            failures.append(f"discovery missed {required} — the file sweep is too narrow")
 
     scanned = 0
     for path in files:

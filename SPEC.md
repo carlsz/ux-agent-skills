@@ -157,10 +157,10 @@ frameworks:                  # which knowledge bases were applied
   - npcis
 summary:                     # counts MUST equal the number of findings by priority
   total: 12
-  p0: 1                      # blocks the task, no workaround
-  p1: 4                      # fix before release
-  p2: 5                      # workaround exists
-  p3: 2                      # cosmetic
+  P0: 1                      # blocks the task, no workaround
+  P1: 4                      # fix before release
+  P2: 5                      # workaround exists
+  P3: 2                      # cosmetic
 ---
 ```
 

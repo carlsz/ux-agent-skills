@@ -133,7 +133,7 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
    exactly as a single-auditor run does.
 
 6. **Write the roll-up.** Create `.ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md` with
-   frontmatter carrying `priorities:` (the `p0`-`p3` totals), `auditors_run:` and
+   frontmatter carrying `priorities:` (the `P0`-`P3` totals), `auditors_run:` and
    `auditors_skipped:`, and a body holding:
 
    - **The priority distribution** — per-auditor counts plus a total row, e.g.

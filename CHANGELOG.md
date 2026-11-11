@@ -14,7 +14,7 @@ first*, so the report answers that with one number and shows the reasoning under
 
 ### Changed
 - **`P0`-`P3` priority replaces `sev0`-`sev4` as the scored scale.** Finding headings are
-  `### [PN] <title>`, `summary` carries `p0`-`p3`, and the index gains priority columns. P0
+  `### [PN] <title>`, `summary` carries `P0`-`P3`, and the index gains priority columns. P0
   blocks the task with no workaround; P1 needs fixing before release (a costly or non-obvious
   workaround, a silent failure, or a WCAG AA failure); P2 has an obvious workaround; P3 is
   cosmetic. A non-problem is omitted entirely, as before.

@@ -222,6 +222,39 @@ def main() -> int:
             if stale in html_out:
                 failures.append(f"{label}: stale verdict artifact {stale!r} still rendered")
 
+    # --- a roll-up whose `priorities:` map cannot be read -----------------------------
+    # Nothing validates rollup frontmatter, so _priority_counts() is the only thing between
+    # a malformed map and the dashboard. Reading absent/misnamed/non-numeric as "all zero"
+    # made the banner announce "every auditor reported clean" ABOVE a table of findings --
+    # the exact false-clean read the function exists to prevent.
+    from render_report_html import _distribution_banner, _priority_counts
+    for label, fm in (
+        ("absent",            {"auditors_run": ["u", "a", "cuj"]}),
+        ("lowercase keys",    {"auditors_run": ["u"], "priorities": {"p0": 1}}),
+        ("non-numeric value", {"auditors_run": ["u"], "priorities": {"P0": "three"}}),
+        ("YAML bool",         {"auditors_run": ["u"], "priorities": {"P0": True}}),
+        ("a list",            {"auditors_run": ["u"], "priorities": [1, 2, 3]}),
+        ("a string",          {"auditors_run": ["u"], "priorities": "none"}),
+        ("empty frontmatter", {}),
+    ):
+        if _priority_counts(fm) is not None:
+            failures.append(f"rollup priorities {label}: must read as unavailable, not zero")
+        try:
+            banner = _distribution_banner(fm)
+        except Exception as exc:  # a crash means the roll-up HTML is never written at all
+            failures.append(f"rollup priorities {label}: banner crashed ({exc!r})")
+            continue
+        if "banner pass" in banner:
+            failures.append(f"rollup priorities {label}: rendered a PASS banner")
+        if "unavailable" not in banner:
+            failures.append(f"rollup priorities {label}: must say the distribution is "
+                            f"unavailable")
+    # ...while a genuine all-zero with complete coverage is still a pass.
+    full = _distribution_banner({"auditors_run": ["u", "a", "c", "w"],
+                                 "priorities": {"P0": 0, "P1": 0, "P2": 0, "P3": 0}})
+    if "banner pass" not in full:
+        failures.append("rollup: a genuine all-zero with full coverage should still pass")
+
     # The index landing repoints run links from .md to .html and stays self-contained.
     with tempfile.TemporaryDirectory() as d:
         base = Path(d)

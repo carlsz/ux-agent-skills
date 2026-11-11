@@ -90,8 +90,10 @@ only a *fix-it-now* if the journey matters, and the author already ranked that. 
 ranking instead of substituting your own is the same discipline as grading against their
 verbatim `expect`.
 
-The clamp is a **floor on urgency, not a fixed demotion**: a `P1` on a `low` journey lands at
-`P2`, not `P3`. It caps how urgent a finding may claim to be; it never shifts the whole ladder.
+The clamp is a **ceiling on urgency, not a fixed demotion**: a `P1` on a `low` journey lands
+at `P2`, not `P3`. It caps how urgent a finding may claim to be; it never shifts the whole
+ladder. (It is a *floor* on the rank number — `P` cannot go below `P2` — which is the same
+rule stated from the other side; say "ceiling on urgency" to avoid the confusion.)
 
 ### Severity: what broke, not how urgent
 

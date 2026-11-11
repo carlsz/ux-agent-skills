@@ -136,6 +136,28 @@ def main() -> int:
     failures += _expect_invalid(tmp, "'schema' must be one of")
     tmp.unlink()
 
+    # --- review findings from PR #20, pinned so they cannot regress ----------------
+    # Lowercase summary keys: SPEC's canonical example shipped `p0:` while the validator
+    # requires `P0:`, so an auditor copying the spec failed its own self-check every run.
+    # The keys are now uppercase everywhere AND the error names casing as the cause --
+    # the previous "missing required key: 'P0'" sent the author hunting an absent key.
+    import re as _re
+    _s3 = (FIXTURES / "valid" / "usability-20261111-143000.md").read_text(encoding="utf-8")
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as fh:
+        fh.write(_re.sub(r"^  P(\d):", lambda m: f"  p{m.group(1)}:", _s3, flags=_re.M))
+        tmp = Path(fh.name)
+    failures += _expect_invalid(tmp, "case-sensitive")
+    tmp.unlink()
+
+    # `3.0 == 3` and `True == 1` in Python, so a membership test accepted both and then
+    # indexed the rating table by something that is not a contract version.
+    for bad in ("schema: 3.0", "schema: true"):
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as fh:
+            fh.write(_s3.replace("schema: 3", bad, 1))
+            tmp = Path(fh.name)
+        failures += _expect_invalid(tmp, "an integer")
+        tmp.unlink()
+
     # index.md: a conforming index passes; a malformed one is rejected.
     failures += _expect_valid_index(FIXTURES / "valid" / "index.md")
     failures += _expect_invalid_index(FIXTURES / "invalid" / "index-badcols.md", "column")
@@ -143,13 +165,22 @@ def main() -> int:
     # table with a priority table appended below it is the documented transition (§7), and
     # both must validate in one file.
     failures += _expect_valid_index(FIXTURES / "valid" / "index-dual.md")
+    # Header detection keyed on two phrases appearing anywhere in a line, so PROSE about
+    # the columns -- which this contract, SPEC and the README all contain -- was parsed as
+    # a header row and then rejected for having the wrong columns.
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as fh:
+        fh.write((FIXTURES / "valid" / "index.md").read_text(encoding="utf-8")
+                 + "\nEach row lists Date (UTC), Auditor, Scope and Report.\n")
+        tmp = Path(fh.name)
+    failures += _expect_valid_index(tmp)
+    tmp.unlink()
 
     if failures:
         print("FAIL — report contract:")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (21 checks, schemas 2 and 3)")
+    print("PASS — report contract (26 checks, schemas 2 and 3)")
     return 0
 
 

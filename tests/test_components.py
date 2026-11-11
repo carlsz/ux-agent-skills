@@ -59,6 +59,21 @@ def _flatten(text: str) -> str:
     return " ".join(joined.split()).lower()
 
 
+def _section(body: str, heading_contains: str) -> str:
+    """Flattened text of the first `##`/`###` section whose heading matches, else `""`.
+
+    Document-wide probes are how an assertion passes for the wrong reason: `"impact" in low`
+    held for the CUJ auditor because its *priority* section says "classify task impact", so
+    rewording the severity factors kept it green. Scope the probe to the section that owns
+    the claim and it fails when that section stops making it.
+    """
+    for chunk in re.split(r"^#{2,3}\s+", body, flags=re.M)[1:]:
+        heading, _, rest = chunk.partition("\n")
+        if heading_contains.lower() in heading.lower():
+            return _flatten(rest)
+    return ""
+
+
 def _numbered_steps(body: str) -> list[str]:
     """Titles of the `N. **Title**` workflow steps, in document order, normalized.
 
@@ -127,10 +142,16 @@ def check_persona() -> list[str]:
     # Render-vs-source honesty rule.
     _require("unverified" in low or "render" in low,
              "persona: must state the render-vs-source honesty rule", errs)
-    # Severity survives as the REPORTED input to priority, so this probe is deliberately
-    # vocabulary-neutral: it asserts the persona still defines a severity scale at all.
-    _require("severity" in low and "0" in body and "4" in body,
-             "persona: must define the severity scale it reports per finding", errs)
+    # Severity survives as the REPORTED input to priority, so the persona must still carry
+    # the scale. The previous form of this probe -- `"severity" in low and "0" in body and
+    # "4" in body` -- could not fail: the "0" and "4" came from `P0` and the `§4`
+    # cross-reference, so deleting both rating tables left it green. Probe the severity
+    # section for the two ends of Nielsen's scale, which exist only because it is described.
+    sev_section = _section(body, "severity")
+    _require(bool(sev_section), "persona: must have a severity section", errs)
+    for end in ("catastrophe", "cosmetic"):
+        _require(end in sev_section,
+                 f"persona: the severity scale must name its {end!r} end", errs)
     # The derivation, not just the table. Single-word probes: `low` is body.lower(),
     # not flattened, so a hard-wrapped phrase would straddle a line break.
     for factor in ("frequency", "impact", "persistence"):
@@ -507,9 +528,14 @@ def check_cuj_auditor_persona() -> list[str]:
     # Schema 3 gave each instrument its own field, which retired slice 1's divergence
     # note: task impact scores PRIORITY, the three factors score SEVERITY. The CUJ auditor
     # now rates both, so it must reach the factors it was once deliberately excused from.
+    # Scoped to the severity section: `"impact" in low` passed on this persona's *priority*
+    # section ("classify task impact"), so it could not detect the severity factors going
+    # missing -- the same defect class as the verdict probe this branch replaced.
+    cuj_sev = _section(body, "severity")
+    _require(bool(cuj_sev), "cuj-auditor: must have a severity section", errs)
     for factor in ("frequency", "impact", "persistence"):
-        _require(factor in low,
-                 f"cuj-auditor: severity must be derived from the {factor!r} factor", errs)
+        _require(factor in cuj_sev,
+                 f"cuj-auditor: the severity section must name the {factor!r} factor", errs)
     # A passing step is severity 0, and severity 0 is a non-finding. If passing steps ever
     # leak into the findings list, `total: 0` stops meaning "passed" and the whole
     # report-shape contract for this auditor collapses.

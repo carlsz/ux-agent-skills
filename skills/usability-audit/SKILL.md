@@ -180,9 +180,9 @@ default (see step 1); `--mode` forces one.
 - A timestamped report exists under `.ux/audits/` and validates against the contract.
 - One row was appended to `.ux/audits/index.md` (created if absent), with no prior rows
   rewritten.
-- Every reported finding has a framework citation (primary + any corroborating), a 0–4
-  priority, severity, evidence, and a fix, with no issue filed under more than one
-  finding.
+- Every reported finding has a framework citation (primary + any corroborating), a
+  `P0`–`P3` priority, an `S1`–`S4` severity naming the three factors, evidence, and a fix,
+  with no issue filed under more than one finding.
 - Runtime-perception findings are `verified` (live) or `potential — unverified` (static),
   matching the mode actually used.
 - Live-mode screenshots are saved under `.ux/audits/assets/` with their stable names,

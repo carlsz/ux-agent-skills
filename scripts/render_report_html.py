@@ -18,9 +18,9 @@ Usage:
 
 Exit code 0 = all rendered; 1 = at least one failed (message on stderr).
 
-Scope: Phase 0 — frontmatter header, severity bar, generic section rendering, and findings
+Scope: frontmatter header, rating bar, generic section rendering, and findings
 as priority-badged cards with inline Evidence images. The `## Walkthrough` flipbook, the
-cuj verified-pass banner, the roll-up dashboard, and `--index` land in later phases.
+cuj verified-pass banner, the roll-up priority dashboard, and `--index` are all here.
 """
 from __future__ import annotations
 
@@ -378,7 +378,7 @@ def _render_walkthrough(content: str, report_dir: Path) -> str:
     return "\n".join(parts)
 
 
-# --- header + severity bar ---------------------------------------------------------------
+# --- header + rating bar ---------------------------------------------------------------
 
 def _chip(text: str) -> str:
     return f'<span class="chip">{html.escape(str(text))}</span>'
@@ -671,19 +671,31 @@ def _link_md_to_html(text: str) -> str:
     return MD_LINK_RE.sub(r"](\1.html\2", text)
 
 
-_P_ORDER = ("p0", "p1", "p2", "p3")
+_P_ORDER = ("P0", "P1", "P2", "P3")
 
 
-def _priority_counts(fm: dict) -> dict[str, int]:
-    """The roll-up's `priorities:` map, missing or unparseable entries read as 0."""
-    raw = fm.get("priorities") or {}
-    counts = {}
-    for key in _P_ORDER:
-        try:
-            counts[key] = int(raw.get(key, 0) or 0)
-        except (TypeError, ValueError):
-            counts[key] = 0
-    return counts
+def _priority_counts(fm: dict) -> dict[str, int] | None:
+    """The roll-up's `priorities:` map, or **None if it cannot be read**.
+
+    Returning None rather than zeros is the whole point. Nothing validates roll-up
+    frontmatter -- it sits outside the report contract -- so this function is the only
+    thing standing between a malformed `priorities:` map and the dashboard. Reading an
+    absent, misnamed or non-numeric map as "all zero" made the banner announce *"every
+    auditor reported clean"* above a body table listing findings, which is exactly the
+    false-clean read `_distribution_banner()` exists to prevent.
+
+    `type(v) is not int` rather than `isinstance`: `True` is an `int` in Python, so a
+    `P0: yes` in YAML would otherwise have counted as one finding.
+    """
+    raw = fm.get("priorities")
+    if not isinstance(raw, dict):
+        return None                     # absent, or a list/string/scalar
+    present = {k: raw[k] for k in _P_ORDER if k in raw}
+    if not present:
+        return None                     # a map, but none of the keys we score on
+    if any(type(v) is not int for v in present.values()):
+        return None                     # a count we cannot trust is not a count of zero
+    return {k: present.get(k, 0) for k in _P_ORDER}
 
 
 def _distribution_banner(fm: dict) -> str:
@@ -696,17 +708,24 @@ def _distribution_banner(fm: dict) -> str:
     The hazard is that dropping the verdict does not remove the false-clean read, it moves
     it: `0 x P0 - 0 x P1` reads as "ship it" to a human exactly as a GO banner did. So an
     empty distribution is only a pass when coverage was complete; with any auditor skipped
-    it is a warn that says so. That is the same discriminator `_pass_banner()` applies to a
+    it is a warn that says so, and a map that cannot be read is a warn rather than a zero. That is the same discriminator `_pass_banner()` applies to a
     cuj `total: 0` -- a verified pass and a run that verified nothing are not the same claim.
     """
     counts = _priority_counts(fm)
-    total = sum(counts.values())
     ran = fm.get("auditors_run") or []
     skipped = fm.get("auditors_skipped") or []
     coverage = f"{len(ran)} auditor{'' if len(ran) == 1 else 's'} ran"
     if skipped:
         coverage += f", {len(skipped)} skipped"
 
+    if counts is None:
+        return _banner(
+            "warn headline", "\u26a0",
+            "<b>Priority distribution unavailable</b> \u2014 this roll-up's "
+            "<code>priorities:</code> frontmatter is missing or unreadable, so the counts "
+            "below are the only record. Do not read this as a clean result.")
+
+    total = sum(counts.values())
     if total == 0:
         if skipped:
             return _banner(
@@ -718,7 +737,7 @@ def _distribution_banner(fm: dict) -> str:
             f"<b>No findings</b> \u2014 {html.escape(coverage)}, every auditor reported clean.")
 
     worst = next(key for key in _P_ORDER if counts[key])
-    kind = {"p0": "alert", "p1": "warn"}.get(worst, "info")
+    kind = {"P0": "alert", "P1": "warn"}.get(worst, "info")
     dist = " \u00b7 ".join(f"{counts[k]} \u00d7 {k.upper()}" for k in _P_ORDER if counts[k])
     return _banner(
         f"{kind} headline", "\U0001f4cb",
@@ -727,7 +746,7 @@ def _distribution_banner(fm: dict) -> str:
 
 
 def _render_rollup(fm: dict, body: str, report_dir: Path) -> str:
-    """Render a `rollup-*.md` suite report as a verdict dashboard.
+    """Render a `rollup-*.md` suite report as a priority dashboard.
 
     The roll-up has its own frontmatter (`rollup`, `priorities`, `auditors_run`,
     `auditors_skipped`) rather than the per-report `auditor`/`summary`, so it renders through
