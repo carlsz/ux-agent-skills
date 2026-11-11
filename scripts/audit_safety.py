@@ -67,6 +67,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 DEFAULT_PREFIX = ".ux/audits/"
@@ -327,6 +328,11 @@ Baseline — who made the mess:
   directory. A shared fixed name let two concurrent audits overwrite each other's
   baseline and measure one repo against the other's tree.
 
+  One audit at a time per path. A baseline is a point-in-time snapshot, so a second run
+  against the SAME path overwrites the first's and records the first's report as
+  pre-existing dirt — the first run is then told it wrote nothing. Two worktrees are the
+  supported way to audit one project twice at once; they get separate baselines.
+
   Only the delta is the agent's. Pre-existing dirt is forgiven while its content is
   unchanged — touch one of those files and it is a violation again.
 
@@ -355,8 +361,27 @@ def baseline_path(repo: str | Path) -> Path:
        else planted there.
 
     So: a private per-user directory, one file per repo, named by digest so two checkouts
-    of the same project do not share one. Two concurrent runs of the *same* repo still
-    do — which is correct, they are measuring the same tree.
+    of the same project do not share one. The digest is over `Path(repo).resolve()`, which
+    is what separates two worktrees and two clones of the same project.
+
+    **Two concurrent runs against the same path are not supported**, and it is worth being
+    exact about why, because an earlier version of this docstring called it "correct, they
+    are measuring the same tree". They are not: a baseline is a point-in-time snapshot, not
+    a property of the tree. Run A snapshots at T0 and writes its report; run B snapshots at
+    T1, overwriting A's file, and T1 records *A's report* as pre-existing dirt. A's step 8
+    then forgives A's own writes, `writes_under()` observes nothing, and A exits 1 with
+    "no writes were observed" — a correct-looking failure for an entirely wrong reason, and
+    the skill's exit criteria tell the agent to treat it as real. Reversed, a run that reads
+    a baseline taken *after* another run's escape forgives that escape. Two agent sessions
+    in one checkout reach this, so: one audit at a time per path. Separate worktrees are the
+    supported way to run two at once, and they get separate baselines.
+
+    The directory is also brought to 0o700 when it already exists, not merely created that
+    way — `mkdir(mode=...)` applies the mode only on creation, so a directory left behind by
+    an earlier version of this code, a permissive umask or a user's own `mkdir -p` would
+    otherwise keep its mode and leave the baseline readable and replaceable by other local
+    users. That matters because the baseline decides which dirty paths are forgiven: plant
+    one holding a host source file's digest and an agent's edit to that file reads as `safe`.
     """
     home = Path(tempfile.gettempdir()) / f"ux-audit-{_whoami()}"
     home.mkdir(mode=0o700, exist_ok=True)
@@ -368,6 +393,20 @@ def baseline_path(repo: str | Path) -> Path:
         raise RuntimeError(f"{home} exists and is not a directory")
     if hasattr(os, "getuid") and home.stat().st_uid != os.getuid():
         raise RuntimeError(f"{home} is not owned by this user; refusing to use it")
+    # `mkdir(mode=0o700)` above applies that mode only when it CREATES the directory, so an
+    # existing one keeps whatever it had. The identity checks above cannot see this: a 0o777
+    # directory is not a symlink, is a directory, and is ours. We own it (just checked), so
+    # tighten it rather than refusing a directory the user can legitimately have ended up
+    # with — then verify, because a chmod that silently did not take would leave the
+    # baseline replaceable by any local user.
+    try:
+        home.chmod(0o700)
+    except OSError:
+        pass
+    mode = home.stat().st_mode
+    if mode & 0o077:
+        raise RuntimeError(f"{home} is accessible to other users ({oct(mode & 0o777)}) and "
+                           f"could not be tightened; refusing to keep a baseline there")
     key = hashlib.sha256(str(Path(repo).resolve()).encode("utf-8")).hexdigest()[:16]
     return home / f"baseline-{key}.json"
 
@@ -444,18 +483,51 @@ def main(argv: list[str]) -> int:
         # Saved as well as printed, so the other end can find it by deriving the same path
         # instead of being handed one. stdout stays pure JSON: redirecting it still works,
         # and the note goes to stderr where it cannot corrupt a `> file`.
+        saved = None
         try:
             saved = baseline_path(repo)
-            saved.write_text(json.dumps(taken, indent=2, sort_keys=True) + "\n",
-                             encoding="utf-8")
+            # 0o600 explicitly, and not write_text(): a baseline inherits the umask
+            # otherwise (0o644 in practice), and it is the file that decides which dirty
+            # paths get forgiven. O_CREAT's mode is itself umask-masked and does nothing
+            # to a file that already exists, so fchmod the handle as well.
+            fd = os.open(saved, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                if hasattr(os, "fchmod"):
+                    os.fchmod(fd, 0o600)
+                handle.write(json.dumps(taken, indent=2, sort_keys=True) + "\n")
             print(f"baseline saved for this repo; read it back with `--baseline auto` "
                   f"({saved})", file=sys.stderr)
         except (OSError, RuntimeError) as exc:
             # Not fatal: the JSON is on stdout either way, and an explicit
-            # `--baseline <path>` still works. But say so, because `--baseline auto` is
-            # about to fail and the reason belongs here, not three steps later.
+            # `--baseline <path>` still works.
+            #
+            # But a failed save must not leave the PREVIOUS run's baseline in place.
+            # Baselines are never cleaned up, so on any machine that has audited this repo
+            # before, one is already there — and `--baseline auto` would read it and answer
+            # about the wrong point in time. Reproduced: a clean first run saves an empty
+            # baseline; the user then edits app.tsx themselves; a second run's save fails;
+            # step 8 reads the stale baseline and reports the USER's app.tsx as the agent's
+            # violation. That is the cry-wolf false positive the baseline exists to remove,
+            # and the skill's own step 1 says a check that cries wolf gets muted. It runs
+            # the other way too: a stale baseline holding the digest an agent goes on to
+            # produce for a host file forgives a real escape.
+            #
+            # So remove it, which is also what makes the line below true — `auto` really is
+            # about to fail, loudly, with exit 2.
+            stale = ""
+            try:
+                if saved is not None:
+                    saved.unlink(missing_ok=True)
+            except OSError:
+                pass
+            if saved is not None and saved.exists():
+                # Could not remove it either. Nothing here can make `auto` safe, so say so
+                # in the imperative: this is the one path where it must not be used.
+                stale = (f" A STALE baseline from an earlier run REMAINS at {saved} and "
+                         f"could not be removed - do not use `--baseline auto` for this "
+                         f"run; it would answer about the wrong point in time.")
             print(f"could not save the baseline ({exc}); redirect stdout and pass the "
-                  f"file back with `--baseline <path>`", file=sys.stderr)
+                  f"file back with `--baseline <path>`.{stale}", file=sys.stderr)
         json.dump(taken, sys.stdout, indent=2, sort_keys=True)
         sys.stdout.write("\n")
         return 0
@@ -472,6 +544,17 @@ def main(argv: list[str]) -> int:
                 return 2
         try:
             baseline = json.loads(Path(baseline_arg).read_text(encoding="utf-8"))
+            # Say which snapshot answered and how old it is, so a stale read shows up in
+            # the audit transcript even where it is not fatal. The age comes from the
+            # file's mtime on purpose: the saved bytes stay identical to what `--snapshot`
+            # printed on stdout, so the documented `> file` + `--baseline <path>` escape
+            # hatch keeps working and there is no second on-disk format to validate.
+            try:
+                age = time.time() - Path(baseline_arg).stat().st_mtime
+                print(f"baseline: {len(baseline)} pre-existing path(s), taken "
+                      f"{age / 60:.1f} min ago ({baseline_arg})", file=sys.stderr)
+            except OSError:
+                pass
         except (OSError, ValueError) as exc:
             # Never fall back to baseline=None here. That would silently re-enable the
             # strict check and blame the user's own dirt on the agent — the exact
