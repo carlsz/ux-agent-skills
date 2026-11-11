@@ -665,6 +665,29 @@ produced valid-looking output, and the test suite was green over all five.
   **nothing at all** when a report carries no counts — a row of zeros is not a neutral
   default, it asserts "nothing found".
 
+## [0.6.1] - 2026-11-10
+
+### Fixed
+- **Two phantom components removed.** `agents/README.md` and `commands/README.md` were being
+  discovered as a persona named "README" and a stray `/README` command — `agents/` and
+  `commands/` are swept wholesale, so every `.md` in them is a component whether or not it has
+  frontmatter — and both sat in the always-on token budget of every session. The three layer
+  catalogs now live in `docs/` (`agents.md`, `commands.md`, `skills.md`); `skills/README.md` was
+  never discovered and moved only to keep them together. A new globbing `check_discovery_dirs()`
+  in `tests/test_components.py` fails if a non-component file reappears in either directory, and
+  AGENTS.md step 8 now says to put catalogs in `docs/` rather than beside the components.
+  Reported by the published-directory review as "no frontmatter block"; recorded as a known,
+  unfixed repo-structure decision since 0.3.0.
+
+### Added
+- **A plugin icon.** `icon.svg` at the plugin root (inline SVG, no external references),
+  referenced as `"icon": "./icon.svg"` from `.claude-plugin/plugin.json`.
+- **`docs/plugin-review.md`** — the directory review's findings and the decision taken on each,
+  including the three declined as false positives (a credential read that does not exist, a
+  download-and-run command inside a README screenshot, and the repo-authoring `CLAUDE.md`) with
+  the evidence that settles them. A scanner reading prose cannot distinguish a suite that writes
+  about credentials and shell commands from one that uses them, and these will recur.
+
 ## [0.6.0] - 2026-08-24
 
 ### Added

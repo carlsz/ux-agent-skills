@@ -1375,10 +1375,54 @@ def check_references() -> list[str]:
     return errs
 
 
+def check_discovery_dirs() -> list[str]:
+    """Every file the host discovers as a component must BE one.
+
+    This check is the one that globs. `agents/*.md` and `commands/*.md` are swept
+    wholesale by the host at load time — frontmatter or not — so a stray file there is
+    not inert documentation, it is a component. A `README.md` catalog in either directory
+    loaded as a phantom persona named "README" and as a stray `/README` command, and sat
+    in the always-on token budget of every session; the directory's published plugin
+    review flagged both as "no frontmatter block". The catalogs now live in `docs/`
+    (`docs/agents.md`, `docs/commands.md`, `docs/skills.md`), and this fails if one
+    comes back, or if any future component ships without the frontmatter its layer needs.
+
+    Deliberately a glob, unlike every other check here: the hand-wired checks verify the
+    components we know about, and only a glob can catch a file nobody meant to author.
+    """
+    errs: list[str] = []
+    layers = {
+        "agents": ("name", "description"),
+        "commands": ("name", "description", "argument-hint"),
+    }
+    for folder, required in layers.items():
+        for path in sorted((ROOT / folder).glob("*.md")):
+            rel = f"{folder}/{path.name}"
+            meta, _ = _frontmatter(path)
+            if not isinstance(meta, dict):
+                errs.append(
+                    f"{rel}: every .md under {folder}/ is discovered as a component, so it "
+                    f"needs frontmatter. Documentation belongs in docs/."
+                )
+                continue
+            for field in required:
+                _require(bool(meta.get(field)), f"{rel}: frontmatter needs {field!r}", errs)
+            _require(meta.get("name") == path.stem,
+                     f"{rel}: frontmatter name {meta.get('name')!r} must match the filename",
+                     errs)
+    return errs
+
+
 # Hand-maintained ON PURPOSE, and this is the suite's sharpest edge: nothing globs these.
 # A component whose check isn't listed here is a component nothing verifies, and the suite
 # stays green while it goes unchecked — the quiet failure AGENTS.md calls the silent trap.
 # Adding a component means adding its check HERE, in the same commit.
+#
+# `check_discovery_dirs` is the deliberate exception and sits first: it globs, because the
+# hand-wired checks below can only verify components someone meant to author, and the failure
+# it catches is a file nobody meant to author becoming a component by sitting in agents/ or
+# commands/. It never substitutes for a per-component check.
+
 
 def check_wiring() -> list[str]:
     """Nothing globs the checks in this file. This one does — in both directions.
@@ -1468,6 +1512,7 @@ def check_no_hardcoded_temp_paths() -> list[str]:
 
 
 CHECKS = (
+    check_discovery_dirs,
     check_persona, check_skill, check_command, check_references,
     check_accessibility_persona, check_accessibility_skill, check_accessibility_command,
     check_auth_handoff_reference,

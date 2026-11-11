@@ -4,6 +4,7 @@
   "displayName": "UX Agent Skills",
   "version": "0.7.0",
   "description": "Audit, spec, and verify production-grade experiences for humans and agents alike.",
+  "icon": "./icon.svg",
   "author": { "name": "Carl Sziebert", "email": "carlsz@gmail.com" },
   "homepage": "https://github.com/carlsz/ux-agent-skills",
   "repository": "https://github.com/carlsz/ux-agent-skills",

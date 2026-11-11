@@ -1,0 +1,40 @@
+# Skills
+
+**Skills** (`skills/<name>/SKILL.md`) — workflows with steps and exit criteria. *The how.*
+
+> **Why this catalog lives in `docs/`.** Skills are discovered as `skills/<name>/SKILL.md`,
+> so a `skills/README.md` was never loaded as a component the way the `agents/` and
+> `commands/` catalogs were. It moved anyway, to keep all three layer catalogs in one place.
+
+Each skill is its own directory containing a `SKILL.md` (YAML frontmatter + Markdown
+instructions), plus any optional reference files or scripts it needs.
+
+A skill keeps the references it loads at run time inside its own directory so it stays
+self-contained — e.g. `usability-audit/references/nng-ux-heuristics.md` (the 10
+heuristics it applies) and `report-contract.md` (the shared `.ux/audits` contract).
+
+## Skills here
+
+- [`usability-audit/`](../skills/usability-audit/SKILL.md) — the usability heuristic-evaluation
+  workflow (static / live / hybrid). Also holds the framework lenses and the shared
+  [`report-contract.md`](../skills/usability-audit/references/report-contract.md).
+- [`accessibility-audit/`](../skills/accessibility-audit/SKILL.md) — the WCAG 2.2 audit
+  workflow (static / live / hybrid), holding its own
+  [WCAG audit lens](../skills/accessibility-audit/references/wcag-2.2.md): the criteria
+  organized by what you can observe and what evidence proves it, rather than by how to fix
+  them.
+- [`ux-audit/`](../skills/ux-audit/SKILL.md) — the suite roll-up: by default fans out to
+  usability + accessibility plus the conditional CUJ auditor — all three native — with
+  web-performance (wrapped from
+  [web-quality-skills](https://github.com/addyosmani/web-quality-skills)) available opt-in
+  via `--only`/`--all`, and merges the results into one go/no-go verdict.
+- [`spec-cuj/`](../skills/spec-cuj/SKILL.md) — author critical user journeys by interview →
+  write each to `.ux/cujs/` → regenerate the host `SPEC.md` index. Holds the shared
+  [`cuj-contract.md`](../skills/spec-cuj/references/cuj-contract.md).
+- [`audit-cuj/`](../skills/audit-cuj/SKILL.md) — replay a stored journey against the running
+  app and report the exact step that broke (`auditor: cuj`).
+- [`render-report/`](../skills/render-report/SKILL.md) — render existing `.ux/audits` reports
+  into self-contained, offline HTML (findings as cards, screenshots as a walk-through flipbook,
+  the roll-up as a go/no-go dashboard) via
+  [`render_report_html.py`](../scripts/render_report_html.py). A derived view — the Markdown
+  stays the source of truth.
