@@ -50,6 +50,13 @@ PRIORITY_KEYS = ["p0", "p1", "p2", "p3"]
 # against it, so the priority scale and the health scale are deliberately the same scale:
 # P0 -> 0 ... P3 -> 3, and 4 when nothing was filed against the item.
 ITEM_OF = 4
+# Why an item carries no score. `n/a` shrinks the rubric legitimately; `not-reached` does
+# not shrink it at all — it shrinks COVERAGE, and owes the reader an entry in the report's
+# `Coverage / not inspected` list. One spelling for both let a scorecard lie by getting
+# shorter, the mirror of the accessibility scorecard lying by getting longer.
+NOT_APPLICABLE_STATUS = "n/a"
+NOT_REACHED_STATUS = "not-reached"
+ITEM_STATUSES = (NOT_APPLICABLE_STATUS, NOT_REACHED_STATUS)
 PRIORITY_ACTION = {"p0": "fix immediately", "p1": "fix before release",
                    "p2": "fix in the next pass", "p3": "fix if time allows"}
 # `health.pct` is a PRIORITY INDEX derived from `summary`, not from `score / max` (§4.1).
@@ -386,9 +393,24 @@ def _check_health(fm: dict) -> list[str]:
             continue
         got = item.get("score", "missing")
         note = str(item.get("note", "")).strip()
-        if got is None:                       # not applicable
+        status = item.get("status")
+        if got is None:
+            # Unscored for one of two opposite reasons (§4.1). Both stay out of `score`
+            # and `max`; only one is a coverage gap the reader is owed. Written the same
+            # way, a run that reached 2 of 10 items looked like one that reached all 10.
+            if status not in ITEM_STATUSES:
+                errors.append(
+                    f"{where}: 'score: null' needs a 'status' of "
+                    f"{' or '.join(map(repr, ITEM_STATUSES))} — {NOT_APPLICABLE_STATUS!r} "
+                    f"means the item does not apply to this app, {NOT_REACHED_STATUS!r} "
+                    f"means it does and the run never inspected it")
             if not note:
-                errors.append(f"{where}: an n/a item must carry a 'note' saying why")
+                errors.append(f"{where}: an unscored item must carry a 'note' saying why")
+            continue
+        if status is not None:
+            errors.append(
+                f"{where}: carries 'status' {status!r} but is scored {got!r}; 'status' "
+                f"explains a null score and nothing else")
             continue
         if not isinstance(got, int) or not 0 <= got <= of:
             errors.append(f"{where}: 'score' must be null or an integer in 0..{of}")
@@ -798,6 +820,76 @@ def validate_rollup(path: str | Path) -> list[str]:
             + _check_rollup_health(fm))
 
 
+HEADING_RE = re.compile(r"(?m)^(#{2,3})\s+(.+?)\s*$")
+MD_LINK_TEXT_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+WALKTHROUGH_RE = re.compile(r"(?ms)^## Walkthrough\s*$(.*?)(?=^## |\Z)")
+# `### CUJ-001 step 2 — <action>`, or `### CUJ-001 — after reload` for a criteria capture:
+# either way the journey id leads. It is part of the heading, not only the filename — see
+# `_check_headings`. The shape after the id is the auditor's to choose; the id is not.
+CUJ_HEADING_RE = re.compile(r"(?i)^CUJ-\d+\b")
+
+
+def heading_slug(text: str) -> str:
+    """The GitHub heading slug for a heading, per §5.
+
+    Deliberately a second implementation of the renderer's `_slug`: the validator must not
+    import the renderer (the Markdown is the source of truth and does not depend on its
+    derived view), and the rule belongs to the contract rather than to either script.
+    `test_report_contract.py` asserts the two agree on a corpus, so the duplication cannot
+    drift silently.
+    """
+    t = MD_LINK_TEXT_RE.sub(r"\1", text.strip())
+    t = re.sub(r"[`*_~]", "", t).lower()
+    t = "".join(c for c in t if c.isalnum() or c in " -_")
+    return t.replace(" ", "-")
+
+
+def _check_headings(fm: dict, body: str) -> list[str]:
+    """Headings are link targets, so they must be unique — and a cuj step must say whose.
+
+    §5 derives every fragment from the heading text, and `## Prioritized fixes`, a
+    roll-up's `## Merged top issues` and a walkthrough's own navigation all link to them.
+    Two headings that slug the same give the second one no reachable anchor: the link
+    resolves to the first, silently, and points the reader at the wrong finding or step.
+    The HTML companion tolerates this on read by suffixing duplicates, as it must — a
+    report is append-only history — which is exactly why the write side has to refuse it.
+
+    The `cuj` rule is the case that made this real. The walkthrough was specified as
+    `### Step <n> — <action>` "per journey step", written when a run covered one journey.
+    A run covering three restarts at `Step 1` three times: ambiguous to a reader, with no
+    defined order between the journeys, and an outright collision whenever two journeys
+    open the same way (*"Step 1 — Open the app"*). The id was already in the filenames;
+    it needed to be in the headings.
+    """
+    errors: list[str] = []
+    seen: dict[str, str] = {}
+    for _, text in HEADING_RE.findall(body):
+        slug = heading_slug(text)
+        if not slug:
+            continue
+        if slug in seen:
+            errors.append(
+                f"two headings slug to the same anchor {slug!r} — {seen[slug]!r} and "
+                f"{text!r}; §5 derives every link target from the heading, so the second "
+                f"one is unreachable")
+        else:
+            seen[slug] = text
+
+    if str(fm.get("auditor", "")).strip().lower() != "cuj":
+        return errors
+    walk = WALKTHROUGH_RE.search(body)
+    if not walk:
+        return errors
+    for level, text in HEADING_RE.findall(walk.group(1)):
+        if level == "###" and not CUJ_HEADING_RE.match(text):
+            errors.append(
+                f"walkthrough heading {text!r} does not lead with its journey id — a cuj "
+                f"run may cover several, so use `### CUJ-<id> step <n> — <action>` (or "
+                f"`### CUJ-<id> — <what>` for other evidence), ordered by journey id then "
+                f"step (§5)")
+    return errors
+
+
 def validate(path: str | Path) -> list[str]:
     """Return a list of contract violations for the report at `path` ([] = valid).
 
@@ -823,11 +915,21 @@ def validate(path: str | Path) -> list[str]:
     errors += _check_finding_fields(body)
     errors += _check_coverage(body)
     errors += _check_assets(body, path.stem)
+    errors += _check_headings(fm, body)
     return errors
 
 
 INDEX_COLUMNS = ["Date (UTC)", "Auditor", "Scope", "P0", "P1", "P2", "P3", "Health",
-                 "Report"]
+                 "Verdict", "Report"]
+# The shape before `Verdict` existed. Read-tolerated so a host repo's existing index keeps
+# validating and keeps being appended to — rewriting prior rows to widen them is exactly
+# what §7 forbids. New indexes are created with INDEX_COLUMNS.
+LEGACY_INDEX_COLUMNS = [c for c in INDEX_COLUMNS if c != "Verdict"]
+# The roll-up's `Auditor` cell. A suite run is not an auditor, and its row is the only one
+# that may carry a verdict — the gate is the suite's, and a member report that appeared to
+# issue one would contradict the contract it is written under (§9).
+SUITE_ROW = "suite"
+NOT_APPLICABLE = "\u2014"
 
 
 def _table_cells(line: str) -> list[str]:
@@ -852,7 +954,11 @@ def validate_index(path: str | Path) -> list[str]:
         return [f"index missing the table header row (columns: {INDEX_COLUMNS})"]
 
     header = _table_cells(lines[header_idx])
-    if header != INDEX_COLUMNS:
+    if header == LEGACY_INDEX_COLUMNS:
+        columns = LEGACY_INDEX_COLUMNS      # predates `Verdict`; keep appending in its shape
+    elif header == INDEX_COLUMNS:
+        columns = INDEX_COLUMNS
+    else:
         return [f"index header has wrong columns: expected {INDEX_COLUMNS}, got {header}"]
 
     errors: list[str] = []
@@ -861,18 +967,38 @@ def validate_index(path: str | Path) -> list[str]:
         cells = _table_cells(ln)
         if set("".join(cells)) <= set("-: "):  # separator row
             continue
-        if len(cells) != len(INDEX_COLUMNS):
+        if len(cells) != len(columns):
             errors.append(
-                f"index row has {len(cells)} columns, expected {len(INDEX_COLUMNS)}: {ln!r}")
+                f"index row has {len(cells)} columns, expected {len(columns)}: {ln!r}")
             continue
-        for cell in cells[3:7]:  # P0..P3
+        row = dict(zip(columns, cells))
+        for key in PRIORITY_KEYS:
+            cell = row[key.upper()]
             if not cell.isdigit():
                 errors.append(f"index priority cell not an integer: {cell!r} in {ln!r}")
-        health = cells[7]
+        health = row["Health"]
         # A report with no scorecard writes an em dash; anything else must be a percentage.
-        if health != "\u2014" and not (health.isdigit() and 0 <= int(health) <= 100):
+        if health != NOT_APPLICABLE and not (health.isdigit() and 0 <= int(health) <= 100):
             errors.append(
-                f"index health cell must be 0-100 or '\u2014': {health!r} in {ln!r}")
+                f"index health cell must be 0-100 or {NOT_APPLICABLE!r}: "
+                f"{health!r} in {ln!r}")
+        if "Verdict" not in row:
+            continue
+        verdict, auditor = row["Verdict"], row["Auditor"]
+        if auditor == SUITE_ROW:
+            # The run the reader actually asked about. Without this row the index — the
+            # landing page — could not answer "did the last run pass?", and the suite's
+            # own history existed nowhere: `health.trend` had to be derived by reading the
+            # sibling roll-ups because this column was per-auditor and the suite had no row.
+            if verdict not in ROLLUP_VERDICTS:
+                errors.append(
+                    f"index {SUITE_ROW!r} row must carry a verdict "
+                    f"({' or '.join(sorted(ROLLUP_VERDICTS))}), got {verdict!r}: {ln!r}")
+        elif verdict != NOT_APPLICABLE:
+            # Same invariant the report body carries: one auditor never issues the gate.
+            errors.append(
+                f"index row for auditor {auditor!r} carries verdict {verdict!r}; the gate "
+                f"is the suite's, so a member row writes {NOT_APPLICABLE!r}: {ln!r}")
     return errors
 
 

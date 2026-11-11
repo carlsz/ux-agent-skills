@@ -1066,6 +1066,10 @@ letter-spacing:.12em;text-transform:uppercase;padding:.7rem .9rem;
 border-bottom:1px solid var(--line);background:var(--tint);white-space:nowrap}
 td{padding:.7rem .9rem;border-bottom:1px solid var(--line);vertical-align:top}
 td.zero{color:var(--ink2);opacity:.45}
+td.suite{font-weight:600}
+.gate{display:inline-block;padding:.08rem .42rem;border-radius:99px;font-size:.76rem;font-weight:700;letter-spacing:.04em}
+.gate.go{background:var(--tint);color:var(--go)}
+.gate.nogo{background:var(--tint);color:var(--nogo)}
 tr:last-child td{border-bottom:0}
 
 /* --- walkthrough flipbook ------------------------------------------------------------- */
@@ -1358,6 +1362,11 @@ def render_to_file(md_path: str | Path) -> Path:
 
 
 ZERO_CELL_RE = re.compile(r"<td>0</td>")
+# The suite row's verdict, and the whole row it sits in. A reader scanning the index is
+# looking for one thing — did the last run pass — and in a table of member rows that all
+# say the same nothing, the one cell that answers has to be the one that is legible.
+VERDICT_CELL_RE = re.compile(r"<td>(GO|NO-GO)</td>")
+SUITE_CELL_RE = re.compile(r"<td>suite</td>")
 
 
 def render_index(md_path: str | Path) -> str:
@@ -1381,8 +1390,12 @@ def render_index(md_path: str | Path) -> str:
             "run's report; <code>Health</code> is its priority index, derived from the findings "
             "alone so rows with different rubrics can be read on one axis.</p>"
             "</div></section>")
-    table = ZERO_CELL_RE.sub('<td class="zero">0</td>',
-                            _render_blocks("\n".join(kept), md_path.parent))
+    table = _render_blocks("\n".join(kept), md_path.parent)
+    table = ZERO_CELL_RE.sub('<td class="zero">0</td>', table)
+    table = VERDICT_CELL_RE.sub(
+        lambda m: f'<td><span class="gate {"go" if m.group(1) == "GO" else "nogo"}">'
+                  f'{m.group(1)}</span></td>', table)
+    table = SUITE_CELL_RE.sub('<td class="suite">suite</td>', table)
     return _page(title, head + table)
 
 

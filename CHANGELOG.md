@@ -51,6 +51,50 @@ All notable changes to this project are documented here. The format is based on
   `/ux-audit` now fans out to three native auditors and one wrapped, instead of two and two.
 
 ### Fixed
+- **Ten defects the suite could only find by being run.** A full `/ux-audit` against a real
+  app and a cold read of what came out. None of these fail a test, which is why they
+  survived: every one is a rule the contract states in one place and the workflows then
+  have to apply, or a rule it never stated at all and each run improvised.
+
+  Grouped by what went wrong:
+
+  - **The index recorded every part of a suite run except its result.** Rows were appended
+    per *auditor* and a roll-up appended none of its own, so the landing page — the first
+    thing a stakeholder opens — could not answer *"did the last run pass?"*, and the
+    suite's own history lived nowhere. (It is why `health.trend` has to be derived by
+    reading the sibling roll-ups: the `Health` column was per-auditor.) The index gains a
+    **`Verdict` column** and a fan-out now appends *n+1* rows: one per member carrying
+    `—`, plus one for the run itself, auditor `suite`. Only a `suite` row may carry a
+    verdict — one auditor never issues the gate. The nine-column header stays
+    read-tolerated, because widening it would mean rewriting prior rows.
+  - **`score: null` meant two opposite things.** *Does not apply* and *never looked at*
+    shared one spelling, which let a scorecard shrink to whatever was convenient to check
+    and read as a clean grade. Split into `status: n/a | not-reached`, both requiring a
+    `note`; a scored item carrying `status` is now rejected too.
+  - **Merged meant concatenated.** A defect two auditors both saw was listed twice in the
+    roll-up's top issues, inflating the very counts the gate reads. §9 now states that
+    merged means de-duplicated, with an ownership tie-break order, and `/ux-audit` cites it
+    at the point of use.
+  - **A walkthrough covering three journeys restarted at "Step 1" three times.** Headings
+    are link targets — §5 derives every fragment from them — so the second and third were
+    unreachable and the roll-up's deep links landed on the first. cuj walkthrough headings
+    now lead with the journey id, and *any* two headings that slug to one anchor are an
+    error, in any report.
+  - **Three rules the contract used without stating.** `<scope-slug>` appeared in six
+    filenames and was defined nowhere; *what counts as one finding* was left to each run,
+    though the counts drive the gate; and the auth pre-flight was told to record an
+    `Access:` line and given no slot to record it in. All three are now written down.
+  - **Two instructions contradicted each other.** On a declined auth handoff the shared
+    reference sent the run down *"the existing skip path"* while `/ux-audit` said *"proceed
+    unauthenticated — do not skip the run"*. Resolved per auditor, in a table: what a
+    decline skips is a scope, never the run.
+  - **The snapshot step existed in one workflow of four.** `audit-cuj` took a baseline and
+    checked against it; `usability`, `accessibility` and `ux-audit` validated reports and
+    then asserted the findings-only footprint against nothing. All four now open with
+    `--snapshot` and close with `--baseline auto`.
+  - **`unit:` named a scale nothing read**, left over from the mean-of-auditors era.
+    Removed, and a sweep keeps it out.
+
 - **The safety baseline no longer lives at one fixed path in `/tmp`.** `audit-cuj` step 1
   said `--snapshot > /tmp/ux-baseline.json` and step 8 read that same name back: one
   filename in a world-writable directory, shared by every run on the machine.

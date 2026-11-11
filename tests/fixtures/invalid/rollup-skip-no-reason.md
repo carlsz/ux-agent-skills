@@ -21,7 +21,7 @@ health:
   band: Good
   trend: []
   auditors:
-    - {auditor: usability, pct: 83, band: Good, unit: "Nielsen rubric"}
+    - {auditor: usability, pct: 83, band: Good}
 ---
 
 # UX Audit Roll-up — demo app

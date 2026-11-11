@@ -22,7 +22,7 @@ health:
   band: Excellent
   trend: []
   auditors:
-    - {auditor: cuj, pct: null, band: Unscored, unit: "steps verified"}
+    - {auditor: cuj, pct: null, band: Unscored}
 ---
 
 # UX Audit Roll-up — demo app

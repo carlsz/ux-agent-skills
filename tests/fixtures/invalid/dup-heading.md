@@ -1,0 +1,113 @@
+---
+auditor: cuj
+schema: 3
+version: 0.1.0
+date: 2026-07-16T12:00:00Z
+target: http://localhost:3000
+mode: live
+scope: "CUJ-001, CUJ-002"
+frameworks:
+  - cuj-contract
+  - task-completion
+  - success-criteria
+summary:
+  total: 1
+  p0: 0
+  p1: 1
+  p2: 0
+  p3: 0
+health:
+  rubric: task-completion
+  score: 21
+  max: 24
+  pct: 75
+  band: Good
+  items:
+    - item: "CUJ-001 step 1 - open the cart"
+      score: 4
+    - item: "CUJ-001 step 2 - proceed to checkout"
+      score: 4
+    - item: "CUJ-001 success criteria"
+      score: 1
+      note: "P1 - the captured task does not survive a reload; both steps passed"
+    - item: "CUJ-002 step 1 - apply a promo code"
+      score: 4
+    - item: "CUJ-002 step 2 - see the discount applied"
+      score: 4
+    - item: "CUJ-002 success criteria"
+      score: 4
+---
+
+<!-- INVALID: two headings slug to the same anchor. Every link target in this contract
+is derived from the heading text, so the second one is unreachable. -->
+# CUJ Audit — CUJ-001, CUJ-002
+
+## Executive summary
+
+1/2 journeys passed, 3 of 4 steps verified. CUJ-002 completes as documented. CUJ-001
+passes every step but fails its success criteria: the task is visible immediately and gone
+after a reload, so the actor believes they succeeded and silently loses the capture.
+
+| Priority | Count |
+|----------|-------|
+| P0 — Blocking | 0 |
+| P1 — Major | 1 |
+| P2 — Minor | 0 |
+| P3 — Polish | 0 |
+
+## Design health
+
+**3 / 4 · 75% · Good** (rubric: `task-completion`)
+
+| Item | Score | Basis |
+|------|-------|-------|
+| CUJ-001 step 1 - open the cart | 1/1 |  |
+| CUJ-001 step 2 - proceed to checkout | 1/1 |  |
+| CUJ-002 step 1 - apply a promo code | 1/1 |  |
+| CUJ-002 step 2 - see the discount applied | 0/1 | the total did not change; the journey cannot complete |
+
+## Prioritized fixes
+
+1. [P1] CUJ-001 — a captured task does not survive a reload
+
+## Findings
+
+### [P1] CUJ-001 — a captured task does not survive a reload
+
+- **Issue Description:** Both steps of "Add a task" behave exactly as documented — the row
+  appears at the top of the list and the input clears — but the task is never persisted.
+  After a full page reload the list is empty. Nothing in the UI signals the loss.
+- **Framework Violation:** CUJ-001 "Add a task to the list" — `success-criteria`;
+  expected "'Buy milk' is still present after a full page reload". Steps 1 and 2 both
+  passed (`cuj-contract`), and the journey reached its goal (`task-completion`).
+- **Priority:** P1 Major — fix before release; the flow appears to succeed while the data is lost, so the actor has no
+  cue to retry; CUJ criticality `critical`, uncapped.
+- **Evidence:** live capture `./assets/dup-heading/cuj-001-after-reload.png` shows the empty list;
+  `./assets/dup-heading/cuj-001-step-2.png` shows the row present before reload. The handler at
+  `src/TaskInput.tsx:34` updates local state and issues no write.
+- **Recommended Fix:** persist on submit before clearing the input, and surface a failure
+  state if the write is rejected rather than optimistically rendering the row.
+
+## Walkthrough
+
+### CUJ-001 step 1 — Click the new-task input at the top of the list
+![CUJ-001 step 1](./assets/dup-heading/cuj-001-step-1.png)
+> Expected: input takes focus, placeholder "What needs doing?". Observed: match.
+
+### CUJ-001 step 1 — Click the new-task input at the top of the list
+![CUJ-001 step 2](./assets/dup-heading/cuj-001-step-2.png)
+> Expected: a row reading 'Buy milk' appears at the top and the input clears. Observed: match.
+
+### CUJ-001 — after reload, success criteria
+![CUJ-001 after reload](./assets/dup-heading/cuj-001-after-reload.png)
+> Expected: 'Buy milk' still present after a full page reload. Observed: the list is empty.
+
+## Appendix
+
+- **Mode:** live (all steps driven against the running app at http://localhost:3000).
+- **Frameworks applied:** cuj-contract, task-completion, success-criteria.
+- **CUJ manifest:** CUJ-001 — steps 1-2 verified, success criteria FAILED;
+  CUJ-002 — steps 1-2 verified, success criteria passed. (Journeys record no revision;
+  `git log` the CUJ files against this report's date for the version verified.)
+- **Coverage / not inspected:** CUJ-003 "Delete a task" was not run — out of the requested
+  `--cuj` selection, not skipped for lack of access.

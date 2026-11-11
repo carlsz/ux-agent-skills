@@ -20,7 +20,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import validate_report  # noqa: E402
-from validate_report import (PRIORITY_KEYS, TREND_MAX, derive_verdict,  # noqa: E402
+from validate_report import (INDEX_COLUMNS, LEGACY_INDEX_COLUMNS,  # noqa: E402
+                             PRIORITY_KEYS, TREND_MAX, derive_verdict, heading_slug,
                              priority_index, trend_for, unattainable, validate,
                              validate_index)
 
@@ -676,12 +677,110 @@ def main() -> int:
     failures += _expect_valid_index(FIXTURES / "valid" / "index.md")
     failures += _expect_invalid_index(FIXTURES / "invalid" / "index-badcols.md", "column")
 
+    # ---- the shakedown backlog ------------------------------------------------------
+    # Ten defects found by running the suite against a real app and reading what came out.
+    # Each assertion below names the one it pins.
+
+    # A. The index recorded every part of a suite run except its result. Rows were
+    #    appended per AUDITOR and a roll-up appended none, so the landing page could not
+    #    answer "did the last run pass?" — and the suite's own history lived nowhere.
+    if "Verdict" not in INDEX_COLUMNS:
+        failures.append("index: no Verdict column, so a suite row cannot state the gate")
+    if "Verdict" in LEGACY_INDEX_COLUMNS:
+        failures.append("index: the legacy header must be the one WITHOUT Verdict")
+    failures += _expect_valid_index(FIXTURES / "valid" / "index.md")
+    if "suite" not in (FIXTURES / "valid" / "index.md").read_text(encoding="utf-8"):
+        failures.append("index: the valid fixture carries no suite row, so the rule that "
+                        "only a suite row holds a verdict is never exercised")
+    failures += _expect_invalid_index(FIXTURES / "invalid" / "index-member-verdict.md",
+                                      "gate is the suite's")
+    failures += _expect_invalid_index(FIXTURES / "invalid" / "index-suite-no-verdict.md",
+                                      "must carry a verdict")
+    # The legacy nine-column index is read-tolerated: widening it would mean rewriting
+    # prior rows, which §7 forbids, and the ban is worth more than the column.
+    with tempfile.TemporaryDirectory() as _d:
+        _legacy = Path(_d) / "index.md"
+        _legacy.write_text(
+            "# Audit index\n\n| " + " | ".join(LEGACY_INDEX_COLUMNS) + " |\n|"
+            + "|".join(["---"] * len(LEGACY_INDEX_COLUMNS)) + "|\n"
+            "| 2026-07-15T14:30:00Z | usability | checkout | 0 | 1 | 1 | 0 | 83 | "
+            "[r](usability-20260715-143000.md) |\n", encoding="utf-8")
+        if validate_index(_legacy):
+            failures.append(f"index: the legacy header must still validate: "
+                            f"{validate_index(_legacy)}")
+
+    # D. Headings are link targets (§5 derives every fragment from them), so two that
+    #    slug alike leave the second unreachable — and a cuj walkthrough covering three
+    #    journeys restarted at "Step 1" three times.
+    failures += _expect_invalid(FIXTURES / "invalid" / "dup-heading.md",
+                                "same anchor")
+    failures += _expect_invalid(FIXTURES / "invalid" / "cuj-walkthrough-no-journey.md",
+                                "does not lead with its journey id")
+    # The validator re-implements §5's slug rather than importing the renderer — the
+    # Markdown must not depend on its derived view. Pin the two against each other, or
+    # the duplication drifts and deep links die exactly where they are hardest to notice.
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from render_report_html import _slug as _renderer_slug  # noqa: E402
+    for probe in ("[P1] CUJ-001 — a task does not survive a reload",
+                  "fails AA contrast at 3.64:1", "Design health", "`code` and *stars*",
+                  "[a link](x.md) inside", "Trailing  spaces  ", "ALL CAPS & symbols!"):
+        if heading_slug(probe) != _renderer_slug(probe):
+            failures.append(
+                f"slug drift on {probe!r}: validator says {heading_slug(probe)!r}, "
+                f"renderer says {_renderer_slug(probe)!r}")
+
+    # F. `score: null` meant both "does not apply" and "never looked at" — opposite facts
+    #    in one spelling, which let a scorecard shrink to what was convenient to check.
+    failures += _expect_invalid(FIXTURES / "invalid" / "health-null-no-status.md",
+                                "needs a 'status'")
+    failures += _expect_invalid(FIXTURES / "invalid" / "health-status-on-scored.md",
+                                "explains a null score and nothing else")
+    _cuj = (FIXTURES / "valid" / "cuj-20260716-140000.md").read_text(encoding="utf-8")
+    if "status: not-reached" not in _cuj:
+        failures.append("the unreplayed-journey fixture no longer distinguishes "
+                        "not-reached from n/a, which is the case that made this real")
+
+    # H. `unit` named a scale nothing read, left over from the mean-of-auditors era.
+    for fx in sorted(FIXTURES.rglob("*.md")):
+        if "unit:" in fx.read_text(encoding="utf-8"):
+            failures.append(f"{fx.name} still carries a `unit:` key, read by nothing")
+
+    # C, E, G, I, J — rules that live in prose. Probe the sentence that carries each,
+    # flattened, because these are hard-wrapped files.
+    _contract = _flat((ROOT / "skills" / "usability-audit" / "references"
+                       / "report-contract.md").read_text(encoding="utf-8"))
+    _rollup = _flat((ROOT / "skills" / "ux-audit" / "SKILL.md").read_text(encoding="utf-8"))
+    _auth = _flat((ROOT / "skills" / "usability-audit" / "references"
+                   / "auth-handoff.md").read_text(encoding="utf-8"))
+    for label, text, phrase in (
+            # C: used in six places, defined in none.
+            ("scope-slug", _contract, "derived from `--scope`, not invented"),
+            # E: merged meant concatenated, so a defect two auditors saw counted twice.
+            ("merge de-dup", _contract, "Merged means de-duplicated, not concatenated"),
+            ("merge de-dup", _rollup, "de-duplicate"),
+            # G: the counts drive the gate, so granularity is not presentational.
+            ("granularity", _contract, "one defect that a single fix would close"),
+            # J: the pre-flight was told to record an Access: line and given nowhere.
+            ("access line", _contract, "carries the one **`Access:`** line"),
+            # I: the shared reference said "the existing skip path" where the suite said
+            #    "do not skip the run" — opposite instructions for one event.
+            ("declined handoff", _auth, "What gets skipped is a scope, never the run"),
+    ):
+        if phrase not in text:
+            failures.append(f"{label}: the rule is not stated — {phrase!r} is missing")
+    # The old wording still appears in _auth — inside the sentence explaining what it
+    # used to say. Pin the per-auditor table instead: that is what resolved the clash.
+    for _row in ("`audit-cuj`", "`usability`, `accessibility`"):
+        if _row not in _auth:
+            failures.append(f"declined handoff: no {_row} row, so what a decline skips "
+                            f"per auditor is unstated again")
+
     if failures:
         print("FAIL — report contract:")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (62 checks)")
+    print("PASS — report contract (84 checks)")
     return 0
 
 

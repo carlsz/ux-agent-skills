@@ -1,0 +1,131 @@
+---
+auditor: usability
+schema: 3
+version: 0.1.0
+date: 2026-07-15T14:30:00Z
+target: https://localhost:3000/checkout
+mode: hybrid
+scope: "checkout flow"
+frameworks:
+  - nielsen-10
+  - shneiderman-8
+summary:
+  total: 2
+  p0: 0
+  p1: 1
+  p2: 1
+  p3: 0
+health:
+  rubric: nielsen-10
+  score: 31
+  max: 36
+  pct: 73
+  band: Good
+  items:
+    - item: "Visibility of system status"
+      score: 1
+      note: "P1 - \"Place order\" gives no processing feedback"
+    - item: "Match between system and the real world"
+      score: 4
+    - item: "User control and freedom"
+      score: 4
+    - item: "Consistency and standards"
+      score: 4
+    - item: "Error prevention"
+      score: 4
+    - item: "Recognition rather than recall"
+      score: 4
+    - item: "Flexibility and efficiency of use"
+      score: 4
+    - item: "Aesthetic and minimalist design"
+      score: 4
+    - item: "Help users recognize, diagnose, and recover from errors"
+      score: 2
+      note: "P2 - the promo-code error says only \"Error\""
+    - item: "Help and documentation"
+      score: null
+      note: "the checkout flow carries no help surface, so the heuristic does not apply"
+---
+
+<!-- INVALID: `score: null` with no `status`. Not applicable and not reached are
+opposite facts; one spelling for both lets a scorecard shrink to what was convenient. -->
+# Usability Audit — checkout flow
+
+## Executive summary
+
+The checkout flow completes, but two usability issues raise abandonment risk: the
+"Place order" button gives no processing feedback, and the promo-code error is vague.
+
+| Priority | Count |
+|----------|-------|
+| P0 — Blocking | 0 |
+| P1 — Major | 1 |
+| P2 — Minor | 1 |
+| P3 — Polish | 0 |
+
+## Design health
+
+**30 / 36 · 83% · Good** (rubric: `nielsen-10`)
+
+| Item | Score | Basis |
+|------|-------|-------|
+| Visibility of system status | 2/4 | "Place order" gives no processing feedback |
+| Match between system and the real world | 4/4 |  |
+| User control and freedom | 4/4 |  |
+| Consistency and standards | 4/4 |  |
+| Error prevention | 3/4 | nothing guards a double submit while the request is in flight |
+| Recognition rather than recall | 4/4 |  |
+| Flexibility and efficiency of use | 3/4 | no saved-card shortcut for returning buyers |
+| Aesthetic and minimalist design | 4/4 |  |
+| Help users recognize, diagnose, and recover from errors | 2/4 | the promo-code error says only "Error" |
+| Help and documentation | n/a | n/a - the checkout flow carries no help surface |
+
+## Prioritized fixes
+
+1. [P1] [Add processing feedback to "Place order"](#p1-place-order-gives-no-processing-feedback)
+2. [P2] [Make the promo-code error specific and actionable](#p2-promo-code-error-is-vague)
+
+## Findings
+
+### [P1] "Place order" gives no processing feedback
+
+- **Issue Description:** After clicking "Place order" the button stays idle with no
+  spinner or disabled state; users may click again and double-submit.
+- **Framework Violation:** Nielsen #1 — Visibility of System Status.
+- **Priority:** P1 Major — fix before release; drives duplicate orders and abandonment.
+- **Evidence:** live capture ![place order idle](./assets/health-null-no-status/usability-checkout-mid-flow.png);
+  handler at `src/checkout/PlaceOrderButton.tsx:42` sets no pending state.
+- **Recommended Fix:** disable the button and show an inline spinner while the request
+  is in flight; restore on success or error.
+
+### [P2] Promo-code error is vague
+
+- **Issue Description:** An invalid promo code shows only "Error" with no reason.
+- **Framework Violation:** Nielsen #9 — Help Users Recognize, Diagnose, and Recover
+  from Errors.
+- **Priority:** P2 Minor — fix in the next pass; recoverable but frustrating.
+- **Evidence:** live capture ![promo error](./assets/health-null-no-status/usability-checkout-error.png); string at
+  `src/checkout/PromoField.tsx:88`.
+- **Recommended Fix:** state the specific reason (expired, invalid, minimum not met)
+  and how to proceed.
+
+## Walkthrough
+
+### Initial
+![checkout initial](./assets/health-null-no-status/usability-checkout-initial.png)
+
+### Mid-flow
+![place order in flight](./assets/health-null-no-status/usability-checkout-mid-flow.png)
+
+### Error
+![promo code error](./assets/health-null-no-status/usability-checkout-error.png)
+
+### Success
+![order confirmed](./assets/health-null-no-status/usability-checkout-success.png)
+
+## Appendix
+
+- **Mode:** hybrid (live render + source lookup for `file:line`).
+- **Frameworks applied:** nielsen-10, shneiderman-8.
+- **Coverage / not inspected:** guest-checkout path (auth-gated, no test account
+  supplied) — not audited.

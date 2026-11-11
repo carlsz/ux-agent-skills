@@ -275,7 +275,8 @@ not move. One bug, one finding. Instead, the blocker's finding carries the blast
 `Also blocks: CUJ-002 "Complete a task" (high)`. Visibility rises; the count does not inflate.
 
 Write **one report per run, not per CUJ** — `.ux/audits/cuj-<YYYYMMDD>-<HHMMSS>.md` — so
-`index.md` rows stay 1:1 with runs. Append the index row.
+`index.md` rows stay 1:1 with runs. Append the index row — with `—` in the `Verdict`
+column, since the gate is the suite's and not one auditor's (§7).
 
 **Lead the executive summary with the counts:**
 
@@ -305,8 +306,11 @@ and which rung established it; setup journeys run outside the selection; and
 **Coverage / not inspected**. Silent gaps are prohibited.
 
 **In live/hybrid mode, assemble the step captures into a `## Walkthrough` section** (report
-contract §5), after `## Findings` and before `## Appendix`. One `### Step <n> — <action>` per
-step in `n` order, each embedding its screenshot inline —
+contract §5), after `## Findings` and before `## Appendix`. One `### <CUJ-id> step <n> — <action>`
+per step, ordered by **journey id then step number** — the id leads because a run covers
+every journey `--cuj` selected, and a bare `### Step 1` repeats once per journey, which is
+ambiguous to a reader and an outright dead anchor whenever two journeys open the same way.
+Each embeds its screenshot inline —
 `![CUJ-<id> step <n>](./assets/<report-stem>/cuj-<id>-step-<n>.png)` — with a one-line
 expected-vs-observed.
 This is the visual walk-through of the journey; a bare path is not enough, the embed must

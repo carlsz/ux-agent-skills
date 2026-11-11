@@ -77,6 +77,14 @@ shares the directory, so no naming convention has to be agreed across runs or au
 | cuj | criteria / other evidence | `cuj-<id>-<slug>.png` (e.g. `cuj-001-after-reload.png`) |
 | usability (and other flow auditors) | a key state | `<auditor>-<scope-slug>-<state>.png` (state ∈ `initial`, `mid-flow`, `success`, `error`, `empty`) |
 
+`<scope-slug>` is **derived from `--scope`, not invented**: lowercase it, replace every
+run of characters that are not a letter or digit with a single `-`, and trim leading and
+trailing `-`. A run with no `--scope` uses `all`. So `--scope "Checkout flow"` gives
+`checkout-flow`, and `--scope "Sign-up / onboarding"` gives `sign-up-onboarding`. The rule
+exists so the name is a function of the input: two runs of the same scope produce the same
+filenames, and a reader can tell from a filename what was being looked at. It was used in
+six places and defined in none.
+
 Reference every image from the body with an **inline embed** —
 `![alt](./assets/<report-stem>/<name>.png)` — never a bare path, so it renders in Markdown
 viewers. Paths are always relative and under `./assets/`.
@@ -418,15 +426,30 @@ a `P0` one.
   over `summary` (see above), validated against `summary`, and `band` follows `pct` in the
   table. A hand-written headline that disagrees with either source is rejected. Dividing
   `score` by `max` gives a different number, and on a narrow rubric a different *band*.
-- `score: null` means *not applicable*: excluded from both `score` and `max`, so marking an
-  item n/a never silently penalises the result.
+- **`score: null` requires a `status`, because it means two different things.** An item
+  can be unscored because the rubric genuinely does not apply to this app, or because the
+  run never got to it — opposite facts that were written identically:
+
+  | `status` | Meaning | Why it is not the other one |
+  |---|---|---|
+  | `n/a` | The item does not apply to this app at all. | The rubric legitimately shrinks; nothing is owed. |
+  | `not-reached` | It applies, and the run did not inspect it. | The rubric did not shrink — **coverage** did. |
+
+  Both stay out of `score` and `max`, so neither penalises the result. What differs is what
+  the reader is owed: a `not-reached` item is a **coverage gap** and must also appear in
+  `Coverage / not inspected` (§5), while an `n/a` item is simply out of scope. Collapsed
+  into one spelling, a run that reached two of ten heuristics and graded both well looked
+  exactly like a run that reached all ten — the scorecard lying by getting *shorter*,
+  which is the mirror of the accessibility scorecard lying by getting longer (§8). An item
+  with a real `score` carries no `status`.
 - **An item scoring at or below half its `of`, or marked n/a, MUST carry a `note`.** An
   unexplained low score is an assertion, not a finding. (This mirrors §9's rule that a
   skipped auditor must carry a reason.)
 - `rubric` names a framework that appears in `frameworks`, so the scorecard cannot cite a
   lens the run did not apply.
 - `health` covers what was **inspected**, not what exists: items the run could not reach are
-  `null` with a note, and the gap is repeated in `Coverage / not inspected` (§5).
+  `score: null` with `status: not-reached` and a note, and the gap is repeated in
+  `Coverage / not inspected` (§5).
 
 ## 5. Body layout
 
@@ -446,6 +469,17 @@ After the frontmatter, in order:
 4. **`## Prioritized fixes`** — findings listed P0 → P3, each line linking to its finding
    below.
 5. **`## Findings`** — one finding per **level-3 heading tagged with its priority**:
+
+   > **What counts as one finding: one defect that a single fix would close.** The counts
+   > drive the gate, so granularity is not a presentational choice — split one defect into
+   > three headings and a `GO` becomes a `NO-GO`; merge three into one and the reverse.
+   > Two corollaries already follow from this rule and are stated where they bite: the
+   > same issue seen through several frameworks is **one** finding attributed to its
+   > primary lens (the usability workflow, step 5), and a journey skipped because an
+   > earlier one broke adds **no** finding — the blocker carries the blast radius
+   > (`audit-cuj`). The same defect on five screens is one finding whose Evidence lists
+   > five locations; five unrelated defects on one screen are five findings.
+
 
    ```markdown
    ### [PN] <short title>           # N ∈ 0..3
@@ -524,21 +558,35 @@ does not affect finding counts (§ Count reconciliation).
 
 Two shapes, by auditor:
 
-- **cuj** — one `### Step <n> — <action>` per journey step, in `n` order (a step captured
-  whether it passed or failed), each with its screenshot and a one-line
-  expected-vs-observed:
+- **cuj** — one `### <CUJ-id> step <n> — <action>` per journey step (a step captured
+  whether it passed or failed), ordered by **journey id, then step number**, each with its
+  screenshot and a one-line expected-vs-observed:
 
   ```markdown
   ## Walkthrough
 
-  ### Step 1 — Click the new-task input
+  ### CUJ-001 step 1 — Click the new-task input
   ![CUJ-001 step 1](./assets/<report-stem>/cuj-001-step-1.png)
   > Expected: input takes focus, placeholder "What needs doing?". Observed: match.
 
-  ### Step 2 — Type 'Buy milk', press Enter
+  ### CUJ-001 step 2 — Type 'Buy milk', press Enter
   ![CUJ-001 step 2](./assets/<report-stem>/cuj-001-step-2.png)
   > Expected: row appears at top, input clears. Observed: match.
+
+  ### CUJ-002 step 1 — Open the task's detail view
+  ![CUJ-002 step 1](./assets/<report-stem>/cuj-002-step-1.png)
+  > Expected: the detail panel opens on the selected task. Observed: match.
   ```
+
+  A capture that is not a step — a success-criteria check, a state after a reload — uses
+  `### <CUJ-id> — <what>` and sits with its journey. The shape after the id is yours; the
+  id leading is not.
+
+  **The journey id is in the heading, not just the filename.** A `cuj` run covers every
+  journey selected by `--cuj`, so a bare `### Step 1` repeats once per journey: three
+  identical headings, three colliding anchors (§5 derives fragments from headings, so the
+  second and third are unreachable), and no defined order between them. The filenames were
+  already scoped by id; the headings were not.
 
 - **usability (and other flow auditors)** — one `### <state>` per captured key state
   (`Initial`, `Mid-flow`, `Success`, `Error`, `Empty`):
@@ -581,13 +629,33 @@ rows):
 ```markdown
 # Audit index
 
-| Date (UTC) | Auditor | Scope | P0 | P1 | P2 | P3 | Health | Report |
-|------------|---------|-------|----|----|----|----|--------|--------|
-| 2026-07-15T14:30:00Z | usability | checkout flow | 0 | 1 | 1 | 0 | 83 | [report](usability-20260715-143000.md) |
+| Date (UTC) | Auditor | Scope | P0 | P1 | P2 | P3 | Health | Verdict | Report |
+|------------|---------|-------|----|----|----|----|--------|---------|--------|
+| 2026-07-15T14:30:00Z | usability | checkout flow | 0 | 1 | 1 | 0 | 83 | — | [report](usability-20260715-143000.md) |
+| 2026-07-16T15:00:00Z | suite | demo app — full suite | 1 | 2 | 2 | 0 | 29 | NO-GO | [roll-up](rollup-20260716-150000.md) |
 ```
 
 `Health` is the report's `health.pct` as a bare integer. A report with no scorecard
 writes `—`.
+
+**A suite run appends its own row, with `suite` in the `Auditor` cell.** It is the row a
+reader is most often looking for — "did the last run pass?" — and for most of this file's
+life it did not exist: rows were appended one per *auditor*, so the index recorded every
+part of a suite run except its result. The `/ux-audit` fan-out therefore appends **n + 1**
+rows: one per member, then one for the roll-up, whose counts are the merged `summary` and
+whose `Report` cell links the `rollup-*.md`.
+
+**Only the suite row carries a `Verdict`; every member row writes `—`.** This is the same
+invariant the report body states — an auditor report never shows a go/no-go, because the
+gate is derived across auditors and one lens must not appear to issue it — made
+mechanical in the one place where member and suite rows sit in a single table, inviting
+exactly that confusion. The validator rejects both halves: a member row that claims a
+verdict, and a suite row that omits one.
+
+> **The legacy nine-column header is read-tolerated.** An `index.md` written before
+> `Verdict` existed still validates and is still appended to in its own shape. Widening it
+> would mean rewriting prior rows, which this section forbids — and the ban is worth more
+> than the column. Create new indexes with the header above.
 
 This column is **per-auditor history**, and that is all it is. It used to be documented as
 the source of the roll-up's `trend` — but a row is appended once per *auditor* run and a
@@ -648,8 +716,8 @@ health:                      # the suite scorecard
   band: Good                 # NOT the mean of `auditors` below, which would read 92.
   trend: [71, 76, 79, 81, 83]   # PRIOR runs, oldest → newest; [] when no history
   auditors:                  # which lens found what — printed, never averaged
-    - {auditor: cuj, pct: 100, band: Excellent, unit: "steps verified"}
-    - {auditor: usability, pct: 83, band: Good, unit: "Nielsen rubric"}
+    - {auditor: cuj, pct: 100, band: Excellent}
+    - {auditor: usability, pct: 83, band: Good}
 ---
 ```
 
@@ -675,6 +743,22 @@ health:                      # the suite scorecard
   schema does not have is read by nothing and decides nothing.
 - `summary` holds the **merged** counts across all members and reconciles the same way as
   §3: `total` equals the sum of `p0..p3`.
+- **Merged means de-duplicated, not concatenated.** Auditors overlap by design — an
+  unlabelled control is a Nielsen *recognition* failure and a WCAG `4.1.2` failure and may
+  be the step a journey dies on — so the same defect arrives from several members. Count it
+  **once**, under the member whose lens owns it, with the others cited as corroboration in
+  the merged entry: *"also reported by accessibility (4.1.2)"*. This is §5's one-defect-one-
+  finding rule applied one level up, and it is the same merge the usability workflow already
+  performs across its four frameworks. Left unstated, a defect two auditors both notice
+  counts twice, which inflates `total`, can move `health.pct`, and — when the duplicate is a
+  `P1` — can turn a `GO` into a `NO-GO` on a product with one problem.
+
+  **Ownership, in order:** the member that can cite the most specific evidence for it (a
+  measurement or `file:line` beats a description); then the one whose framework names the
+  defect most directly; then, still tied, the member that graded it **worst** — never the
+  one that graded it mildest, which would let the merge soften the gate. Record the losing
+  members' priorities in the entry when they differ: two lenses disagreeing about severity
+  is a fact worth printing, not a conflict to resolve silently.
 - **`health.pct` is the priority index over `summary` (§4.1)** — the same function over the
   same shape of input as a member applies to its own counts — and `band` follows §4.1's
   table. It is **not** the mean of the member percentages, which is what this section said
@@ -757,7 +841,12 @@ health:                      # the suite scorecard
    total, health percentage and band, and a one-line result. Link each auditor name to its
    report.
 4. **`## Auditors that ran vs. skipped`** — prose mirroring `auditors_ran` /
-   `auditors_skipped`, with the reason for every skip.
+   `auditors_skipped`, with the reason for every skip. When the run met a login wall, this
+   section also carries the one **`Access:`** line (§5's vocabulary, same rung-not-account
+   rule), because the gate above it must never read as covering the whole product when it
+   covered the public half. A member report puts its `Access:` line in its appendix; a
+   roll-up has no appendix, so it goes here — the suite pre-flight was told to record one
+   and, until now, given nowhere to put it.
 5. **`## Merged top issues`** — findings across all members, `P0` → `P3`, each
    linking to its finding anchor in the member report: `member-<stamp>.md#<slug>`, where
    `<slug>` is the member's finding heading slugged by §5's rule. Cite the heading as the

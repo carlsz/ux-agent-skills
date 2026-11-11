@@ -79,11 +79,27 @@ manufacture the very state the audit is supposed to test for.
 
 Then record **the rung, not the identity** (§5).
 
-### Beat 5 — Resume, or skip with a named cause
+### Beat 5 — Resume, or carry on with a named gap
 
 Session confirmed → return to the workflow (for `audit-cuj`, back to **L0** to re-check the
-precondition against the now-authenticated app). Declined or unanswered → the existing skip
-path, with a named cause and a `Repair:` line.
+precondition against the now-authenticated app).
+
+**Declined or unanswered → carry on unauthenticated. What gets skipped is a scope, never
+the run.** The size of that scope is the one thing that differs by auditor, and conflating
+them is how this reference used to say "the existing skip path" while `/ux-audit` said
+"proceed unauthenticated — do not skip the run":
+
+| Auditor | What a decline skips | What still happens |
+|---|---|---|
+| `audit-cuj` | The journeys whose preconditions need the session — each skipped with a named cause and a `Repair:` line. | Journeys reachable unauthenticated are still replayed and reported. |
+| `usability`, `accessibility` | Nothing. The gated screens become **coverage gaps**, not skips. | The whole public surface is audited and reported as usual. |
+| `/ux-audit` (suite) | Nothing. Every selected auditor still runs. | The outcome is disclosed as the roll-up's `Access:` line (§9 body layout). |
+
+A declined handoff is a smaller audit, not an abandoned one — the public half of an app is
+most of what a first-time user meets, and refusing to look at it because a login wall
+exists would be the opposite of honest. What is never acceptable is reporting the covered
+half as if it were the whole: the gap is recorded wherever that auditor records coverage,
+and the `Access:` line says which rung was reached.
 
 ---
 

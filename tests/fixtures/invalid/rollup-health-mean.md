@@ -22,9 +22,9 @@ health:
   band: Good
   trend: [71, 76, 79]
   auditors:
-    - {auditor: usability, pct: 83, band: Good, unit: "Nielsen rubric"}
-    - {auditor: accessibility, pct: 67, band: Acceptable, unit: "WCAG criteria passed"}
-    - {auditor: cuj, pct: 75, band: Good, unit: "steps verified"}
+    - {auditor: usability, pct: 83, band: Good}
+    - {auditor: accessibility, pct: 67, band: Acceptable}
+    - {auditor: cuj, pct: 75, band: Good}
 ---
 
 # UX Audit Roll-up — demo app

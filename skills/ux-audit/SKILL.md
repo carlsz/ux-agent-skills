@@ -42,7 +42,19 @@ Three native auditors plus one wrapped from **[web-quality-skills](https://githu
 
 ## Workflow
 
-1. **Discover available auditors.** Usability is always available (native). For
+1. **Snapshot the repo before anything runs.**
+
+   ```
+   python3 scripts/audit_safety.py <host-repo> --snapshot
+   ```
+
+   Before the auth pre-flight, not after — and before any auditor writes. Git can tell you
+   the tree differs from HEAD; it cannot tell you *who* made it differ, and a suite run is
+   most often pointed at a repo that is dirty before it starts. Without this, step 8 reports
+   the user's own uncommitted work as the suite's violation. The command saves the baseline
+   under a path derived from the host repo, and step 8 reads it back with `--baseline auto`.
+
+2. **Discover available auditors.** Usability is always available (native). For
    accessibility and web performance, check whether the wrapping skills
    (`web-quality-skills:accessibility`, `web-quality-skills:performance`) are installed.
    **Web performance is also opt-in**: even when installed, it runs only when named in
@@ -57,7 +69,7 @@ Three native auditors plus one wrapped from **[web-quality-skills](https://githu
    (for CUJ: `"no CUJs authored; run /ux-spec"`). A missing, skipped, or opt-in-not-requested
    auditor must never read as a clean pass. Honor `--only` and `--all`.
 
-2. **Auth pre-flight — once, before any auditor runs.** *Applies only when this run will
+3. **Auth pre-flight — once, before any auditor runs.** *Applies only when this run will
    actually drive a browser:* `target` is a URL (or a reachable running app) **and** the
    resolved mode is live or hybrid. A repo-path target, or `--mode static`, has no page to
    navigate and no session to establish — skip this step entirely and record nothing. Do not
@@ -93,7 +105,7 @@ Three native auditors plus one wrapped from **[web-quality-skills](https://githu
    `.ux/audits/` **wholesale** rather than assets-only, and why the recommendation is made
    here — at auth time, before any auditor writes anything.
 
-3. **Fan out.** Run each selected auditor against the same `target`/`--scope`:
+4. **Fan out.** Run each selected auditor against the same `target`/`--scope`:
    - **Usability** — invoke the native `usability-audit` skill; it already writes a
      contract report.
    - **Accessibility** — invoke the native `accessibility-audit` skill; it already writes
@@ -108,7 +120,7 @@ Three native auditors plus one wrapped from **[web-quality-skills](https://githu
      host's `.ux/cujs/` and already writes a contract report. It honors its own
      static-vs-live honesty rule (a static run cannot produce a verified pass).
 
-4. **Normalize into the shared contract.** For each wrapped auditor, write a
+5. **Normalize into the shared contract.** For each wrapped auditor, write a
    contract-conforming report at `.ux/audits/<auditor>-<YYYYMMDD>-<HHMMSS>.md` — same
    frontmatter schema, body layout, and appendix. **Map each tool's severity onto the
    `P0`-`P3` scale** (contract §4 — note the direction: `P0` is the worst):
@@ -135,7 +147,7 @@ Three native auditors plus one wrapped from **[web-quality-skills](https://githu
    `score / max`** — otherwise a lens that enumerates more criteria scores higher for the
    same defects. An auditor that measured nothing gradable writes `pct: null, band:
    Unscored` rather than a number it did not earn, and the roll-up carries that entry as
-   written (step 6).
+   written (step 7).
    Set `auditor` and `frameworks` per the table above; carry the tool's evidence
    (screenshots, `file:line`, measured metrics) into the Evidence field.
    The **native** auditors (usability, accessibility, `cuj`) already emit contract reports
@@ -146,10 +158,16 @@ Three native auditors plus one wrapped from **[web-quality-skills](https://githu
    verified nothing (`frameworks: [cuj-contract]` alone signals the latter), and never
    fold a *skipped* CUJ run into the passed column.
 
-5. **Append the index.** Add one `.ux/audits/index.md` row per auditor run (append-only),
-   exactly as a single-auditor run does.
+6. **Append the index.** Add one `.ux/audits/index.md` row per auditor run (append-only),
+   exactly as a single-auditor run does — each with `—` in the `Verdict` column.
 
-6. **Write the roll-up.** Create `.ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md` to the
+   **Then append one more row for the run itself**, with `suite` in the `Auditor` cell, the
+   merged counts, the suite `health.pct`, the derived **verdict**, and a link to the
+   `rollup-*.md`. Write it after step 7, once those values exist. It is the row a reader
+   actually looks for — *did the last run pass?* — and until now the index recorded every
+   part of a suite run except its result.
+
+7. **Write the roll-up.** Create `.ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md` to the
    **roll-up frontmatter and body layout in
    [report-contract.md §9](../usability-audit/references/report-contract.md#9-the-suite-roll-up-rollup-md)**
    — read it before writing, and copy the key names exactly:
@@ -179,7 +197,7 @@ Three native auditors plus one wrapped from **[web-quality-skills](https://githu
      band: Good                 # NOT the mean of `auditors` below. Write no `method:` key.
      trend: [71, 76]            # DERIVED from the prior rollup-*.md; [] on a first run
      auditors:                  # which lens found what — printed, never averaged
-       - {auditor: usability, pct: 83, band: Good, unit: "Nielsen rubric"}
+       - {auditor: usability, pct: 83, band: Good}
    ---
    ```
 
@@ -219,24 +237,28 @@ Three native auditors plus one wrapped from **[web-quality-skills](https://githu
    The body carries the lead verdict paragraph, a per-auditor priority-and-health table, the auditors
    that ran vs. were skipped (with reasons — including a CUJ run skipped for want of
    `.ux/cujs/`, and web performance skipped when not opted into), a merged top-issues list
-   ordered by priority across all auditors, the verdict rationale, and `## Notes`. A skipped
+   ordered by priority across all auditors, the verdict rationale, and `## Notes`. **Merged
+   means de-duplicated, not concatenated** — two auditors seeing one defect is one issue,
+   attributed by §9's ownership tie-break; listing it twice inflates the very counts the
+   gate reads. A skipped
    CUJ run, or a web-performance run not opted into, is disclosed, never scored as a pass.
    Link to each individual report.
 
-7. **Self-check.** Validate every report, **the roll-up**, and the index with
+8. **Self-check.** Validate every report, **the roll-up**, and the index with
    [`scripts/validate_report.py`](../../scripts/validate_report.py) — it dispatches on
    `kind: rollup` and checks the roll-up against §9, including recomputing the verdict and
    `health.pct` from the merged counts. Confirm `health.trend` with the one check that needs
    the directory rather than the file, `validate_report.py --trend <rollup>`. Then confirm
    the safety
-   invariant with [`scripts/audit_safety.py`](../../scripts/audit_safety.py) `<host-repo>`.
+   invariant with [`scripts/audit_safety.py`](../../scripts/audit_safety.py)
+`<host-repo> --baseline auto`.
    It checks **both halves** of the invariant (SPEC §5.2) and exits 0 only if both
    hold: nothing changed outside `.ux/audits/`, **and** the writes you just made inside it
    were observed — it prints them. Exit 1 with *"no writes were observed"* means the run
    produced nothing; that is a real failure for an auditor, not a formality, and it is the
    only signal you get once `.ux/audits/` is gitignored and `git status` has gone quiet.
 
-8. **Render the HTML companions.** Generate a self-contained HTML view for every member
+9. **Render the HTML companions.** Generate a self-contained HTML view for every member
    report, the roll-up dashboard (with its go/no-go verdict and per-auditor matrix linking to
    each member's `.html`), and the index landing page:
 

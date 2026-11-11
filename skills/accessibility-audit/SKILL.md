@@ -20,7 +20,7 @@ for a maker who will apply the change, and this one reports instead (see Boundar
 and `hybrid` (both). Unlike the other auditors, the mode here changes **what can be
 claimed at all**: most WCAG criteria are only observable at runtime, so a static run finds
 markup that looks wrong and cannot establish conformance. Mode is auto-selected by default
-(step 1); `--mode` forces one.
+(step 2); `--mode` forces one.
 
 ---
 
@@ -30,11 +30,24 @@ markup that looks wrong and cannot establish conformance. Mode is auto-selected 
   the running dev server or the repo's UI source.
 - `--scope` — narrow the audit to a flow/area (e.g. "checkout"). Optional.
 - `--mode static | live | hybrid` — force an evidence-gathering mode. Optional; default is
-  auto (see step 1).
+  auto (see step 2).
 
 ## Workflow
 
-1. **Scope the audit and select the mode.** Resolve `target` and `--scope`, and identify
+1. **Snapshot the repo before you write anything.**
+
+   ```
+   python3 scripts/audit_safety.py <host-repo> --snapshot
+   ```
+
+   Git can tell you the tree differs from HEAD; it cannot tell you *who* made it differ,
+   and you are most often run on a repo that is dirty **before you start**. Without this,
+   the footprint check in your self-check step reports the user's own uncommitted work as
+   your violation, every run — and a check that cries wolf gets muted. The command saves
+   the baseline itself, under a path derived from the host repo; you read it back with
+   `--baseline auto`, so neither step names a file.
+
+2. **Scope the audit and select the mode.** Resolve `target` and `--scope`, and identify
    the host repo root (where `.ux/` will live). Then choose the mode:
    - If `--mode` is given, use it.
    - Otherwise **auto-select**: **prefer live** when a target URL is given or a dev server
@@ -47,13 +60,13 @@ markup that looks wrong and cannot establish conformance. Mode is auto-selected 
      reachable is reported as `static`, with the reason.
    List the surfaces you intend to cover.
 
-2. **Read the lens and the contract.** Load [the WCAG audit lens](./references/wcag-2.2.md)
+3. **Read the lens and the contract.** Load [the WCAG audit lens](./references/wcag-2.2.md)
    and the [report contract](../usability-audit/references/report-contract.md), including
    §4's *A conformance level is not a priority*. Cite criteria from the reference; do not
    recite them from memory. Decide from the lens which criteria are **in scope for this
    surface** — a surface with no media does not get 1.2.x, and saying so is not a gap.
 
-3. **Gather evidence** using the selected mode:
+4. **Gather evidence** using the selected mode:
 
    ### Static mode (source)
    Read the in-scope components, markup, routes, copy and design tokens. You can settle
@@ -61,7 +74,7 @@ markup that looks wrong and cannot establish conformance. Mode is auto-selected 
    language, `3.3.2` labels, `2.1.1` handlers on non-interactive elements, `4.1.2` roles on
    custom widgets. Capture `file:line` for each. Everything that depends on the render —
    contrast, focus order, focus visibility, target size, reflow, live-region announcement
-   — is **`potential — unverified`** here, with the reason; see step 5.
+   — is **`potential — unverified`** here, with the reason; see step 6.
 
    ### Live mode (render)
    Inspect the running app through a browser (browser MCP). **Ask the user first** before
@@ -82,13 +95,13 @@ markup that looks wrong and cannot establish conformance. Mode is auto-selected 
    - **Screenshot** each key state (initial, focus-visible, error, success, empty) and save
      each as `accessibility-<scope-slug>-<state>.png` inside **this run's own** asset
      directory, `.ux/audits/assets/<report-stem>/` — the report filename you will write in
-     step 7 without its `.md`, so the images and the report that cites them share one
+     step 8 without its `.md`, so the images and the report that cites them share one
      lifecycle and no later run can overwrite them (report contract §1). Embed them inline
      (`![alt](./assets/<report-stem>/…)`) — in findings for evidence, and assembled into
-     the `## Walkthrough` section (step 7).
+     the `## Walkthrough` section (step 8).
    - **Automated tooling is optional and bounded.** If you run axe-core or Lighthouse,
      carry its output as evidence and add the tool to `frameworks`. It settles a minority
-     of the criteria and none of the judgement-bound ones — see step 6.
+     of the criteria and none of the judgement-bound ones — see step 7.
    - **Auth pre-flight.** Never enter credentials or bypass auth yourself. When the
      in-scope flow runs into a login wall, run the **auth handoff** —
      [`auth-handoff.md`](../usability-audit/references/auth-handoff.md) — as a pre-flight,
@@ -106,7 +119,7 @@ markup that looks wrong and cannot establish conformance. Mode is auto-selected 
      - Auditing the sign-in screen itself (3.3.8, labels, focus) is in scope and needs no
        session: observe it, never authenticate against it.
 
-4. **Grade by impact on the user the defect affects, citing the level.** For each failure,
+5. **Grade by impact on the user the defect affects, citing the level.** For each failure,
    write the five fields: Issue
    Description (what fails, **for whom**, in which assistive context), Framework Violation
    (criterion number, name and level, cited exactly), Priority, Evidence, Recommended Fix.
@@ -117,7 +130,7 @@ markup that looks wrong and cannot establish conformance. Mode is auto-selected 
    minimum is `P2`, and that is not softening it. **Every failed criterion is a finding**,
    including the `P3`s — a low grade is never permission to leave it out.
 
-5. **Apply the render-vs-source honesty rule.** It binds harder here than in any other
+6. **Apply the render-vs-source honesty rule.** It binds harder here than in any other
    auditor, because most of WCAG is a runtime property:
    - In **live** mode, a criterion you observed or measured is stated as **verified**,
      backed by the measurement, the accessibility-tree excerpt or the screenshot.
@@ -126,7 +139,7 @@ markup that looks wrong and cannot establish conformance. Mode is auto-selected 
      static run **cannot establish conformance** — it can only find markup that looks
      wrong. Never assert an unobserved runtime behavior as fact.
 
-6. **State what the tooling did and did not cover.** If you ran axe-core or Lighthouse,
+7. **State what the tooling did and did not cover.** If you ran axe-core or Lighthouse,
    name it in `frameworks` and say in the appendix which criteria it covered. **Never
    report "0 automated violations" as "accessible"**: automated tooling detects roughly a
    third of WCAG failures and almost none of the judgement-bound ones — whether alt text is
@@ -134,7 +147,7 @@ markup that looks wrong and cannot establish conformance. Mode is auto-selected 
    clean tool run over an unexamined surface is the most confident-sounding false pass this
    suite can produce, so the appendix carries the gap explicitly.
 
-7. **Write the report.** Create `.ux/`, `.ux/audits/`, and this run's
+8. **Write the report.** Create `.ux/`, `.ux/audits/`, and this run's
    `.ux/audits/assets/<report-stem>/` in the host repo if absent. Write
    `.ux/audits/accessibility-<YYYYMMDD>-<HHMMSS>.md` (UTC clock) with the frontmatter
    schema (`auditor: accessibility`, `frameworks: [wcag-2.2]` plus any tool you actually
@@ -145,24 +158,26 @@ markup that looks wrong and cannot establish conformance. Mode is auto-selected 
    `## Findings` and before `## Appendix`: one `### <state>` per captured key state, each
    embedding its screenshot inline. Omit the section in static mode (nothing was captured).
 
-8. **Append to the index.** Add one row for this run to `.ux/audits/index.md` — create the
+9. **Append to the index.** Add one row for this run to `.ux/audits/index.md` — create the
    file with the contract's header if it doesn't exist. The index is **append-only**: add
    your row, never rewrite or reorder prior rows (they may belong to earlier runs or other
-   auditors). The row records date, auditor, scope, the four priority counts and the health
-   percentage, linking to the report file.
+   auditors). The row records date, auditor, scope, the four priority counts, the
+   health percentage and a **`—` in the `Verdict` column**, linking to the report file.
+   The verdict cell is not yours to fill: the gate is derived across auditors, and the
+   suite's own row carries it (§7).
 
-9. **Self-check before finishing.** Ensure `summary` counts reconcile with the findings in
+10. **Self-check before finishing.** Ensure `summary` counts reconcile with the findings in
    the body and no tag outside `P0`-`P3` appears. Validate the report and index with
    [`scripts/validate_report.py`](../../scripts/validate_report.py) — `validate_report.py
    <report>` and `validate_report.py --index .ux/audits/index.md`. Then confirm the safety
    invariant with [`scripts/audit_safety.py`](../../scripts/audit_safety.py)
-   `<host-repo>`. It checks **both halves** of the invariant (SPEC §5.2) and exits 0 only if
+`<host-repo> --baseline auto`. It checks **both halves** of the invariant (SPEC §5.2) and exits 0 only if
    both hold: nothing changed outside `.ux/audits/`, **and** the writes you just made inside
    it were observed — it prints them. Exit 1 with *"no writes were observed"* means the run
    produced nothing; that is a real failure for an auditor, not a formality, and it is the
    only signal you get once `.ux/audits/` is gitignored and `git status` has gone quiet.
 
-10. **Render the HTML companion.** After the report validates, generate its self-contained
+11. **Render the HTML companion.** After the report validates, generate its self-contained
     HTML view beside the Markdown:
 
     ```
