@@ -668,5 +668,32 @@ Roughly half of #16 was never about the rename. Ranked by what it would cost to 
       (`dup-heading`, `missing-appendix`, `walkthrough-bad-path`, `rollup-skip-no-reason`)
       are contract coverage #20 does not have.
 
-**PR #18 is stacked on #16's branch, not on main**, so it still targets a base that will
-now never merge. Re-pointing it is a separate call and was not made here.
+### ⛳ Checkpoint 9 — PR #18 (accessibility auditor), closed to revisit later
+
+#18 was stacked on #16's branch rather than `main`, so closing #16 left it targeting a base
+that would never merge. The user closed it too: **"we will revisit the need for an a11y
+auditor in the future."** Its branch is kept.
+
+**Recovery handle: `5fefc89` on `claude/accessibility-auditor-2cd53b`** — one commit,
++988/-28 across 15 files. It is a *complete* component set, authored to this repo's
+"adding a new auditor, end to end" recipe: persona, skill, `references/wcag-2.2.md`,
+command, eval case, a hand-wired `check_*` in `test_components.py`, `docs/` catalog
+entries, a fixture, and roll-up registration. Nothing about it is half-finished.
+
+**Revisiting it is a port, not a rebase.** It was written against #16's contract, which is
+the shape that was rejected. Four things have to change, and the last is a design decision
+rather than a find-and-replace:
+
+1. `summary` keys are lowercase `p0`-`p3`; #20's contract uses uppercase `P0`-`P3`.
+2. It carries a `health:` block and a `## Design health` body section throughout — persona,
+   skill, and fixture. #20 has no scorecard, so these come out rather than get renamed.
+3. Its index rows carry a `Verdict` column; #20 drops the verdict entirely.
+4. **It registers accessibility as a *native* skill** (`skills/accessibility-audit`) in
+   `skills/ux-audit/SKILL.md`, replacing #20's *wrapped*
+   `web-quality-skills:accessibility`. That is a change to what the suite owns versus
+   what it borrows — the roll-up table, the install-check in step 1, and the "offer, don't
+   auto-install" boundary all follow from it. Decide that before porting, not during.
+
+It also predates the per-finding severity decision, so its findings carry priority alone
+and would need `S1`-`S4` added with the three NN/g factors stated — the same work slice 2
+did for the other personas.
