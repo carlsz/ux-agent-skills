@@ -41,7 +41,8 @@ DOC_FILES = [
     "skills/usability-audit/references/auth-handoff.md",
     "skills/spec-cuj/references/cuj-contract.md",
     "commands/ux-audit.md",
-    "agents/README.md", "skills/README.md", "commands/README.md",
+    "docs/agents.md", "docs/skills.md", "docs/commands.md",
+    "docs/plugin-review.md",
     "evals/README.md",
 ]
 

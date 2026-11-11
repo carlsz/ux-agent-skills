@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="UX Agent Skills: a magnifying glass over an interface">
+  <title>UX Agent Skills</title>
+  <rect width="512" height="512" rx="112" fill="#15161A"/>
+  <g fill="none" stroke="#ECE9E3" stroke-width="20" stroke-linecap="round">
+    <rect x="96" y="112" width="240" height="200" rx="28"/>
+    <path d="M96 168h240"/>
+    <path d="M140 216h116"/>
+    <path d="M140 262h72"/>
+  </g>
+  <circle cx="330" cy="322" r="92" fill="#15161A"/>
+  <g fill="none" stroke="#F2B441" stroke-width="24" stroke-linecap="round">
+    <circle cx="330" cy="322" r="92"/>
+    <path d="M396 388l46 46"/>
+  </g>
+</svg>
