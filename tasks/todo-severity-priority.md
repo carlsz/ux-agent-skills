@@ -592,5 +592,42 @@ the honest headline of this slice. 23 substitutions, and three of them mattered:
       html-report, the original build). Rewriting them would falsify history, the same
       principle that protects the CHANGELOG.
 - [x] Full suite green, all 8 files.
-- [ ] **Human review.**
-- [ ] **Not committed.** Six slices now sit uncommitted in one worktree.
+- [x] **Human review.** Opened as PR #20; `test` is green.
+
+### ⛳ Checkpoint 7 — the review's findings are answered
+A sandboxed review of the branch returned 14 findings; `dea5290` acts on them. The two
+worth remembering:
+
+- [x] **The false-clean read moved, it did not leave.** Dropping the go/no-go verdict was
+      supposed to remove the "green banner over a page of findings" failure. It only
+      relocated it: `_priority_counts()` read *unreadable* `priorities:` frontmatter as all
+      zero, so an absent, misnamed, non-numeric or YAML-bool map rendered the green
+      "every auditor reported clean" pass — directly above a body table listing findings.
+      Nothing validates roll-up frontmatter, so that function was the only guard. It now
+      returns `None` for anything it cannot trust and the banner warns. The lesson is the
+      slice-5 one restated: the hazard is a *claim of coverage*, and renaming the claim
+      does not retire it.
+- [x] **Two probes that could not fail, one of them on a line this branch had edited.**
+      The persona severity probe was `"severity" in low and "0" in body and "4" in body`;
+      the `0` and `4` came from `P0` and a section-4 cross-reference, so deleting both
+      rating tables left it green. Same defect class as the `check_rollup_skill()` verdict
+      probe this branch *replaced* — which is the point: the silent trap is not a one-off
+      to be fixed, it is the standing cost of hand-wired checks, and a probe is not a test
+      until something has been deleted under it. Both are now scoped with `_section()` and
+      mutation-proved.
+
+- [x] Also fixed: a `priorities:` list crashed the renderer outright (the `try` covered
+      `int()`, not `raw.get`); `summary` key casing contradicted itself across SPEC, the
+      contract and the CHANGELOG (`p0` vs `P0` — **and #16 standardizes the other way**);
+      `schema: 3.0` and `schema: true` both validated (`3.0 == 3`, `True == 1`);
+      `validate_index()` read prose discussing the columns as a table header;
+      `splitlines()` hid U+2028/U+2029/U+0085 from the charset guard; `SKILL.md` asked for
+      "a 0-4 priority" in its own exit criteria.
+
+- [ ] **Open, and not this branch's to decide: PR #16 implements the same rename.** Open
+      since 2026-10-26, updated 2026-11-11, +7493/-818 across 72 files, 30 of them shared
+      with #20. It also claims `schema: 3` — same number, incompatible shape: lowercase
+      `p0`-`p3` keys, **no per-finding severity at all** ("`3` replaced the 0-4 severity
+      scale with P0-P3"), plus a derived `health` scorecard this plan explicitly rejected.
+      The two cannot both merge. Reconciling them is a product decision, recorded here
+      rather than taken.
