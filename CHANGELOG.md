@@ -6,49 +6,6 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-### Added
-- **The accessibility auditor now exists.** `agents/accessibility-auditor.md`,
-  `skills/accessibility-audit/` (with its own
-  [WCAG audit lens](skills/accessibility-audit/references/wcag-2.2.md)),
-  `commands/accessibility-audit.md`, and `evals/cases/accessibility-audit.json` — the
-  eight-step recipe in AGENTS.md, run for the first time.
-
-  **It was a default member of the `/ux-audit` bundle from the beginning and had no
-  components.** The fan-out wrapped `web-quality-skills:accessibility` and called that an
-  auditor. It is not one: that skill contains no occurrence of *finding*, *report*,
-  *priority* or `.ux/` — it is a **remediation guide**, pairing each rule with the
-  corrected markup in a ❌/✅ idiom meant to be applied. So the roll-up was asking an agent
-  to improvise a whole auditor per run: the point of view, the grading, the coverage rule,
-  the report shape.
-
-  The improvisation showed. Three severity vocabularies were in play at once — the
-  contract's `P0`–`P3`, the roll-up's `Level AA → P1` lookup, and the wrapped skill's
-  *Critical / Serious / Moderate* list, which files contrast under **Critical** — and none
-  of them agreed. Across five real runs the same criterion, `1.4.3`, came out `P1`, `P2`
-  and `P3`, twice within a single report. The previous entry fixed the lookup; this one
-  gives the rule an owner.
-
-  Three things make this auditor different from the other two, and each is pinned by a
-  check:
-
-  - **It reads the external skill and rejects its posture.** The remediation wording is
-    genuinely useful and belongs in the Recommended Fix field; the ❌/✅ idiom is a work
-    order, and this is a findings-only suite. The boundary is under more pressure here than
-    anywhere else, because an accessibility defect usually has an obvious three-line fix
-    sitting right beside it.
-  - **Its rubric is the only one that is not fixed.** Usability grades ten Nielsen
-    heuristics and `cuj` grades the journey's steps — both known before the run.
-    Accessibility grades *the criteria it actually checked*, so its scorecard can lie by
-    getting longer: fifty-six rows after examining nine reads as thoroughness. An
-    unevaluated criterion belongs in the appendix's coverage list, never in `health`.
-  - **Mode is not cosmetic.** Most of WCAG is a runtime property — contrast against the
-    computed background, focus order, focus visibility, target size, live-region timing —
-    so a static run finds markup that looks wrong and **cannot establish conformance**, and
-    has to say so in its own appendix. The same goes for tooling: axe and Lighthouse cover
-    a minority of criteria and almost none of the judgement-bound ones, so *"0 violations"*
-    is a statement about the tool, never about the app.
-
-  `/ux-audit` now fans out to three native auditors and one wrapped, instead of two and two.
 
 ### Fixed
 - **Ten defects the suite could only find by being run.** A full `/ux-audit` against a real

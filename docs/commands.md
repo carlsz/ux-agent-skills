@@ -15,8 +15,6 @@ that does the work.
 
 - [`usability-audit.md`](../commands/usability-audit.md) — `/ux-agent-skills:usability-audit`:
   run the usability auditor against one target.
-- [`accessibility-audit.md`](../commands/accessibility-audit.md) —
-  `/ux-agent-skills:accessibility-audit`: run the accessibility auditor against one target.
 - [`ux-audit.md`](../commands/ux-audit.md) — `/ux-agent-skills:ux-audit`: the suite roll-up.
   Default fans out to usability + accessibility + cuj; web-performance is opt-in
   (`--only`/`--all`).
