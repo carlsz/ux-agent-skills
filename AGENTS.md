@@ -39,13 +39,24 @@ ux-agent-skills/
 ├── scripts/                # validate_report.py, validate_cuj.py, audit_safety.py, render_report_html.py
 ├── tests/                  # contract / component / cuj-contract / safety / docs / evals / render-html checks
 ├── evals/                  # trigger + behavioral evals (Sprout as the target)
+├── docs/                   # layer catalogs (agents.md, commands.md, skills.md) + README images
+├── icon.svg                # the directory listing's icon, referenced by plugin.json
 └── SPEC.md                 # this repo's design spec (§1–8 usability auditor, §9 CUJs, §10 walk-through + HTML) — what/why
 ```
 
 **Components are auto-discovered by convention** from `agents/`, `skills/*/SKILL.md`, and
 `commands/`. Adding one needs **no `plugin.json` edit** — the manifest carries metadata and
-`dependencies` only. Touch it to bump `version`, or to add an external plugin you wrap (mirror any
-`dependencies` change into `marketplace.json`).
+`dependencies` only. Touch it to bump `version`, to change the `icon`, or to add an external plugin
+you wrap (mirror any `dependencies` change into `marketplace.json`).
+
+**`agents/` and `commands/` are swept wholesale**, so every `.md` in them *is* a component —
+frontmatter or not. A plain `README.md` there loaded as a phantom persona named "README" and as a
+stray `/README` command, both in the always-on token budget; the published plugin review caught
+them as "no frontmatter block". The layer catalogs therefore live in [`docs/`](docs/) —
+[`agents.md`](docs/agents.md), [`commands.md`](docs/commands.md), [`skills.md`](docs/skills.md) —
+and `check_discovery_dirs()` fails if one comes back. **Put documentation in `docs/`, never beside
+the components it describes.** (`skills/` is exempt by construction: discovery there is
+`skills/<name>/SKILL.md`, a directory, not a glob.)
 
 ## Frontmatter by layer
 
@@ -93,7 +104,8 @@ conformance work. In order:
 7. **`skills/ux-audit/SKILL.md`** — add to the roll-up fan-out if it joins the suite, and update the
    auditor list in `check_rollup_skill()`.
 8. **Docs** — add the file to `DOC_FILES` in `tests/test_docs.py` so its links get checked, and
-   update the catalog in the relevant subdirectory README.
+   update the catalog in [`docs/`](docs/) (`agents.md` / `skills.md` / `commands.md` — **not** a
+   README beside the component; see the discovery note above).
 
 ## The CUJ family (a second triad)
 
@@ -214,6 +226,14 @@ component goes unverified. This is the quieter and more dangerous of the two.
 The same shape shows up in `test_docs.py`: `DOC_FILES` is a hardcoded list, and a path that doesn't
 exist is silently skipped rather than flagged. It link-checks what it's told about — no more.
 
+**The one exception, and why it is one.** `check_discovery_dirs()` *does* glob — `agents/*.md` and
+`commands/*.md` — and it is the only check in `test_components.py` that does. The hand-wired checks
+verify components you meant to author; only a glob catches a file **nobody meant to author at all**,
+which is exactly how a documentation `README.md` became a loaded component for five releases
+(0.3.0 onward). The hand-wiring rule above is unchanged: a new component still needs its own `check_*()`, because this
+one only asserts that a discovered file has the frontmatter its layer requires, never that it does
+its job.
+
 ## Triggers and routing
 
 Tier 2 evals build a stemmed TF-IDF corpus from **each `SKILL.md`'s frontmatter `description`** plus
@@ -245,6 +265,14 @@ Load the working copy without installing:
 ```
 claude --plugin-dir .
 ```
+
+## The published-directory review
+
+The plugin is listed in the Claude directory, which re-scans every published version. Its findings
+and the decisions taken on them — including the three standing **false positives** a prose-level
+scanner keeps re-raising against a suite whose whole subject is credentials and audits — are
+recorded in [`docs/plugin-review.md`](docs/plugin-review.md). Read it before "fixing" a finding
+that was already declined on the record.
 
 ## Boundaries
 
