@@ -624,10 +624,49 @@ worth remembering:
       `splitlines()` hid U+2028/U+2029/U+0085 from the charset guard; `SKILL.md` asked for
       "a 0-4 priority" in its own exit criteria.
 
-- [ ] **Open, and not this branch's to decide: PR #16 implements the same rename.** Open
-      since 2026-10-26, updated 2026-11-11, +7493/-818 across 72 files, 30 of them shared
-      with #20. It also claims `schema: 3` — same number, incompatible shape: lowercase
-      `p0`-`p3` keys, **no per-finding severity at all** ("`3` replaced the 0-4 severity
-      scale with P0-P3"), plus a derived `health` scorecard this plan explicitly rejected.
-      The two cannot both merge. Reconciling them is a product decision, recorded here
-      rather than taken.
+- [x] **PR #16 implemented the same rename; the user chose #20 and closed it.** #16 was
+      open since 2026-10-26, +7493/-818 across 72 files, 30 shared with #20, and claimed
+      the same `schema: 3` with an incompatible shape: lowercase `p0`-`p3` keys, **no
+      per-finding severity at all** ("`3` replaced the 0-4 severity scale with P0-P3"),
+      plus a derived `health` scorecard this plan explicitly rejected. The two could not
+      both merge.
+
+### ⛳ Checkpoint 8 — what closing #16 set aside, and where to find it
+
+Closing a PR does not delete its branch. **Recovery handle: `26473fb`** on
+`claude/ux-agent-skills-report-design-2cd53b` — do not delete that branch until the
+salvage below is either cherry-picked or consciously dropped.
+
+Roughly half of #16 was never about the rename. Ranked by what it would cost to lose:
+
+- [ ] **`db7e6e9` — "Derive the safety baseline's path instead of naming one in /tmp".**
+      The highest-value orphan, and the only one touching a file #20 never opens
+      (`scripts/audit_safety.py`, `tests/test_safety.py`). `audit-cuj` step 1 wrote
+      `--snapshot > /tmp/ux-baseline.json` and step 8 read the same name back: one
+      filename in a world-writable directory, shared by every run on the machine. Two
+      concurrent audits measure one repo against the other's tree — which forgives a real
+      escape *or* invents one, with no symptom either way. This is a correctness bug in
+      the check that enforces findings-only. The fix derives the path per repo by digest
+      in a `0o700` per-user directory, refuses it if it is a symlink
+      (`mkdir(exist_ok=True)` is satisfied by a symlink to a directory), and exits 2 on
+      `--baseline auto` with nothing saved rather than running unbaselined. It also notes
+      there is no `/tmp` on Windows. **Cherry-picks cleanly in principle** — #20 touches
+      neither file.
+- [ ] **`4421622` — "Close the ten defects a real run found and nothing tested"** and
+      **`87231ec` — "Run the suite against a real app, and fix what three auditors
+      found".** Dogfood-driven, and the kind of defect this suite's tests structurally
+      cannot catch (a rule the contract states once that each workflow then has to apply).
+      Entangled with the rename and the health scorecard, so these need reading, not
+      cherry-picking. The index-verdict finding in `4421622` is now moot — #20 drops the
+      verdict — but the `score: null` ambiguity it describes ("does not apply" vs "never
+      looked at") is the same class of false-clean read Checkpoint 7 is about.
+- [ ] **`15eb44e` — "Give every run its own asset directory".** Bears directly on the
+      stable-name / prune-to-latest rule in SPEC §10.
+- [ ] **`700d709`, `62a8589` — renderer defects** (italics printed as literal stars; dead
+      deep links). Small, and in a file #20 rewrote — re-find rather than cherry-pick.
+- [ ] **~42 fixtures.** The `health-*` ones die with the scorecard; the rest
+      (`dup-heading`, `missing-appendix`, `walkthrough-bad-path`, `rollup-skip-no-reason`)
+      are contract coverage #20 does not have.
+
+**PR #18 is stacked on #16's branch, not on main**, so it still targets a base that will
+now never merge. Re-pointing it is a separate call and was not made here.
