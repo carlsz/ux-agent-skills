@@ -58,6 +58,15 @@ and `check_discovery_dirs()` fails if one comes back. **Put documentation in `do
 the components it describes.** (`skills/` is exempt by construction: discovery there is
 `skills/<name>/SKILL.md`, a directory, not a glob.)
 
+> **The directory re-scans every published version, and some of its findings are false
+> positives.** This suite's subject *is* credentials, login walls and shell invocations, and a
+> prose-level scanner cannot tell a document that writes about a hazard from code that uses one —
+> v0.6.0 was flagged for a credential read that does not exist (it was reading `auth-handoff.md`'s
+> **rejection** table) and for a download-and-run command inside a README screenshot. Expect both
+> to recur. Answer with the `grep` that settles it; do not launder the prose until a scanner likes
+> it, which would cost the reader the rejection tables that make the design reviewable. The
+> reasoning behind each decline is in `c4b5fce`.
+
 ## Frontmatter by layer
 
 Every component is YAML frontmatter + a Markdown body. The fields are few and the `description` does
@@ -265,14 +274,6 @@ Load the working copy without installing:
 ```
 claude --plugin-dir .
 ```
-
-## The published-directory review
-
-The plugin is listed in the Claude directory, which re-scans every published version. Its findings
-and the decisions taken on them — including the three standing **false positives** a prose-level
-scanner keeps re-raising against a suite whose whole subject is credentials and audits — are
-recorded in [`docs/plugin-review.md`](docs/plugin-review.md). Read it before "fixing" a finding
-that was already declined on the record.
 
 ## Boundaries
 
