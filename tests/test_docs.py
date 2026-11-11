@@ -42,7 +42,6 @@ DOC_FILES = [
     "skills/spec-cuj/references/cuj-contract.md",
     "commands/ux-audit.md",
     "docs/agents.md", "docs/skills.md", "docs/commands.md",
-    "docs/plugin-review.md",
     "evals/README.md",
 ]
 

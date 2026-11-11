@@ -23,11 +23,6 @@ All notable changes to this project are documented here. The format is based on
 ### Added
 - **A plugin icon.** `icon.svg` at the plugin root (inline SVG, no external references),
   referenced as `"icon": "./icon.svg"` from `.claude-plugin/plugin.json`.
-- **`docs/plugin-review.md`** — the directory review's findings and the decision taken on each,
-  including the three declined as false positives (a credential read that does not exist, a
-  download-and-run command inside a README screenshot, and the repo-authoring `CLAUDE.md`) with
-  the evidence that settles them. A scanner reading prose cannot distinguish a suite that writes
-  about credentials and shell commands from one that uses them, and these will recur.
 
 ## [0.6.0] - 2026-08-24
 
