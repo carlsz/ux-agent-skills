@@ -53,6 +53,7 @@ def check_readme() -> list[str]:
         "usability-audit": "the command / skill name",
         ".ux/audits": "where reports are written",
         "report contract": "the shared suite contract",
+        "priority": "the scored rating scale (P0-P3), primary since 0.7.0",
         "static": "static mode",
         "live": "live mode",
         "hybrid": "hybrid mode",

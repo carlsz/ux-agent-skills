@@ -1,15 +1,15 @@
 ---
 name: ux-review
-description: Render your existing .ux/audits reports into self-contained HTML — findings as cards, screenshots as an interactive walk-through flipbook, the roll-up as a go/no-go dashboard, plus an index landing page. Invokes the render-report skill.
+description: Render your existing .ux/audits reports into self-contained HTML — findings as cards, screenshots as an interactive walk-through flipbook, the roll-up as a priority dashboard, plus an index landing page. Invokes the render-report skill.
 argument-hint: "[target] [--index]"
 ---
 
 # /ux-review
 
 Turn the audit reports already sitting in your `.ux/audits/` into **self-contained HTML** you
-can open in a browser or share — no server, no build. Findings render as severity-badged cards,
+can open in a browser or share — no server, no build. Findings render as priority-badged cards,
 the captured screenshots become an interactive **walk-through flipbook**, the roll-up becomes a
-**go/no-go dashboard**, and an `index.html` ties every run together. Thin entry point — the
+**priority dashboard**, and an `index.html` ties every run together. Thin entry point — the
 [`render-report`](../skills/render-report/SKILL.md) skill does the work.
 
 The audit commands already emit this HTML when they run; reach for `/ux-review` to (re)render

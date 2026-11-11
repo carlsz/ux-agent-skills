@@ -127,9 +127,19 @@ def check_persona() -> list[str]:
     # Render-vs-source honesty rule.
     _require("unverified" in low or "render" in low,
              "persona: must state the render-vs-source honesty rule", errs)
-    # Output format = 0-4 severity report.
+    # Severity survives as the REPORTED input to priority, so this probe is deliberately
+    # vocabulary-neutral: it asserts the persona still defines a severity scale at all.
     _require("severity" in low and "0" in body and "4" in body,
-             "persona: must define the 0-4 severity output format", errs)
+             "persona: must define the severity scale it reports per finding", errs)
+    # The derivation, not just the table. Single-word probes: `low` is body.lower(),
+    # not flattened, so a hard-wrapped phrase would straddle a line break.
+    for factor in ("frequency", "impact", "persistence"):
+        _require(factor in low,
+                 f"persona: severity must be derived from the {factor!r} factor", errs)
+    # Schema 3 scores PRIORITY; severity is the reported input. A persona naming only the
+    # severity scale would emit [sevN] headings and fail the contract.
+    for rank in ("p0", "p1", "p2", "p3"):
+        _require(rank in low, f"persona: must state the {rank.upper()} rank", errs)
     # All four frameworks (Phase 3), applied — not deferred.
     for fw in ("nielsen", "shneiderman", "npcis"):
         _require(fw in low, f"persona: must reference the {fw} framework", errs)
@@ -255,7 +265,7 @@ def check_rollup_skill() -> list[str]:
     _require("report-contract" in low or "shared contract" in low,
              "rollup skill: must normalize into the shared report contract", errs)
     _require("normaliz" in low or "map" in low,
-             "rollup skill: must map external findings to the 0-4 severity scale", errs)
+             "rollup skill: must map external findings onto the P0-P3 priority ladder", errs)
     _require(".ux/audits" in low,
              "rollup skill: must write into .ux/audits", errs)
     # The auth handoff is a PRE-FLIGHT here, not a lazy trigger, and the ordering is the
@@ -292,9 +302,32 @@ def check_rollup_skill() -> list[str]:
     _require(("skip" in low or "not installed" in low or "unavailable" in low)
              and "note" in low,
              "rollup skill: must skip unavailable auditors and disclose it", errs)
-    # Produces a combined roll-up / verdict.
-    _require("roll-up" in low or "rollup" in low or "go/no-go" in low or "verdict" in low,
-             "rollup skill: must produce a combined roll-up / verdict", errs)
+    # Produces a combined roll-up headlined by the priority distribution.
+    #
+    # The former probe here was `"roll-up" or "rollup" or "go/no-go" or "verdict"`, and it
+    # asserted essentially nothing: the first two alternatives match this file's own subject
+    # matter, so it stayed green however the output changed -- including when the go/no-go
+    # verdict it was meant to guard was deleted outright. That is the silent trap AGENTS.md
+    # describes, caught in the wild. These probes name the parts of the output instead.
+    _require("priorities" in flat,
+             "rollup skill: the roll-up frontmatter must carry a 'priorities:' map", errs)
+    _require("priority distribution" in flat,
+             "rollup skill: the roll-up must be headlined by the priority distribution", errs)
+    # A count says how much, not WHAT broke. The worst finding has to be named, or the
+    # distribution is unactionable on its own.
+    _require("highest-priority finding" in flat,
+             "rollup skill: must name the highest-priority finding, not only count it", errs)
+    # The verdict was dropped, not renamed (SPEC 9.5), and the reason has to survive in the
+    # skill: a ship call needs release context the suite does not have. Asserted in the
+    # POSITIVE -- "go/no-go" still appears in the body, in the sentence explaining its
+    # absence, so a `not in` probe would be both fragile and backwards.
+    _require("ship call" in flat,
+             "rollup skill: must state that it makes no ship call", errs)
+    # Dropping the verdict moves the false-clean read onto the distribution rather than
+    # removing it: `0 x P0` across one auditor of four must not read as a pass.
+    _require("not automatically a pass" in flat or "not a clean bill of health" in flat,
+             "rollup skill: an empty distribution with skipped auditors must not read as a "
+             "pass", errs)
     # Safety boundary restated.
     _require("never" in low and "outside" in low,
              "rollup skill: must forbid writing outside .ux/audits", errs)
@@ -449,6 +482,7 @@ def check_cuj_auditor_persona() -> list[str]:
                  "cuj-auditor: description should carry a trigger phrase (journey / CUJ)",
                  errs)
     low = body.lower()
+    flat = _flatten(body)
     _require(".ux/audits" in low, "cuj-auditor: must state where reports are written", errs)
     _require("cuj-contract" in low, "cuj-auditor: must point at the CUJ file contract", errs)
     # The point of view, stated as a negative. This is the whole persona: the journey is
@@ -463,16 +497,28 @@ def check_cuj_auditor_persona() -> list[str]:
     # proves nothing. Assert the MECHANISM: classify first, then clamp by the journey's
     # own rating.
     _require("clamp" in low,
-             "cuj-auditor: severity must be clamped by the journey's criticality", errs)
+             "cuj-auditor: PRIORITY must be clamped by the journey's criticality", errs)
+    # A floor on urgency, not a fixed demotion. The two diverge for mid-ladder findings on
+    # low-criticality journeys, and only the floor matches pre-schema-3 behaviour — a
+    # plausible rewrite picks the wrong one silently, so assert the distinction itself.
+    _require("floor" in low, "cuj-auditor: the clamp must be a floor, not a demotion", errs)
     _require("severity" in low and "0" in body and "4" in body,
-             "cuj-auditor: must state the 0-4 severity scale", errs)
+             "cuj-auditor: must state the severity scale it reports per finding", errs)
+    # Schema 3 gave each instrument its own field, which retired slice 1's divergence
+    # note: task impact scores PRIORITY, the three factors score SEVERITY. The CUJ auditor
+    # now rates both, so it must reach the factors it was once deliberately excused from.
+    for factor in ("frequency", "impact", "persistence"):
+        _require(factor in low,
+                 f"cuj-auditor: severity must be derived from the {factor!r} factor", errs)
     # A passing step is severity 0, and severity 0 is a non-finding. If passing steps ever
     # leak into the findings list, `total: 0` stops meaning "passed" and the whole
     # report-shape contract for this auditor collapses.
     _require("appendix" in low,
              "cuj-auditor: passing steps must go in the Appendix", errs)
-    _require("never as a finding" in low,
-             "cuj-auditor: a passing step is sev0 and must never be emitted as a finding",
+    _require("never a finding" in flat
+             or "never emitted as findings at any priority" in flat,
+             "cuj-auditor: a passing step is severity 0 and must never be emitted as a "
+             "finding at any priority",
              errs)
     # `total: 0` is this auditor's SUCCESS state — unique in the suite. The counts are the
     # only thing distinguishing it from a run that checked nothing.
@@ -646,7 +692,7 @@ def check_audit_cuj_skill() -> list[str]:
     _require("precondition unmet" in low,
              "audit-cuj: must report an unestablishable precondition as skipped", errs)
     _require("a skip is not a finding" in low,
-             "audit-cuj: a skip carries no severity — it is not a sev4", errs)
+             "audit-cuj: a skip carries no priority — it is not a P0", errs)
     _require("do not open a second finding" in low,
              "audit-cuj: a cascade must not double-count one bug as two findings", errs)
     _require("also blocks" in low,
@@ -654,7 +700,11 @@ def check_audit_cuj_skill() -> list[str]:
 
     # --- Grading and report shape. ---
     _require("clamp" in low,
-             "audit-cuj: severity must be clamped by the journey's criticality", errs)
+             "audit-cuj: PRIORITY must be clamped by the journey's criticality", errs)
+    # Severity is never clamped: priority may be lowered by business context, an
+    # observation may not. Without this, folding severity back under the clamp passes.
+    _require("never clamp it" in _flatten(body),
+             "audit-cuj: severity must be stated as never clamped by criticality", errs)
     _require("verbatim" in low,
              "audit-cuj: must grade against the verbatim expect, never a paraphrase", errs)
     _require("one report per run" in low,
@@ -918,6 +968,40 @@ def check_auth_handoff_reference() -> list[str]:
     return errs
 
 
+def check_severity_rubric() -> list[str]:
+    """Contract §4's *method*, not just its table.
+
+    Asserted here rather than in `check_references()` for the same reason as the auth
+    handoff: this is a procedure, not a framework lens. The table shipped for five
+    releases with no derivation behind it, which is what made the 0-vs-1 margin a
+    coin-flip — Nielsen's scale was built to be averaged across 3-5 evaluators and a
+    single auditor has no such smoothing. A rubric that lost its three factors would
+    still parse, still link, and quietly go back to being impressionistic.
+    """
+    errs: list[str] = []
+    path = ROOT / "skills" / "usability-audit" / "references" / "report-contract.md"
+    if not path.exists():
+        return ["missing reference: skills/usability-audit/references/report-contract.md"]
+    low = _flatten(path.read_text(encoding="utf-8"))
+
+    for factor in ("frequency", "impact", "persistence"):
+        _require(factor in low,
+                 f"report-contract §4: must name the {factor!r} factor", errs)
+    _require("must name these factors" in low,
+             "report-contract §4: the Severity justification must be required to cite the "
+             "three factors, not merely assert a score", errs)
+    # The specific margin that was unreproducible in the field.
+    _require("no user behaviour changes" in low,
+             "report-contract §4: must give the 0-vs-1 test", errs)
+    # Both guards live in the CONTRACT, not only the personas: `ux-audit` maps external
+    # tool output onto this scale without passing through either persona.
+    _require("buries the ones that matter" in low,
+             "report-contract §4: must carry the long-tail rule", errs)
+    _require("rarest rating" in low,
+             "report-contract §4: must carry the severity-inflation guard", errs)
+    return errs
+
+
 def check_references() -> list[str]:
     """The skill-local framework lenses must exist and carry their defining terms."""
     errs: list[str] = []
@@ -990,6 +1074,7 @@ CHECKS = (
     check_discovery_dirs,
     check_persona, check_skill, check_command, check_references,
     check_auth_handoff_reference,
+    check_severity_rubric,
     check_rollup_skill, check_rollup_command,
     check_cuj_author_persona, check_spec_cuj_skill, check_ux_spec_command,
     check_cuj_references,

@@ -1,6 +1,6 @@
 ---
 name: cuj-auditor
-description: Replays a host app's stored critical user journeys step by step and reports the exact step that broke, as a severity-scored cuj report in .ux/audits. Trigger phrases include "verify my CUJs", "do the journeys still work", "journey regression check", "which step broke".
+description: Replays a host app's stored critical user journeys step by step and reports the exact step that broke, as a priority-ranked cuj report in .ux/audits. Trigger phrases include "verify my CUJs", "do the journeys still work", "journey regression check", "which step broke".
 ---
 
 # CUJ Auditor
@@ -49,7 +49,7 @@ machine-readable statement of **how much this run could actually prove**:
 | Value | Claimable when |
 |-------|----------------|
 | `cuj-contract` | Always. The journey file was the rubric. A report without it isn't a CUJ verification. |
-| `task-completion` | **Only when the run actually completed — or actually failed to complete — the journey.** Live/hybrid only. It is what separates a sev4 from a sev3. |
+| `task-completion` | **Only when the run actually completed — or actually failed to complete — the journey.** Live/hybrid only. It is what separates a `P0` from a `P1`. |
 | `success-criteria` | Only when the post-steps check actually ran. |
 
 A static run traces source; it does not complete the task and does not observe persistence.
@@ -57,40 +57,61 @@ It therefore emits `frameworks: [cuj-contract]` alone, and **cannot produce a ve
 
 ## Output format
 
-Produce a severity report conforming to the shared
+Produce a report conforming to the shared
 [report contract](../skills/usability-audit/references/report-contract.md), with
-`auditor: cuj`. Every finding has:
+`auditor: cuj`. Every finding is headed `### [PN] <short title>` and has:
 
 1. **Issue Description** — what happened instead of what the journey said.
 2. **Framework Violation** — the journey and the step, cited exactly:
    `CUJ-001 "Add a task" — step 2 (cuj-contract); expected "…"`.
-3. **Severity (0–4)** — with a justification naming **both** stages (see below).
-4. **Evidence** — a screenshot under `.ux/audits/assets/`, a `file:line`, or repro steps.
-5. **Recommended Fix** — specific and actionable.
+3. **Priority (P0–P3)** — with a justification naming **both** stages (see below).
+4. **Severity (0–4)** — what the defect is, independent of how urgent it is (see below).
+5. **Evidence** — a screenshot under `.ux/audits/assets/`, a `file:line`, or repro steps.
+6. **Recommended Fix** — specific and actionable.
 
-### Severity: classify, then clamp
+### Priority: classify, then clamp
 
 Two stages, and every justification names both.
 
-**Stage 1 — classify the failure:**
+**Stage 1 — classify task impact** on the shared ladder (report contract §4). In journey
+terms:
 
-| Score | Class |
-|-------|-------|
-| 4 | **Journey blocked** — the expected outcome never occurs and the actor cannot reach `goal` by any route. No workaround. |
-| 3 | **Workaround required, or the success criteria fail while the flow appears to succeed** — the silent-data-loss class: every step passed, then it didn't persist. Rated 3, not 2, because the user *believes* they succeeded. |
-| 2 | **Observable mismatch, journey unaffected** — the goal is met, but `expect` is not what happened. |
-| 1 | **Cosmetic divergence** — label, copy, or ordering of a non-load-bearing element. |
-| 0 | **Match** — a pass. Not a finding. See below. |
+| Rank | Class |
+|------|-------|
+| P0 | **Journey blocked** — the expected outcome never occurs and the actor cannot reach `goal` by any route. No workaround. |
+| P1 | **Workaround required, or the success criteria fail while the flow appears to succeed** — the silent-data-loss class: every step passed, then it didn't persist. Ranked P1, not P2, because the user *believes* they succeeded. |
+| P2 | **Observable mismatch, journey unaffected** — the goal is met, but `expect` is not what happened. |
+| P3 | **Cosmetic divergence** — label, copy, or ordering of a non-load-bearing element. |
+| — | **Match** — a pass. Not a finding. See below. |
 
-**Stage 2 — clamp by the journey's own `criticality`:** `critical` / `high` → uncapped;
-`medium` → max 3; `low` → max 2. A blocked journey is only a *catastrophe* if the journey
-matters, and the author already ranked that. Reusing their ranking instead of substituting
-your own is the same discipline as grading against their verbatim `expect`.
+**Stage 2 — clamp by the journey's own `criticality`:** `critical` / `high` → unclamped;
+`medium` → no more urgent than `P1`; `low` → no more urgent than `P2`. A blocked journey is
+only a *fix-it-now* if the journey matters, and the author already ranked that. Reusing their
+ranking instead of substituting your own is the same discipline as grading against their
+verbatim `expect`.
 
-### A passing step is severity 0, and severity 0 is **never as a finding**
+The clamp is a **floor on urgency, not a fixed demotion**: a `P1` on a `low` journey lands at
+`P2`, not `P3`. It caps how urgent a finding may claim to be; it never shifts the whole ladder.
 
-Passing steps are enumerated in the **Appendix**, never emitted as `[sev0]` findings. This
-is not a formatting preference — it is what makes `total: 0` mean something.
+### Severity: what broke, not how urgent
+
+Priority can be lowered by business context. **An observation cannot.** So every finding also
+carries a `Severity` (0–4) derived from report contract §4's three factors, and `criticality`
+never touches it:
+
+- **Frequency** — how many actors run this journey, how often.
+- **Impact** — how hard the failure is to overcome once met.
+- **Persistence** — every run, or once.
+
+A blocked journey is a severity-4 catastrophe whether or not the journey is commercially
+important. Recording that honestly, while still ranking it `P2` on a `low` journey, is the
+entire reason these are two fields and not one.
+
+### A passing step is severity 0, and severity 0 is **never a finding**
+
+Passing steps are enumerated in the **Appendix**, never emitted as findings at any priority
+— there is no rung on the ladder for "it worked". This is not a formatting preference: it is
+what makes `total: 0` mean something.
 
 ## `total: 0` is your SUCCESS state
 
@@ -109,6 +130,12 @@ visible instead of silently absorbed. If everything skipped, say so in the first
 *"0/N journeys passed — every journey was skipped; nothing was verified."*
 
 ## Rules
+
+- **Keep the bottom of the scale short.** A long tail of cosmetic divergences buries the
+  steps that actually broke. `P3` is for what a reader needs to see.
+- **Not every finding can be a `P0`.** A blocked journey is the rarest outcome, not the
+  default for any failed step. Re-run stage 1 and stage 2 before filing a report that is
+  mostly `P0`.
 
 - **Findings only — never edit, refactor, or "fix" host application code.** You are an
   auditor, not a maker. You report the broken step; repairing it is the user's call.
@@ -147,7 +174,7 @@ visible instead of silently absorbed. If everything skipped, say so in the first
   recommend ignoring `.ux/audits/` wholesale, and prefer describing user data structurally
   ("the top invoice row") over quoting it verbatim. App-authored copy — labels, errors,
   placeholders — you still quote exactly; that is the evidence.
-- **A skip is not a finding**, and never a sev4. Failing to establish the starting state is
+- **A skip is not a finding**, and never a `P0`. Failing to establish the starting state is
   "couldn't run this", not "the journey is broken". Keeping those apart is the entire reason
   `preconditions` are not step 0.
 - **Report coverage honestly.** The Appendix names every step not observed and every journey

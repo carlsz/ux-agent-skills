@@ -1,6 +1,6 @@
 ---
 name: ux-audit
-description: Suite roll-up — fan out to the default UX auditors (usability, accessibility, cuj) against one target, with web performance available opt-in, normalize all findings into the shared .ux/audits contract, and produce one combined go/no-go roll-up. Use for "full UX audit", "audit everything", "ux-audit".
+description: Suite roll-up — fan out to the default UX auditors (usability, accessibility, cuj) against one target, with web performance available opt-in, normalize all findings into the shared .ux/audits contract, and produce one combined roll-up ranked by priority (P0-P3), with no ship call. Use for "full UX audit", "audit everything", "ux-audit", "go/no-go UX verdict".
 ---
 
 # UX Audit — suite roll-up
@@ -83,8 +83,8 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
    | No attended browser surface | Same as declined, with cause `handoff unavailable — no attended browser surface`. **Not** a decline; nobody was asked. |
 
    **Disclose it in the roll-up.** Carry the outcome into the roll-up summary as an
-   `Access:` line, so a go/no-go verdict is never read as covering the whole product when it
-   covered only the public half. Record the **rung, never the account**.
+   `Access:` line, so the priority distribution is never read as covering the whole product
+   when it covered only the public half. Record the **rung, never the account**.
 
    **A note on the wrapped auditors.** `web-quality-skills:accessibility` and
    `:performance` inherit the session but do not know this suite's capture rules, so their
@@ -107,14 +107,19 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 
 4. **Normalize into the shared contract.** For each wrapped auditor, write a
    contract-conforming report at `.ux/audits/<auditor>-<YYYYMMDD>-<HHMMSS>.md` — same
-   frontmatter schema, body layout, and appendix. **Map each tool's severity onto the
-   0–4 scale**:
-   - **Accessibility (WCAG):** blocker on a core flow / Level A name-role-value failure →
-     3–4; Level AA (e.g. 1.4.3 contrast) → 3; minor/AAA or edge → 2; cosmetic → 1.
-   - **Web performance:** a Core Web Vital in the "poor" band (measured) → 3; "needs
-     improvement" → 2; a structural anti-pattern with only *potential* impact → 1–2,
+   frontmatter schema, body layout, and appendix. **Map each tool's output onto the
+   `P0`–`P3` ladder** — these tools never produced a severity in the first place; they
+   produce conformance failures and measured bands, which are statements about task impact:
+   - **Accessibility (WCAG):** a blocker on a core flow, or a Level A name-role-value
+     failure that leaves no route through → `P0`; other Level A, and Level AA (e.g. 1.4.3
+     contrast) → `P1`; minor/AAA or edge → `P2`; cosmetic → `P3`.
+   - **Web performance:** a Core Web Vital in the "poor" band (measured) → `P1`; "needs
+     improvement" → `P2`; a structural anti-pattern with only *potential* impact → `P2`–`P3`,
      labeled potential per the metric-honesty rule.
-   - **Omit severity 0** (non-problems), same as usability.
+   - **Severity still has to be rated**, not copied from the priority: apply the contract's
+     three factors to what the tool found. A contrast failure on every page is persistent and
+     frequent even when a workaround exists.
+   - **Omit non-problems entirely** (severity 0), same as usability.
    Set `auditor` and `frameworks` per the table above; carry the tool's evidence
    (screenshots, `file:line`, measured metrics) into the Evidence field.
    The **native** auditors (usability, `cuj`) already emit contract reports — no external
@@ -127,14 +132,30 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 5. **Append the index.** Add one `.ux/audits/index.md` row per auditor run (append-only),
    exactly as a single-auditor run does.
 
-6. **Write the roll-up.** Create `.ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md`: a per-auditor
-   severity table, the auditors that ran vs. were skipped (with reasons — including a
-   CUJ run skipped for want of `.ux/cujs/`, and web performance skipped when not opted into,
-   with its opt-in reason), a merged top-issues list ordered by severity across all
-   auditors, and an overall **go/no-go verdict** (e.g. no-go if any sev4, or any auditor
-   reports a sev3 blocker — a CUJ sev4 is a blocked journey and forces no-go). A skipped CUJ
-   run, or a web-performance run not opted into, is disclosed, never scored as a pass. Link
-   to each individual report.
+6. **Write the roll-up.** Create `.ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md` with
+   frontmatter carrying `priorities:` (the `p0`-`p3` totals), `auditors_run:` and
+   `auditors_skipped:`, and a body holding:
+
+   - **The priority distribution** — per-auditor counts plus a total row, e.g.
+     `1 x P0 - 4 x P1 - 7 x P2 - 2 x P3`. This is the headline.
+   - **The highest-priority finding, named.** A count says how much; it does not say *what*
+     broke. Quote the worst finding with its auditor and link, so the reader sees the thing
+     itself and can disagree with its rank.
+   - **A merged issues list** ordered by priority across all auditors.
+   - **Coverage** — which auditors ran, which were skipped and why (a CUJ run skipped for
+     want of `.ux/cujs/`; web performance skipped when not opted into, with its opt-in
+     reason), and the `Access:` rung from step 2.
+
+   **No overall go/no-go verdict, and this is deliberate.** Whether a release ships needs
+   release context the suite does not have — deadlines, risk appetite, what the alternative
+   costs — and inventing one is exactly what Boundaries forbids. The roll-up answers *what
+   do I fix first*; the ship call stays with the human.
+
+   **An empty distribution is not automatically a pass.** A skipped CUJ run, a
+   web-performance run not opted into, or an uninstalled auditor is disclosed next to the
+   counts, never folded into a clean read: `0 x P0` across one auditor of four says almost
+   nothing about the product. The same discriminator the CUJ reports use (a verified pass is
+   not a run that verified nothing) applies to the suite as a whole. Link to each report.
 
 7. **Self-check.** Validate every report and the index with
    [`scripts/validate_report.py`](../../scripts/validate_report.py), and confirm the safety
@@ -146,8 +167,8 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
    only signal you get once `.ux/audits/` is gitignored and `git status` has gone quiet.
 
 8. **Render the HTML companions.** Generate a self-contained HTML view for every member
-   report, the roll-up dashboard (with its go/no-go verdict and per-auditor matrix linking to
-   each member's `.html`), and the index landing page:
+   report, the roll-up dashboard (with its priority distribution and per-auditor matrix
+   linking to each member's `.html`), and the index landing page:
 
    ```
    python3 scripts/render_report_html.py .ux/audits/*.md
@@ -170,7 +191,7 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 
 - Each selected, available auditor produced a contract-valid report under `.ux/audits/`,
   with one appended index row apiece.
-- A `rollup-<timestamp>.md` exists with the per-auditor table, skipped auditors (with
-  reasons), merged issues, and a go/no-go verdict.
+- A `rollup-<timestamp>.md` exists with the priority distribution, the highest-priority
+  finding named, skipped auditors (with reasons), merged issues, and no ship call.
 - Every report validates; `audit_safety.py` exits 0 on **both** halves: nothing changed
   outside `.ux/audits/`, **and** the reports this run wrote inside it were observed.

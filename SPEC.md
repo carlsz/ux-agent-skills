@@ -2,7 +2,7 @@
 
 > A usability-focused auditor for the **ux-agent-skills** plugin. It inspects a host
 > app (live or from source), evaluates it against four usability frameworks, and writes
-> a severity-scored report to `.ux/audits/` in the host repo. Findings only — it never
+> a priority-ranked report to `.ux/audits/` in the host repo. Findings only — it never
 > edits host application code.
 >
 > This is the **first of a suite** of auditors (accessibility, web performance, …). It
@@ -26,7 +26,7 @@ impossible to compare or track over time.
 
 ### Goal
 Deliver a **usability-auditor** that any host app can invoke on demand to produce a
-rigorous, framework-grounded, severity-scored usability report — and establish the
+rigorous, framework-grounded, priority-ranked usability report — and establish the
 **report contract** the rest of the auditor suite will inherit.
 
 ### Target users
@@ -44,7 +44,8 @@ rigorous, framework-grounded, severity-scored usability report — and establish
 
 ### Success criteria
 1. Running the command against a host app produces a valid report in `.ux/audits/`.
-2. Every finding cites a specific framework heuristic, carries a 0–4 severity, is backed
+2. Every finding cites a specific framework heuristic, carries a `P0`–`P3` priority and an
+   `S1`–`S4` severity, is backed
    by concrete evidence (screenshot path, `file:line`, or repro steps), and gives an
    actionable fix.
 3. No host application file outside `.ux/audits/` is created or modified.
@@ -143,7 +144,7 @@ frontmatter schema. Only `auditor` and `frameworks` differ between auditors.
 ```yaml
 ---
 auditor: usability          # usability | accessibility | web-performance | …
-schema: 2                    # report-contract version (2 added the Walkthrough section — §10)
+schema: 3                    # report-contract version (3 = priority-scored — §4; 2 stays valid forever)
 version: 0.1.0               # emitting auditor version
 date: 2026-07-15T14:30:00Z   # ISO-8601, from runtime clock
 target: https://localhost:3000/checkout   # URL or repo path
@@ -154,19 +155,22 @@ frameworks:                  # which knowledge bases were applied
   - shneiderman-8
   - ai-heuristics
   - npcis
-summary:                     # counts MUST equal the number of findings by severity
+summary:                     # counts MUST equal the number of findings by priority
   total: 12
-  sev4: 1                    # catastrophe
-  sev3: 4                    # major
-  sev2: 5                    # minor
-  sev1: 2                    # cosmetic
+  p0: 1                      # blocks the task, no workaround
+  p1: 4                      # fix before release
+  p2: 5                      # workaround exists
+  p3: 2                      # cosmetic
 ---
 ```
 
 **`index.md`** — appended (never rewritten) with one row per run:
 ```
-| Date (UTC) | Auditor | Scope | Sev4 | Sev3 | Sev2 | Sev1 | Report |
+| Date (UTC) | Auditor | Scope | P0 | P1 | P2 | P3 | Report |
 ```
+The index is append-only and shared, so a repo that already has a `Sev4 … Sev1` header keeps
+it and gains a second table below — a row is never translated between vocabularies
+([report contract](skills/usability-audit/references/report-contract.md) §7).
 
 ---
 
@@ -193,14 +197,41 @@ Because the deliverables are Markdown persona/skill/command files plus generated
 | AI Design Heuristics (PAIR / Amershi) | Non-deterministic / generative-AI UI: expectation-setting, explainability, correction pathways. |
 | NPCIS | Holistic: Navigation, Presentation, Content, Interaction, Strategy. |
 
-### Severity rubric (0–4, Nielsen's severity ratings)
-| Score | Meaning | In report? |
-|-------|---------|-----------|
-| 0 | Not a usability problem | No — omit |
-| 1 | Cosmetic only | Yes |
-| 2 | Minor usability problem | Yes |
-| 3 | Major (high priority) | Yes |
-| 4 | Catastrophe — fix before release | Yes, top of list |
+### Rating rubric — priority is scored, severity is its stated input
+Findings are **scored by priority** (`P0`–`P3`) — the one question a findings-only report has
+to answer is *what do I fix first*:
+
+| Priority | Criterion | When |
+|----------|-----------|------|
+| `P0` | Blocks the task — no workaround exists | Immediately |
+| `P1` | A costly or non-obvious workaround; a silent failure (the flow appears to succeed but doesn't); or a WCAG AA failure | Before release |
+| `P2` | An obvious workaround exists; task completion unaffected | Next improvement pass |
+| `P3` | No effect on task completion — cosmetic | After higher priorities |
+| — | Not a problem | **Omit entirely** — not counted, not listed |
+
+Each finding **also reports its NN/g severity**, which is never aggregated — it exists so a
+reader can check the priority call and overrule it:
+
+| Severity | Meaning |
+|----------|---------|
+| 0 | Not a usability problem — omitted, and never emitted as a finding at any priority |
+| `S1` | Cosmetic only |
+| `S2` | Minor usability problem |
+| `S3` | Major |
+| `S4` | Catastrophe |
+
+**Derived, not impressionistic.** A score comes from Nielsen's three factors — **frequency**
+(how many users meet it), **impact** (how hard to overcome once met), **persistence** (a
+one-time obstacle, or one that bites on every visit) — and each finding's justification names
+them. The scale was built to be *averaged across 3–5 independent evaluators*, and that
+averaging is what smooths its margins; a single auditor has none, so the factors carry that
+weight instead. The operative form — the 0-vs-1 test, and the two rules that keep the scale
+usable — is [`report-contract.md` §4](skills/usability-audit/references/report-contract.md).
+This section is the rationale; that one is what auditors follow.
+
+**One rubric, every auditor.** `audit-cuj` applies these same three factors to its `Severity`
+field; what differs is only the evidence each auditor has to rate them from. Priority is
+likewise one shared ladder (§9.4). Nothing in the suite scores two things on one scale.
 
 ### Report output rules
 - **Grounded** — every finding needs concrete evidence; no unverifiable claims.
@@ -288,7 +319,7 @@ and safety invariants:
 ### Always (no need to ask)
 - Read host source, markup, routes, and copy freely.
 - Create `.ux/` and `.ux/audits/` in the host repo root if absent, and write reports there.
-- Produce only severity-scored, evidence-backed, framework-cited findings.
+- Produce only priority-ranked, evidence-backed, framework-cited findings.
 - Record actual mode, scope, and coverage gaps in every report.
 
 ### Ask first
@@ -342,7 +373,8 @@ and safety invariants:
       outside `.ux/audits/`, and the run's own writes inside it were observed. A bare
       `git status` is not the check — an ignored `.ux/audits/` (§11.6) makes it
       trivially true.
-- [ ] Every finding: cites a framework, carries a 0–4 severity, has evidence, has a fix.
+- [ ] Every finding: cites a framework, carries a priority and a severity, has evidence,
+      has a fix.
 - [ ] README/CHANGELOG updated to reflect the auditor and the shared report contract.
 
 ---
@@ -530,23 +562,41 @@ Rules:
   in the **Appendix**, not in new frontmatter keys. The frontmatter stays at the shared nine. Adding
   auditor-specific keys to a *shared* contract is how comparability erodes.
 
-### Severity mapping (0–4)
+### Rating a journey failure: priority, then severity
 
-Two stages: classify the failure, then clamp by the journey's own `criticality`.
+Two stages for priority, then an independent severity. Every justification names all of it.
 
-| Score | Class |
-|-------|-------|
-| **4** | **Journey blocked** — the expected outcome never occurs and the actor cannot reach `goal` by any route. No workaround. |
-| **3** | **Workaround required, or success criteria fail while the flow appears to succeed** — includes the silent-data-loss class: every step passed, then the task didn't persist. Rated 3 rather than 2 because the user *believes* they succeeded. |
-| **2** | **Observable mismatch, journey unaffected** — the goal is met, but `expect` is not what happened. |
-| **1** | **Cosmetic divergence** — label, copy, or ordering of a non-load-bearing element differs. |
-| **0** | **Match — omit.** Passing steps are listed in the Appendix, never as findings. |
+**Stage 1 — classify task impact** on the shared `P0`–`P3` ladder
+([report contract §4](skills/usability-audit/references/report-contract.md)). What each rung
+means in journey terms:
 
-Then cap by `criticality`: `critical` / `high` → uncapped; `medium` → max 3; `low` → max 2. A blocked
-journey is only a *catastrophe* if the journey matters, and the author already ranked that — reusing
-their ranking is why `criticality` is mandatory. Each finding's justification names both stages.
+| Rank | Class |
+|------|-------|
+| **P0** | **Journey blocked** — the expected outcome never occurs and the actor cannot reach `goal` by any route. No workaround. |
+| **P1** | **Workaround required, or success criteria fail while the flow appears to succeed** — includes the silent-data-loss class: every step passed, then the task didn't persist. Ranked P1 rather than P2 because the user *believes* they succeeded. |
+| **P2** | **Observable mismatch, journey unaffected** — the goal is met, but `expect` is not what happened. |
+| **P3** | **Cosmetic divergence** — label, copy, or ordering of a non-load-bearing element differs. |
+| — | **Match — not a finding.** Passing steps are listed in the Appendix. |
 
-Severity 0 stays a non-finding, exactly as §4 requires. **A passing journey is `total: 0`** — unique
+**Stage 2 — clamp by the journey's own `criticality`.** `critical` / `high` → unclamped;
+`medium` → no more urgent than `P1`; `low` → no more urgent than `P2`. A blocked journey is
+only a *fix-it-now* if the journey matters, and the author already ranked that — reusing their
+ranking is why `criticality` is mandatory.
+
+> **A floor, not a demotion.** The clamp caps urgency; it does not shift every finding down a
+> fixed number of rungs. A `P1` on a `low` journey lands at `P2`, not `P3` — the same
+> behaviour the pre-schema-3 severity cap had (`medium` max 3, `low` max 2) under the
+> `sev4→P0 … sev1→P3` mapping. Demoting by a fixed count instead would quietly re-rank every
+> mid-ladder finding on the suite's least important journeys.
+
+**Severity is separate and unclamped.** Each finding also carries a `Severity` derived from
+§4's three factors — frequency (how many actors run this journey, how often), impact (how hard
+the failure is to overcome), persistence (every run, or once). It records *what was observed*
+and is never capped by `criticality`: a blocked journey is a catastrophe whether or not the
+journey is commercially important. That is the whole reason the two are separate fields —
+priority may be lowered by business context, an observation may not.
+
+A severity-0 observation stays a non-finding, exactly as §4 requires. **A passing journey is `total: 0`** — unique
 in the suite, where empty normally means "found nothing". The executive summary must therefore lead
 with the counts, because the schema has no way to distinguish a clean pass from a run that checked
 nothing:
@@ -577,7 +627,7 @@ standard *is* the host's own journey files. So this vocabulary names which lens 
 | Value | Meaning |
 |-------|---------|
 | `cuj-contract` | The journey file is the rubric. Always present; a report without it isn't a CUJ verification. |
-| `task-completion` | The goal-reachability lens — did the actor reach `goal`, with or without a workaround? Separates sev4 from sev3. **Only claimable when the run actually completed (or failed to complete) the journey — live/hybrid only.** |
+| `task-completion` | The goal-reachability lens — did the actor reach `goal`, with or without a workaround? Separates `P0` from `P1`. **Only claimable when the run actually completed (or failed to complete) the journey — live/hybrid only.** |
 | `success-criteria` | The post-steps check. Separable because a journey can pass every step and still fail its criteria. |
 
 This makes the list a machine-readable statement of *how much the run could prove*: a static run
@@ -634,8 +684,9 @@ scoped rule doesn't; the scope is the same line the persona already drew for sou
 ### Suite membership
 `audit-cuj` joins the `/ux-audit` fan-out as a fourth auditor. It is native but **conditional**: it
 needs a non-empty `.ux/cujs/`. Absent → skipped with the reason recorded ("no CUJs authored; run
-`/ux-spec`"), never a silent pass. The roll-up's go/no-go must not read a *skipped* CUJ run as a
-*passed* one.
+`/ux-spec`"), never a silent pass. The roll-up's priority distribution must not read a
+*skipped* CUJ run as a *passed* one — an empty distribution with auditors skipped is
+disclosed as partial coverage, not a clean bill of health.
 
 ## 9.6 Testing / validation strategy
 
@@ -651,12 +702,12 @@ Extends §5.2; the invariants there continue to hold unchanged.
 3. **No PII** — a CUJ carrying `author` / `authored` / `by` / `email` is **rejected**, so the rule in
    §9.7 is executable rather than merely documented. Deleting the field from the schema is not the
    guarantee; nothing stops someone adding it back by hand.
-4. **Report portability** — `auditor: cuj` fixtures (a sev3 report, and a `total: 0` clean pass)
+4. **Report portability** — `auditor: cuj` fixtures (a `P1` report, and a `total: 0` clean pass)
    validate against the §3.4 contract; a `cuj` report citing `nielsen-10` is rejected.
 5. **The audit invariant does not weaken (critical)** — after an audit run, `.ux/cujs/` and `SPEC.md`
    changes are **still violations**. The allowlist below is opt-in and applies to authoring only.
 6. **Detection, not narration** — the end-to-end test breaks a journey deliberately in a real app and
-   requires a sev4 naming the correct step. A tool that only ever passes is not a verifier.
+   requires a `P0` naming the correct step. A tool that only ever passes is not a verifier.
 
 ### The safety allowlist
 `scripts/audit_safety.py` grows a keyword-only `allow` parameter and two profiles:
@@ -717,7 +768,7 @@ reconciliation must be stated plainly rather than left implicit:
 - [ ] `/cuj-audit` emits a §3.4-valid report with `auditor: cuj`, each finding naming the CUJ id and
       broken step; a passing journey yields `total: 0` with steps listed in the Appendix.
 - [ ] Static mode labels findings `potential — unverified` and emits `frameworks: [cuj-contract]` only.
-- [ ] A deliberately broken journey produces a sev4 naming the correct step.
+- [ ] A deliberately broken journey produces a `P0` naming the correct step.
 - [ ] `audit_safety.py` still flags `.ux/cujs/` and `SPEC.md` under the default `audit` profile.
 - [ ] `audit-cuj` appears in the `/ux-audit` roll-up, and is skipped **with a reason** when no CUJs
       exist.
@@ -814,10 +865,10 @@ being brittle against the fixtures, which carry no real images.
 > command + skill.
 
 **What it produces.** For each `.ux/audits/*.md`, a self-contained `<stem>.html` beside it:
-a frontmatter header, a severity-cell summary, findings as severity-badged cards, and — for a
+a frontmatter header, a rating-cell summary, findings as priority-badged cards, and — for a
 report with a `## Walkthrough` — an **interactive flipbook** (prev/next, keyboard, dots),
-grouped per CUJ journey. A `rollup-*.md` renders as a **go/no-go dashboard** (verdict banner +
-per-auditor severity matrix, links repointed to the `.html` views); `index.md` renders as a
+grouped per CUJ journey. A `rollup-*.md` renders as a **priority dashboard**
+(distribution headline + per-auditor matrix, links repointed to the `.html` views); `index.md` renders as a
 stable `index.html` landing page. Special cases: a cuj `total: 0` renders a verified-pass (or
 "nothing verified") banner; dev-lab/static runs get a provenance banner; a report with no
 walkthrough surfaces its Evidence screenshots (embeds **and** bare `(./assets/…)` paths) as a

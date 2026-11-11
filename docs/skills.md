@@ -22,7 +22,7 @@ heuristics it applies) and `report-contract.md` (the shared `.ux/audits` contrac
   usability + accessibility (accessibility wrapping
   [web-quality-skills](https://github.com/addyosmani/web-quality-skills)) plus the conditional
   CUJ auditor, with web-performance (also wrapped) available opt-in via `--only`/`--all`, and
-  merges the results into one go/no-go verdict.
+  merges the results into one priority distribution.
 - [`spec-cuj/`](../skills/spec-cuj/SKILL.md) — author critical user journeys by interview →
   write each to `.ux/cujs/` → regenerate the host `SPEC.md` index. Holds the shared
   [`cuj-contract.md`](../skills/spec-cuj/references/cuj-contract.md).
@@ -30,6 +30,6 @@ heuristics it applies) and `report-contract.md` (the shared `.ux/audits` contrac
   app and report the exact step that broke (`auditor: cuj`).
 - [`render-report/`](../skills/render-report/SKILL.md) — render existing `.ux/audits` reports
   into self-contained, offline HTML (findings as cards, screenshots as a walk-through flipbook,
-  the roll-up as a go/no-go dashboard) via
+  the roll-up as a priority dashboard) via
   [`render_report_html.py`](../scripts/render_report_html.py). A derived view — the Markdown
   stays the source of truth.

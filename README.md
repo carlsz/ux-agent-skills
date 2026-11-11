@@ -20,7 +20,7 @@ Slash commands that map to the UX design and software development lifecycle. Eac
 makes it compose with [agent-skills](https://github.com/addyosmani/agent-skills): hand a report's
 `## Prioritized fixes` queue straight to `/spec`, `/plan`, or `/build`, since every finding already
 carries a `file:line` and a concrete Recommended Fix. Then re-run
-`/ux-agent-skills:usability-audit` to confirm the severity actually dropped — audit here, make
+`/ux-agent-skills:usability-audit` to confirm the priority actually dropped — audit here, make
 there, verify here.
 
 ## Installation
@@ -61,7 +61,7 @@ without it: `/ux-spec` falls back to its own question set and tells you it did (
 ## Usability Audits
 
 Senior UX auditor that runs an expert **heuristic evaluation** of a host app
-and writes a severity-scored report into that app's repo — findings only, it never edits
+and writes a priority-ranked report into that app's repo — findings only, it never edits
 your code.
 
 ```
@@ -78,7 +78,14 @@ your code.
 
 **Frameworks:** Nielsen's 10 Heuristics, Shneiderman's 8 Golden Rules, AI Design Heuristics
 (when the app has AI features), and NPCIS — findings de-duplicated and attributed to a
-primary framework. **Severity** is scored 0–4 (0 = not a problem, omitted; 4 = catastrophe).
+primary framework.
+
+**Rating.** Findings are scored **P0–P3 by priority** — what to fix first. P0 blocks the task
+with no workaround; P1 needs fixing before release (a costly workaround, a silent failure, or a
+WCAG AA failure); P2 has an obvious workaround; P3 is cosmetic. A non-problem is **omitted
+entirely**, not scored. Each finding also reports its **NN/g severity** (`S1`–`S4`) with the
+three factors Nielsen derives it from — frequency, impact, persistence — so you can check the
+call and overrule it. Priority is the queue; severity is the evidence behind its place in it.
 
 Reports land in the host repo under **`.ux/audits/`**:
 
@@ -153,9 +160,11 @@ companion to `agent-skills`. **Web performance** (also wrapped from `web-quality
 **opt-in** — its metrics are usually dev-mode / localhost lab numbers rather than production
 Core Web Vitals, so it runs only when you add `--only web-performance` or `--all`, and is
 otherwise disclosed as skipped. Every result is **normalized into the shared contract**
-(0–4 severity), so all reports land in one `.ux/audits/` directory, share one `index.md`,
-and are summarized in a `rollup-<timestamp>.md` with a per-auditor table and an overall
-**go/no-go verdict**. Auditors whose wrapping skill isn't installed are skipped and
+(the P0–P3 priority ladder), so all reports land in one `.ux/audits/` directory, share one
+`index.md`, and are summarized in a `rollup-<timestamp>.md` with a per-auditor table and a
+**priority distribution** — `1 × P0 · 4 × P1 · 7 × P2`. There is deliberately **no go/no-go
+verdict**: whether a release ships needs context the suite doesn't have, so the roll-up tells
+you what to fix first and leaves the call with you. Auditors whose wrapping skill isn't installed are skipped and
 disclosed — and the CUJ auditor is **conditional**, running only when you've authored
 journeys under `.ux/cujs/` and otherwise skipped with a reason. A skip is never silently
 treated as a pass. See the [roll-up skill](skills/ux-audit/SKILL.md).
@@ -165,7 +174,7 @@ treated as a pass. See the [roll-up skill](skills/ux-audit/SKILL.md).
 Every auditor in this suite — usability (native), plus accessibility and web-performance
 (wrapped, see the roll-up above) — emits the same
 [report contract](skills/usability-audit/references/report-contract.md) — one
-`.ux/audits/` directory, one frontmatter schema, one severity scale, one rolling index —
+`.ux/audits/` directory, one frontmatter schema, one priority scale, one rolling index —
 so their outputs are comparable and can be rolled up together. Only the `auditor` value and
 framework vocabulary differ. Reports self-validate via
 [`scripts/validate_report.py`](scripts/validate_report.py); the safety invariant (writes
@@ -208,12 +217,13 @@ Every audit is also a **self-contained HTML page** you can open in a browser or 
 teammate — no server, no build, no network. Alongside each `report.md`, the auditor writes a
 `report.html` (and refreshes `index.html`) with:
 
-- **Findings as severity-badged cards** and a per-severity summary.
+- **Findings as priority-badged cards** and a per-priority summary.
 - **An interactive walk-through flipbook** — the screenshots the auditor captured while
   driving your app, in order: every CUJ step, or a usability flow's key states (initial /
   mid-flow / success / error / empty). Click through or use the arrow keys.
-- **A go/no-go dashboard** for the roll-up, with a per-auditor severity matrix linking to each
-  report, and an `index.html` landing page tying every run together.
+- **A priority dashboard** for the roll-up, headlined by the distribution, with a per-auditor
+  priority matrix linking to each report, and an `index.html` landing page tying every run
+  together.
 
 The HTML is a **derived view** — the Markdown report stays the source of truth, so nothing you
 rely on changes. Images are inlined, so the page renders offline and on GitHub alike.
@@ -241,16 +251,22 @@ or invoke the command directly, pointing at a running dev server for a live pass
 > /ux-agent-skills:usability-audit http://localhost:3000 --scope "add / edit / complete / delete"
 ```
 
-The auditor drives the flow in a browser, then writes a severity-scored report to
+The auditor drives the flow in a browser, then writes a priority-ranked report to
 `Sprout/.ux/audits/usability-<timestamp>.md` — for example:
 
 ```markdown
-### [sev2] Edit save/cancel is invisible and blur commits silently
-- Framework Violation: Nielsen #6 — Recognition Rather than Recall (primary);
+### [P1] Edit save/cancel is invisible and blur commits silently
+- **Issue Description:** Entering edit mode shows only a text field — nothing indicates how
+  to commit or abandon the change, and clicking away commits it silently.
+- **Framework Violation:** Nielsen #6 — Recognition Rather than Recall (primary);
   corroborating Shneiderman #7 — Keep Users in Control.
-- Evidence: Verified live — entered edit mode; the row showed only the text field with
+- **Priority:** P1 — the edit appears to succeed either way, so the failure is silent, and
+  there is no undo to work around it. Journey criticality `high`, unadjusted.
+- **Severity:** S3 (major) — every user who edits a row meets it (frequency), a silent commit
+  cannot be reversed (impact), and it recurs on every edit (persistence).
+- **Evidence:** Verified live — entered edit mode; the row showed only the text field with
   no Save/Cancel control or hint. Source: components/todo/TodoItem.tsx:41-62.
-- Recommended Fix: add visible Save / Cancel controls or an "Enter to save · Esc to
+- **Recommended Fix:** add visible Save / Cancel controls or an "Enter to save · Esc to
   cancel" hint, and commit on blur only when the value changed.
 ```
 
@@ -263,14 +279,18 @@ to also include the opt-in web-performance auditor:
 ```
 
 That writes one normalized report per auditor plus a `rollup-<timestamp>.md` with a
-per-auditor severity table and a go/no-go verdict — all under `Sprout/.ux/audits/`, and
-nothing else in the repo is touched.
+per-auditor priority table and the suite-wide distribution — all under `Sprout/.ux/audits/`,
+and nothing else in the repo is touched.
 
-![A completed /ux-audit run of Sprout in Claude Code: the roll-up go/no-go verdict and per-auditor table on the left, and the self-contained HTML usability report — findings as cards, prioritized fixes — open in a browser on the right.](docs/images/audit-review.png)
+![A completed /ux-audit run of Sprout in Claude Code: the roll-up verdict banner and per-auditor table on the left, and the self-contained HTML usability report — findings as cards, prioritized fixes — open in a browser on the right.](docs/images/audit-review.png)
 
-*A full `/ux-audit` roll-up — the go/no-go verdict and per-auditor summary in the session,
-and the derived HTML report open in a browser. Everything under `.ux/audits/`; nothing else
-in the host repo is touched.*
+*A full `/ux-audit` roll-up in the session, and the derived HTML report open in a browser.
+Everything under `.ux/audits/`; nothing else in the host repo is touched.*
+
+> **This capture is from 0.6.1.** It shows the go/no-go verdict banner that 0.7.0 replaced
+> with the priority distribution, and `sev`-badged cards rather than `P`-badged ones.
+> Re-capturing it needs a live `/ux-audit` run against a host app; until then the surrounding
+> prose, not the screenshot, is authoritative.
 
 ## Contributing
 

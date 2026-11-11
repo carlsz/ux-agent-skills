@@ -1,12 +1,12 @@
 ---
 name: usability-audit
-description: Run an expert heuristic usability audit of a host app and write a severity-scored report to .ux/audits. Invokes the usability-auditor persona via the usability-audit skill.
+description: Run an expert heuristic usability audit of a host app and write a priority-ranked report to .ux/audits. Invokes the usability-auditor persona via the usability-audit skill.
 argument-hint: "[target] [--scope <area>] [--mode static|live|hybrid]"
 ---
 
 # /usability-audit
 
-Run a heuristic usability evaluation and write a durable, severity-scored report to
+Run a heuristic usability evaluation and write a durable, priority-ranked report to
 `.ux/audits/` in the host repo. Thin entry point — the
 [`usability-audit`](../skills/usability-audit/SKILL.md) skill does the work, driving the
 [`usability-auditor`](../agents/usability-auditor.md) persona.
