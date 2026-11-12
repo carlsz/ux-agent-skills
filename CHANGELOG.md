@@ -6,6 +6,55 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-12
+
+### Fixed
+- **The safety baseline no longer lives at one fixed path in `/tmp`.** `audit-cuj` step 1
+  said `--snapshot > /tmp/ux-baseline.json` and step 8 read that same name back: one
+  filename in a world-writable directory, shared by every run on the machine.
+
+  **It was a correctness bug in the check that enforces findings-only, not untidiness.**
+  Two audits at once — two repos, or one repo in two worktrees — overwrite each other's
+  baseline, and the footprint check then measures this repo against that one's tree. Both
+  directions reproduce. A user's own uncommitted work gets reported as the agent's
+  violation; and, far worse, when the other repo happened to have the same path dirty, an
+  agent writing to **host application code** was reported as `safe`. The check had no
+  symptom either way — it printed a confident verdict about the wrong tree.
+
+  `scripts/audit_safety.py` now derives the path itself from the host repo: `--snapshot`
+  saves it (and still prints the JSON, so `> file` plus `--baseline <path>` keeps working),
+  and `--baseline auto` recomputes the same path to read it back. Neither step names a
+  file, which is the point — a skill's steps are separate tool calls and shell state does
+  not survive between them, so `$(mktemp)` would have been a regression rather than a fix.
+  One file per repo, named by digest, in a per-user directory refused if it turns out to
+  be a symlink — `mkdir(exist_ok=True)` is satisfied by a symlink to a directory, so a
+  mode alone would be decoration. The directory is brought to `0o700` when it already
+  exists rather than only when created (`mkdir(mode=...)` applies the mode on creation
+  only, so one left by an earlier version, a permissive umask or a user's own `mkdir -p`
+  kept it), and the baseline file is written `0o600` instead of inheriting the umask. Both
+  matter because the baseline decides which dirty paths are forgiven: a baseline any local
+  user can replace is one that can be planted to make an agent's edit to a host source
+  file read as `safe`. `--baseline auto` with nothing saved exits 2 rather than quietly
+  running unbaselined, which would restore the false positive the baseline exists to
+  remove. There is also no `/tmp` on Windows.
+
+  Nothing ties a baseline to the run that took it, so two further cases are handled
+  explicitly. A **failed save deletes any leftover baseline** before warning: baselines
+  are never cleaned up, so one from an earlier run of this repo is normally already there,
+  and `auto` would otherwise read it and answer about the wrong point in time — the user's
+  own uncommitted work reported as the agent's violation, or a real escape forgiven.
+  Removing it makes the warning true, and `auto` exits 2. And **one audit at a time per
+  path** is now stated rather than assumed: a second run against the same path overwrites
+  the first's baseline and records its report as pre-existing dirt, so the first is told it
+  wrote nothing. Separate worktrees remain the supported way to audit one project twice at
+  once. Reading a baseline now prints which one and how old it is, so a stale read leaves a
+  trace in the audit transcript even where it is not fatal.
+
+  A new `check_no_hardcoded_temp_paths()` sweep keeps a fixed temp path out of every
+  persona, skill, command and reference. A component is a prompt, so "use a unique temp
+  path" would be improvised differently every run; the path has to be derived in the
+  script or it is not derived at all.
+
 ## [0.7.0] - 2026-11-11
 
 Reports are now ranked by **priority**, with NN/g severity retained per finding as the stated

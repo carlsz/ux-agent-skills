@@ -198,6 +198,30 @@ Three things to keep straight when you touch it:
   `snapshot()` sweeps the write prefixes with `writes_under()` so ignored prior reports are
   digested rather than mistaken for the current run's output.
 
+- **The baseline's path is derived, never named.** `--snapshot` saves it under a path
+  computed from the host repo, in a private per-user directory, and `--baseline auto`
+  recomputes the same path — so the two steps name no file. They cannot: a skill's steps
+  are separate tool calls and shell state does not survive between them, which is why the
+  superseded instruction hardcoded `/tmp/ux-baseline.json` and why `$(mktemp)` would have
+  been a regression. One shared filename meant two concurrent audits overwrote each
+  other's baseline, and the check then measured one repo against the other's tree — in the
+  reproduction, an agent editing host application code reported **`safe`**. The sweep in
+  `check_no_hardcoded_temp_paths()` keeps a fixed temp path out of every component, because
+  a component is a prompt: "pick a unique path" would be improvised differently each run.
+
+- **Nothing ties a baseline to the run that took it, and two things follow.** A failed
+  `--snapshot` save **deletes any leftover baseline** before warning — baselines are never
+  cleaned up, so one from an earlier run of the same repo is normally sitting there, and
+  `--baseline auto` would read it and answer about the wrong point in time (reproduced: the
+  user's own uncommitted `app.tsx` reported as the agent's violation). Removing it is what
+  makes the warning true — `auto` then exits 2 instead. And **one audit at a time per
+  path**: a second run against the same path overwrites the first's baseline and records
+  its report as pre-existing dirt, so the first is told it wrote nothing. `baseline_path()`
+  says so, cases 31-33 in `test_safety.py` pin it, and separate worktrees are the supported
+  way to run two at once. Reading a baseline prints its age so a stale read is visible in
+  the transcript; the age comes from the file's mtime on purpose, so the saved bytes stay
+  identical to what `--snapshot` printed and there is no second on-disk format.
+
 - **`_dirty_paths()` never gets `--ignored`, and the second pass is why it doesn't have to.**
   `changes_confined_to()` looks for ignored escapes through a pathspec-scoped sweep of
   `_ALL_PROFILE_PATHS` — the union of every profile's paths, so an ignored `.ux/cujs/`

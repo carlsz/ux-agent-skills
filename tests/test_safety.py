@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import subprocess
 import sys
 import tempfile
@@ -24,7 +25,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import audit_safety  # noqa: E402
 from audit_safety import (  # noqa: E402
-    EXTRA_BY_PROFILE, changes_confined_to, snapshot, writes_under,
+    EXTRA_BY_PROFILE, baseline_path, changes_confined_to, snapshot, writes_under,
 )
 
 # Bind to the PROFILES, not to the function's defaults. The profiles are what the CLI
@@ -395,13 +396,212 @@ def main() -> int:
                 failures.append(f"a C-quoted path must survive verbatim "
                                 f"(ignored={ignored}): {w}")
 
+    # ---- where the baseline lives (found by the /tmp shakedown) --------------------
+    # The skill used to say `--snapshot > /tmp/ux-baseline.json` and read that same fixed
+    # name back. One name in a world-writable directory, shared by every run on the
+    # machine. These assertions are about the PATH, not the snapshot's contents.
+    with tempfile.TemporaryDirectory() as sandbox:
+        real_tmp, tempfile.tempdir = tempfile.tempdir, sandbox
+        try:
+            a, b = Path(sandbox) / "repo-a", Path(sandbox) / "repo-b"
+            for repo in (a, b):
+                repo.mkdir()
+                _init_repo(repo)
+
+            # 26. Derived from the repo, so both ends compute it without being told —
+            #     the constraint that rules out $(mktemp): shell state does not survive
+            #     between a skill's steps, so step 8 must be able to re-derive it.
+            if baseline_path(a) != baseline_path(a):
+                failures.append("baseline_path is not stable for one repo, so step 8 "
+                                "cannot find what step 1 saved")
+            if baseline_path(a) == baseline_path(b):
+                failures.append("two repos share one baseline file - this is the bug: "
+                                "concurrent audits overwrite each other's")
+
+            # 27. Private directory, and not one somebody else planted. `mkdir(0o700,
+            #     exist_ok=True)` is satisfied by a symlink to a directory, so the mode
+            #     alone is decoration.
+            home = baseline_path(a).parent
+            if home.stat().st_mode & 0o077:
+                failures.append(f"the baseline directory is not private: "
+                                f"{oct(home.stat().st_mode)}")
+            decoy = Path(sandbox) / "decoy"
+            decoy.mkdir()
+            planted = Path(sandbox) / f"ux-audit-{audit_safety._whoami()}-planted"
+            planted.symlink_to(decoy, target_is_directory=True)
+            saved_whoami = audit_safety._whoami
+            audit_safety._whoami = lambda: f"{saved_whoami()}-planted"
+            try:
+                baseline_path(a)
+                failures.append("baseline_path wrote through a symlinked directory - the "
+                                "0o700 above is decoration without this check")
+            except RuntimeError:
+                pass
+            finally:
+                audit_safety._whoami = saved_whoami
+
+            # 27b. An ALREADY-EXISTING permissive directory must be tightened, not
+            #      accepted. `mkdir(mode=0o700, exist_ok=True)` applies the mode only on
+            #      creation, and the identity checks above cannot see this: a 0o777
+            #      directory is not a symlink, is a directory, and is ours. Such a
+            #      directory comes from an earlier version of this code, a permissive
+            #      umask, or a user's own `mkdir -p`. The check above could not catch it,
+            #      because it only ever saw a directory the test had just created.
+            #      It matters because the baseline decides which dirty paths are forgiven:
+            #      plant one holding a host file's digest and an agent's edit to that file
+            #      reads as `safe`.
+            audit_safety._whoami = lambda: f"{saved_whoami()}-permissive"
+            try:
+                preexisting = Path(sandbox) / f"ux-audit-{audit_safety._whoami()}"
+                preexisting.mkdir()
+                preexisting.chmod(0o777)
+                target = baseline_path(a)
+                if preexisting.stat().st_mode & 0o077:
+                    failures.append(
+                        f"an existing baseline directory kept its permissive mode "
+                        f"{oct(preexisting.stat().st_mode & 0o777)} - any local user can "
+                        f"replace the file that decides what gets forgiven")
+                with contextlib.redirect_stdout(io.StringIO()), \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    audit_safety.main([str(a), "--snapshot"])
+                # 27c. And the baseline FILE itself must not be world-readable: it
+                #      inherits the umask (0o644 in practice) without an explicit mode.
+                if target.exists() and target.stat().st_mode & 0o077:
+                    failures.append(
+                        f"the baseline file is readable or writable by other users "
+                        f"({oct(target.stat().st_mode & 0o777)})")
+            finally:
+                audit_safety._whoami = saved_whoami
+
+            # 28. `--snapshot` saves it AND still prints JSON, so an explicit
+            #     `> file` + `--baseline <path>` keeps working for anyone holding it.
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+                audit_safety.main([str(a), "--snapshot"])
+            if not baseline_path(a).exists():
+                failures.append("--snapshot did not save a baseline for the repo")
+            try:
+                json.loads(out.getvalue())
+            except ValueError:
+                failures.append("--snapshot no longer prints pure JSON on stdout, so "
+                                "redirecting it to a file has stopped working")
+
+            # 29. THE REGRESSION TEST. A dirty repo-a, audited while repo-b is also
+            #     snapshotting: a real escape into host code must still be caught. Under
+            #     one shared filename b's baseline answered for a, and an agent editing
+            #     the app reported `safe` — the findings-only invariant, silently off.
+            # repo-b's user has app.tsx dirty; repo-a's does not. Under one shared
+            # filename, b's snapshot records app.tsx as pre-existing and a's check then
+            # FORGIVES a's agent for editing it. The baseline must be a's own.
+            (b / "app.tsx").write_text("// b's user had this uncommitted\n")
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                audit_safety.main([str(b), "--snapshot"])      # the interfering run
+            (a / "app.tsx").write_text("// b's user had this uncommitted\n")  # a's agent
+            _write_report(a, "usability-20260101-000000.md")
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                code = audit_safety.main([str(a), "--baseline", "auto"])
+            if code == 0:
+                failures.append("a write to app.tsx was forgiven after another repo took "
+                                "a snapshot - the baselines are sharing a file again")
+
+            # 30. `auto` with nothing saved must fail loudly. Falling back to "no
+            #     baseline" would re-enable the strict check and blame the user's own
+            #     dirt on the agent - the false positive the baseline exists to remove.
+            fresh = Path(sandbox) / "repo-c"
+            fresh.mkdir()
+            _init_repo(fresh)
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                code = audit_safety.main([str(fresh), "--baseline", "auto"])
+            if code != 2:
+                failures.append(f"--baseline auto with nothing saved returned {code}, not "
+                                f"a usage error - it must never silently run unbaselined")
+        finally:
+            tempfile.tempdir = real_tmp
+
+            # 31. THE STALE-BASELINE REGRESSION (F1). A failed save must not leave the
+            #     PREVIOUS run's baseline answering for this one. Baselines are never
+            #     cleaned up, so on any machine that has audited this repo before, one is
+            #     already sitting there — `--baseline auto` finding *something* is the
+            #     normal case, not the exception. Case 30 covers nothing saved; this one
+            #     covers something STALE saved, which fails in the opposite direction:
+            #     exit 1, blaming a file the agent never touched.
+            stale_repo = Path(sandbox) / "repo-d"
+            stale_repo.mkdir()
+            _init_repo(stale_repo)
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                audit_safety.main([str(stale_repo), "--snapshot"])   # run 1: clean tree
+            # The USER edits the app themselves, between the two runs. No agent involved.
+            (stale_repo / "app.tsx").write_text("// the user's own uncommitted work\n")
+            # Run 2's step 1, with the save failing. chmod the FILE, not the directory:
+            # overwriting an existing file needs no write permission on its directory.
+            leftover = baseline_path(stale_repo)
+            leftover.chmod(0o400)
+            try:
+                with contextlib.redirect_stdout(io.StringIO()), \
+                        contextlib.redirect_stderr(io.StringIO()) as warned:
+                    code = audit_safety.main([str(stale_repo), "--snapshot"])
+                if code != 0:
+                    failures.append(f"a failed baseline save turned fatal (exit {code}) - "
+                                    f"it must stay non-fatal so the documented `> file` "
+                                    f"plus `--baseline <path>` escape hatch survives")
+                if "could not save" not in warned.getvalue():
+                    failures.append("a failed baseline save did not say so on stderr")
+            finally:
+                if leftover.exists():
+                    leftover.chmod(0o600)
+            _write_report(stale_repo, "usability-20260102-000000.md")
+            err = io.StringIO()
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+                code = audit_safety.main([str(stale_repo), "--baseline", "auto"])
+            if code == 1 and "app.tsx" in err.getvalue():
+                failures.append("a stale baseline from an earlier run survived a failed "
+                                "save and blamed the USER's own app.tsx on the agent - "
+                                "the cry-wolf false positive the baseline exists to remove")
+            elif code != 2:
+                failures.append(f"--baseline auto after a failed save returned {code}, not "
+                                f"a usage error - a failed save must leave no baseline for "
+                                f"it to read, so it fails loudly rather than answering "
+                                f"about the wrong point in time")
+
+            # 32. Reading a baseline says which one and how old, so a stale read is
+            #     visible in the audit transcript even where it is not fatal.
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                audit_safety.main([str(stale_repo), "--snapshot"])
+            err = io.StringIO()
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+                audit_safety.main([str(stale_repo), "--baseline", "auto"])
+            if "taken" not in err.getvalue() or "min ago" not in err.getvalue():
+                failures.append("reading a baseline does not report its age - a stale read "
+                                "then leaves no trace in the audit transcript")
+
+            # 33. The docstring must not go back to calling concurrent same-path runs
+            #     correct. They are not: a baseline is a point-in-time snapshot, so the
+            #     second run's snapshot records the first run's report as pre-existing
+            #     dirt, and the first run is then told it wrote nothing. A prose probe,
+            #     deliberately - the behaviour is a known limitation, and what regressed
+            #     before was the claim about it.
+            doc = (baseline_path.__doc__ or "")
+            if "not supported" not in doc:
+                failures.append("baseline_path's docstring no longer says concurrent runs "
+                                "against the same path are unsupported")
+            if "they are measuring the same tree" in doc:
+                failures.append("baseline_path's docstring again claims two concurrent "
+                                "runs of one repo may share a baseline because they "
+                                "measure the same tree - a baseline is a point-in-time "
+                                "snapshot, not a property of the tree")
+
     if failures:
         print("FAIL — safety:")
         for f in failures:
             print(f"  - {f}")
         return 1
     print("PASS — safety (invariant + idempotency + writes_under + CLI wiring "
-          "+ ignored escapes)")
+          "+ ignored escapes + baseline paths + staleness)")
     return 0
 
 
