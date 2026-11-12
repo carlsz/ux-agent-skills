@@ -6,6 +6,109 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-11
+
+Reports are now ranked by **priority**, with NN/g severity retained per finding as the stated
+input. One scored scale, not two: the reader of a findings-only report asks *what do I fix
+first*, so the report answers that with one number and shows the reasoning underneath.
+
+### Changed
+- **`P0`-`P3` priority replaces `sev0`-`sev4` as the scored scale.** Finding headings are
+  `### [PN] <title>`, `summary` carries `P0`-`P3`, and the index gains priority columns. P0
+  blocks the task with no workaround; P1 needs fixing before release (a costly or non-obvious
+  workaround, a silent failure, or a WCAG AA failure); P2 has an obvious workaround; P3 is
+  cosmetic. A non-problem is omitted entirely, as before.
+- **Severity survives as NN/g severity, reported per finding and never aggregated.** Each
+  finding carries an `S1`-`S4` severity whose justification must name Nielsen's three
+  derivation factors - frequency, impact, persistence. It is not a second badge, not an index
+  column, and not summed: it exists so a reader can check the priority call and overrule it.
+  Nielsen designed those ratings to be averaged across 3-5 evaluators, and a single auditor
+  has no such smoothing - stating the factors is what keeps the citation honest.
+- **Report contract schema 3.** `validate_report.py` dispatches on `schema`; **schema 2 keeps
+  validating forever**, because a report records the contract it was born under and is never
+  rewritten. Half-migrated reports are rejected in both directions - schema-2 summary keys
+  under a `[PN]` body, and the reverse.
+- **The roll-up's go/no-go verdict is gone, not renamed.** `rollup-*.md` now leads with the
+  priority distribution (`1 x P0 - 4 x P1 - 7 x P2`) plus the highest-priority finding named,
+  and states that it makes no ship call: that needs release context the suite does not have
+  and SPEC 6 forbids it from inventing. Forcing a binary onto a borderline judgement was what
+  made the old verdict misleading. Roll-up frontmatter replaces `verdict` with `priorities`
+  and `auditors_skipped`; it sits outside the report contract, so this cost no schema bump.
+- **An empty distribution is not automatically a pass.** With any auditor skipped, the
+  dashboard warns rather than passing - `0 x P0` across one auditor of four says almost
+  nothing about the product. Same discriminator the cuj reports already draw between a
+  verified pass and a run that verified nothing.
+- **A journey's `criticality` now floors priority instead of capping severity.** `medium` and
+  `low` journeys cannot reach the top of the ladder, which is correct for urgency; capping
+  *severity* had falsified an observation, recording a genuine catastrophe on a low-criticality
+  journey as a 2. Severity is rated independently and never clamped.
+- **The HTML companion renders both schemas.** P ranks ride the existing positional colour
+  ramp, so a `P0` card is the hottest colour a `sev4` card was and the stylesheet is unchanged
+  in substance; the banner classes `.nogo`/`.verdict`/`.go` became `.alert`/`.headline` (`.go`
+  duplicated `.pass`), since a class named `nogo` cannot outlive the call it named.
+
+### Added
+- **`tests/test_charset.py`.** Fails on any foreign-script letter or invisible/format
+  character in a tracked text file - homoglyphs, zero-width and non-breaking spaces, and the
+  bidirectional overrides of Trojan Source (CVE-2021-42574). The product here is prose, so a
+  stray character in `agents/*.md` ships as a defect; it globs `git ls-files` deliberately, and
+  its own firing is self-checked. It found three pre-existing zero-width spaces, now removed.
+- **Roll-up fixtures.** `_render_rollup()` had no test coverage at all, and it showed: with
+  `verdict` absent it emitted a red alarm banner with an empty `<b></b>`. Two fixtures now
+  cover the normal shape and the empty-with-skips hazard.
+
+### Fixed
+- **`check_rollup_skill()` asserted nothing about the verdict.** Its probe was
+  `"roll-up" or "rollup" or "go/no-go" or "verdict"`, and the first two alternatives match the
+  file's own subject matter - so it stayed green however the output changed, including when the
+  verdict it guarded was deleted outright. Replaced with probes on the distribution, the named
+  top finding, the no-ship-call statement, and the empty-is-not-a-pass rule.
+- **The `cuj-auditor` passing-step rule read "severity 0 is never as a finding"** - broken
+  grammar held in place by a test probe demanding that exact string. The prose is fixed and the
+  probe now matches the substantive rule instead of a heading fragment.
+- Component `description` fields still advertised "severity-scored" reports, and the
+  "Running the checks" block in AGENTS.md was missing `test_cuj_contract.py`.
+
+- **The HTML companion dropped every hard-wrapped bullet's continuation line.** The block
+  renderer took lists one line at a time and stopped at the first line that did not start
+  with a bullet - so a continuation fell *outside* the `<ul>` and rendered as a stray
+  paragraph beneath it, reading as a separate claim, and nested sub-lists were flattened up
+  to the parent's level. This repo hard-wraps prose at ~95 columns and the contract's own
+  Appendix example nests, so it was the default shape, not an edge case: a live run against
+  a host app had 45 of 61 bullets affected, breaking every Appendix and every roll-up
+  Coverage section. Lists are now parsed as blocks, with an indent tree.
+- **Three further gaps in the same renderer, all found by that run.** A link whose text
+  carries brackets went unparsed - which is *the* shape schema 3 produces, since findings
+  are headed `### [PN] <title>` and `## Prioritized fixes` is built from links to them, so
+  that section rendered as raw Markdown. A `###` heading inside a blockquote emitted its
+  hashes literally, which is what the roll-up skill's "quote the worst finding" instruction
+  produces. And `*emphasis*` was never implemented (only `**bold**`), so single asterisks
+  reached the page; the new rule declines to open a span on a lone asterisk, so `a * b * c`
+  and a glob stay put.
+- **The roll-up was unvalidated, and `rollup: true` was documented nowhere.** The key is
+  the renderer's only discriminator, and omitting it is **silent**: the file still renders,
+  as an ordinary report, minus the headline banner naming the highest-priority finding and
+  warning about skipped auditors. The whole signal was a 26-byte difference in the output.
+  No persona, skill, command or reference had ever named the key - it existed only in
+  fixtures and in `render_report_html.py` - so an agent following `ux-audit/SKILL.md` could
+  not have known to write it. The skill now specifies the full roll-up frontmatter, and
+  `validate_report.py --rollup` checks it: the key, the `priorities` totals, the ran and
+  skipped lists, the two required sections, and the absence of a reinstated `verdict`.
+- **Step 7 told the auditor to "validate every report", which the roll-up cannot pass.** A
+  roll-up carries no `auditor`, `mode`, `frameworks` or findings, so the bare validator
+  answers with ten confident errors about missing keys. That was by design - the roll-up
+  sits outside the report contract - but the instruction never said so, so the first thing
+  a reader does produces a page of false failures. Step 7 now names the three modes.
+- **The contract required `## Prioritized fixes` to link to each finding, and no fixture
+  did.** Fixtures teach, so the one that teaches schema 3 now carries the links, with
+  anchors that resolve to its own headings, and the contract spells out the line shape and
+  where the anchor comes from.
+
+### Known
+- **`docs/images/audit-review.png` is a 0.6.1 capture.** It still shows the go/no-go banner and
+  `sev`-badged cards. Re-capturing needs a live `/ux-audit` run against a host app; the README
+  marks it as such until then.
+
 ## [0.6.1] - 2026-11-10
 
 ### Fixed

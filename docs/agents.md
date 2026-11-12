@@ -18,7 +18,7 @@ that skill self-contained.
 ## Personas here
 
 - [`usability-auditor.md`](../agents/usability-auditor.md) — senior UX auditor; evaluates
-  against Nielsen / Shneiderman / AI-heuristics / NPCIS and emits a 0–4 severity report. Driven
+  against Nielsen / Shneiderman / AI-heuristics / NPCIS and emits a priority-ranked (P0–P3) report. Driven
   by the [`usability-audit`](../skills/usability-audit/SKILL.md) skill.
 - [`cuj-author.md`](../agents/cuj-author.md) — UX researcher who defines critical user journeys
   by interview, and **refuses vague ones** (no "the user", no unobservable outcomes, no

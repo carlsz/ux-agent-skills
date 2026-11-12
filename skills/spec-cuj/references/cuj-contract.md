@@ -69,7 +69,7 @@ schema: 1                    # cuj-contract version — must be 1
 title: Add a task to the list
 actor: "Returning user with 3-10 existing tasks, opens the app daily to capture new ones"
 goal: "Capture a new task from the list view without navigating away"   # outcome, not features
-criticality: critical        # critical | high | medium | low — drives severity capping (§6)
+criticality: critical        # critical | high | medium | low — clamps finding priority (§6)
 entry_point: "/"             # route, URL, or named screen where the journey starts
 preconditions:               # non-empty; what must already be TRUE (not what you do — §5)
   - "App loaded at / with at least one existing task"
@@ -90,8 +90,9 @@ success_criteria:            # evaluated AFTER the steps complete (§5)
   `actor_description` (one specific `actor` string does that work, §4), and **no provenance
   block at all** (§8).
 - `schema` must equal `1`.
-- `criticality` ∈ {`critical`, `high`, `medium`, `low`}. Not decoration — `audit-cuj` caps
-  finding severity by it (§6), so an unknown level has no defined cap.
+- `criticality` ∈ {`critical`, `high`, `medium`, `low`}. Not decoration — `audit-cuj` clamps
+  finding **priority** by it (§6), so an unknown level has no defined clamp. It never touches
+  severity: an observation is not lowered by how commercially important the journey is.
 - `preconditions`, `steps`, and `success_criteria` are non-empty lists.
 - Each step is a mapping with `n`, `action`, and `expect`, all non-empty. **`n` must be
   contiguous `1..N` in order** — findings cite `step <n>` by number, so the numbering has to

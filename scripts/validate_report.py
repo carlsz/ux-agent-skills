@@ -38,16 +38,44 @@ FRAMEWORKS_BY_AUDITOR = {
     # traced source without completing the task or observing persistence.
     "cuj": {"cuj-contract", "task-completion", "success-criteria"},
 }
-SEVERITY_KEYS = ["sev4", "sev3", "sev2", "sev1"]  # sev0 is intentionally absent
+KNOWN_SCHEMAS = (2, 3)
 
-# A finding is a level-3 heading tagged with its severity, e.g. "### [sev3] Foo".
-FINDING_RE = re.compile(r"^###\s+\[sev([0-4])\]", re.MULTILINE)
+# Rating vocabulary, per schema — §4 changed instrument at schema 3.
+#
+#   schema 2: the scored field is SEVERITY (sev4 worst). `sev0` is a non-finding and must
+#             never appear, as a summary key or as a heading.
+#   schema 3: the scored field is PRIORITY (P0 first in the queue, P3 last). Severity is
+#             still assessed and still reported per finding, but is no longer aggregated,
+#             so schema 3 has no forbidden rank: "not a problem" is simply never filed.
+#
+# Schema 2 is a PERMANENT path, not a deprecation. A report records the contract it was
+# born under and is never rewritten (contract §"Schema history"), so a 2 written in 2026
+# must still validate in 2036.
+RATING = {
+    2: {
+        "keys": ["sev4", "sev3", "sev2", "sev1"],
+        "tag": "sev",
+        "pattern": re.compile(r"^###\s+\[sev(\d+)\]", re.MULTILINE),
+        "ranks": {"1", "2", "3", "4"},
+        "omitted": "0",
+        "fields": ["Issue Description", "Framework Violation", "Severity",
+                   "Evidence", "Recommended Fix"],
+    },
+    3: {
+        "keys": ["P0", "P1", "P2", "P3"],
+        "tag": "P",
+        "pattern": re.compile(r"^###\s+\[P(\d+)\]", re.MULTILINE),
+        "ranks": {"0", "1", "2", "3"},
+        "omitted": None,
+        "fields": ["Issue Description", "Framework Violation", "Priority", "Severity",
+                   "Evidence", "Recommended Fix"],
+    },
+}
+
 # The optional `## Walkthrough` section (§5) and the markdown images inside it.
 WALKTHROUGH_RE = re.compile(r"^##\s+Walkthrough\s*$", re.MULTILINE | re.IGNORECASE)
 IMAGE_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
-# The five labelled fields every finding block must contain.
-FINDING_FIELDS = ["Issue Description", "Framework Violation", "Severity",
-                  "Evidence", "Recommended Fix"]
+# Finding fields are per-schema — see RATING[...]["fields"].
 
 
 def _split_frontmatter(text: str) -> tuple[dict, str] | tuple[None, str]:
@@ -73,8 +101,11 @@ def _check_frontmatter(fm: dict) -> list[str]:
         if key not in fm:
             errors.append(f"frontmatter missing required key: {key!r}")
 
-    if fm.get("schema") != 2:
-        errors.append("frontmatter 'schema' must equal 2")
+    schema = fm.get("schema")
+    if type(schema) is not int or schema not in KNOWN_SCHEMAS:
+        errors.append(
+            f"frontmatter 'schema' must be one of {list(KNOWN_SCHEMAS)} "
+            f"(an integer), got {schema!r}")
 
     mode = fm.get("mode")
     if mode not in KNOWN_MODES:
@@ -115,56 +146,104 @@ def _check_frontmatter(fm: dict) -> list[str]:
 
 
 def _check_summary(fm: dict, body: str) -> list[str]:
+    """Counts must reconcile against the body, in the vocabulary of this report's schema."""
     errors: list[str] = []
     summary = fm.get("summary")
     if not isinstance(summary, dict):
         errors.append("frontmatter 'summary' must be a mapping")
         return errors
 
-    if "sev0" in summary:
-        errors.append("summary must not contain 'sev0' (severity 0 findings are omitted)")
+    spec = RATING.get(fm.get("schema"))
+    if spec is None:
+        return errors  # unknown schema: already reported by _check_frontmatter
 
-    for key in ["total"] + SEVERITY_KEYS:
+    schema, keys = fm["schema"], spec["keys"]
+    other_schema = 3 if schema == 2 else 2
+    other = RATING[other_schema]
+
+    # A half-migrated report: this schema's shape carrying the other's vocabulary. Caught
+    # explicitly because the count checks below would otherwise report it as a pile of
+    # missing keys, which reads like a malformed report rather than a mismatched one.
+    foreign = sorted(k for k in other["keys"] if k in summary)
+    if foreign:
+        errors.append(
+            f"summary uses schema-{other_schema} keys {foreign} in a schema-{schema} report")
+
+    if spec["omitted"] is not None:
+        forbidden = f"{spec['tag']}{spec['omitted']}"
+        if forbidden in summary:
+            errors.append(
+                f"summary must not contain {forbidden!r} "
+                f"(rank {spec['omitted']} findings are omitted)")
+
+    for key in ["total"] + keys:
         if key not in summary:
-            errors.append(f"summary missing required key: {key!r}")
+            # Name casing as the cause when that is what it is. The keys are `P0`-`P3`
+            # while the ROLL-UP's own `priorities:` map used to be lowercase, so `p0:` is
+            # the natural slip -- and a bare "missing required key" sent the author looking
+            # for an absent key rather than a miscased one.
+            wrong_case = next((k for k in summary if str(k).lower() == key.lower()
+                               and str(k) != key), None)
+            if wrong_case is not None:
+                errors.append(
+                    f"summary has {wrong_case!r} but the key is {key!r} "
+                    f"(summary keys are case-sensitive)")
+            else:
+                errors.append(f"summary missing required key: {key!r}")
         elif not isinstance(summary[key], int) or summary[key] < 0:
             errors.append(f"summary {key!r} must be a non-negative integer")
 
-    # Counts must reconcile: total == sum of per-severity counts.
-    if all(isinstance(summary.get(k), int) for k in ["total"] + SEVERITY_KEYS):
-        by_sev = sum(summary[k] for k in SEVERITY_KEYS)
-        if summary["total"] != by_sev:
+    if all(isinstance(summary.get(k), int) for k in ["total"] + keys):
+        by_rank = sum(summary[k] for k in keys)
+        if summary["total"] != by_rank:
             errors.append(
-                f"summary 'total' ({summary['total']}) != sum of sev1-4 ({by_sev})")
+                f"summary 'total' ({summary['total']}) != sum of "
+                f"{keys[0]}-{keys[-1]} ({by_rank})")
 
-        # Findings in the body must match the declared counts.
-        found = FINDING_RE.findall(body)
-        if any(sev == "0" for sev in found):
-            errors.append("body contains a [sev0] finding; severity 0 must be omitted")
-        graded = [s for s in found if s != "0"]
+        found = spec["pattern"].findall(body)
+        if spec["omitted"] is not None and spec["omitted"] in found:
+            errors.append(
+                f"body contains a [{spec['tag']}{spec['omitted']}] finding; "
+                f"rank {spec['omitted']} must be omitted")
+        stray = sorted({r for r in found
+                        if r not in spec["ranks"] and r != spec["omitted"]})
+        if stray:
+            errors.append(
+                f"body has finding heading(s) outside the "
+                f"{spec['tag']}{min(spec['ranks'])}-{spec['tag']}{max(spec['ranks'])} "
+                f"range: {stray}")
+
+        graded = [r for r in found if r in spec["ranks"]]
         if len(graded) != summary["total"]:
             errors.append(
                 f"summary 'total' ({summary['total']}) != findings in body ({len(graded)})")
-        for sev_key in SEVERITY_KEYS:
-            n = sum(1 for s in graded if s == sev_key[-1])
-            if n != summary[sev_key]:
+        for key in keys:
+            n = sum(1 for r in graded if r == key[-1])
+            if n != summary[key]:
                 errors.append(
-                    f"summary {sev_key!r} ({summary[sev_key]}) != [sev{sev_key[-1]}] "
-                    f"findings in body ({n})")
+                    f"summary {key!r} ({summary[key]}) != [{key}] findings in body ({n})")
+
+    # The other half of the migration check: right summary, wrong headings.
+    if other["pattern"].search(body):
+        errors.append(
+            f"body uses [{other['tag']}N] finding headings in a schema-{schema} report")
 
     return errors
 
 
-def _check_finding_fields(body: str) -> list[str]:
-    """Each finding block must carry the five labelled fields."""
+def _check_finding_fields(body: str, schema: int | None) -> list[str]:
+    """Each finding block must carry the labelled fields its schema requires."""
+    spec = RATING.get(schema)
+    if spec is None:
+        return []
     errors: list[str] = []
-    matches = list(FINDING_RE.finditer(body))
+    matches = list(spec["pattern"].finditer(body))
     for i, m in enumerate(matches):
         start = m.start()
         end = matches[i + 1].start() if i + 1 < len(matches) else len(body)
         block = body[start:end]
         heading = body[start:body.index("\n", start) if "\n" in body[start:] else end]
-        missing = [f for f in FINDING_FIELDS if f not in block]
+        missing = [f for f in spec["fields"] if f not in block]
         if missing:
             errors.append(f"finding {heading.strip()!r} missing fields: {missing}")
     return errors
@@ -226,14 +305,22 @@ def validate(path: str | Path) -> list[str]:
 
     errors = _check_frontmatter(fm)
     errors += _check_summary(fm, body)
-    errors += _check_finding_fields(body)
+    errors += _check_finding_fields(body, fm.get("schema"))
     errors += _check_coverage(body)
     errors += _check_walkthrough(body)
     return errors
 
 
-INDEX_COLUMNS = ["Date (UTC)", "Auditor", "Scope", "Sev4", "Sev3", "Sev2", "Sev1",
-                 "Report"]
+# The index is append-only and SHARED across runs and schemas, so its columns cannot
+# simply change at schema 3 — rewriting prior rows is forbidden. Both shapes are therefore
+# valid, and a file may carry a legacy table with a new-shaped one appended below it. An
+# index keeps the shape it was created with; the first schema-3 run in a host that already
+# has one starts a second table rather than migrating the first.
+INDEX_COLUMNS_BY_SHAPE = {
+    "severity": ["Date (UTC)", "Auditor", "Scope", "Sev4", "Sev3", "Sev2", "Sev1",
+                 "Report"],
+    "priority": ["Date (UTC)", "Auditor", "Scope", "P0", "P1", "P2", "P3", "Report"],
+}
 
 
 def _table_cells(line: str) -> list[str]:
@@ -244,68 +331,150 @@ def _table_cells(line: str) -> list[str]:
 def validate_index(path: str | Path) -> list[str]:
     """Return contract violations for a `.ux/audits/index.md` ([] = valid).
 
-    The index is append-only: this checks structure (header row + column count +
-    integer severity cells), not history, since prior rows must never be rewritten.
+    The index is append-only: this checks structure (a recognised header row + column
+    count + integer count cells), not history, since prior rows must never be rewritten.
+    A file may hold more than one table — a legacy severity-shaped one and a
+    priority-shaped one below it — so each header governs the rows beneath it until the
+    next header. Lines that are not table rows are skipped, which is what lets a heading
+    sit between the two tables.
     """
     path = Path(path)
     if not path.exists():
         return [f"index not found: {path}"]
     lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
-    header_idx = next((i for i, ln in enumerate(lines)
-                       if "Date (UTC)" in ln and "Report" in ln), None)
-    if header_idx is None:
-        return [f"index missing the table header row (columns: {INDEX_COLUMNS})"]
-
-    header = _table_cells(lines[header_idx])
-    if header != INDEX_COLUMNS:
-        return [f"index header has wrong columns: expected {INDEX_COLUMNS}, got {header}"]
+    header_idxs = [i for i, ln in enumerate(lines)
+                   if ln.lstrip().startswith("|")
+                   and "Date (UTC)" in ln and "Report" in ln]
+    if not header_idxs:
+        return ["index missing the table header row (columns: "
+                f"{INDEX_COLUMNS_BY_SHAPE['priority']})"]
 
     errors: list[str] = []
-    # Data rows follow the header separator (|---|---|). Skip the separator line.
-    for ln in lines[header_idx + 1:]:
-        cells = _table_cells(ln)
-        if set("".join(cells)) <= set("-: "):  # separator row
-            continue
-        if len(cells) != len(INDEX_COLUMNS):
+    for n, h in enumerate(header_idxs):
+        header = _table_cells(lines[h])
+        cols = next((c for c in INDEX_COLUMNS_BY_SHAPE.values() if header == c), None)
+        if cols is None:
             errors.append(
-                f"index row has {len(cells)} columns, expected {len(INDEX_COLUMNS)}: {ln!r}")
+                "index header has wrong columns: expected one of "
+                f"{list(INDEX_COLUMNS_BY_SHAPE.values())}, got {header}")
             continue
-        for sev_cell in cells[3:7]:  # Sev4..Sev1
-            if not sev_cell.isdigit():
-                errors.append(f"index severity cell not an integer: {sev_cell!r} in {ln!r}")
+        stop = header_idxs[n + 1] if n + 1 < len(header_idxs) else len(lines)
+        for ln in lines[h + 1:stop]:
+            if not ln.lstrip().startswith("|"):
+                continue  # prose between tables, e.g. a heading
+            cells = _table_cells(ln)
+            if set("".join(cells)) <= set("-: "):  # separator row
+                continue
+            if len(cells) != len(cols):
+                errors.append(
+                    f"index row has {len(cells)} columns, expected {len(cols)}: {ln!r}")
+                continue
+            for cell in cells[3:7]:  # the four count columns, whichever shape
+                if not cell.isdigit():
+                    errors.append(f"index count cell not an integer: {cell!r} in {ln!r}")
     return errors
+
+
+# The roll-up is NOT a report: it carries no `auditor`, no `mode`, no `frameworks` and no
+# findings, so `validate()` rejects it with a page of irrelevant errors. That is by design -
+# the roll-up sits outside the report contract, which is why replacing its `verdict` with
+# `priorities` cost no schema bump. But "outside the contract" had been read as "unchecked",
+# and it has its own silent failure mode: `render_report_html.py` branches on the `rollup`
+# key, so a roll-up written without it still renders, just minus the headline banner that
+# names the worst finding and the skipped auditors. Nothing was louder than a 26-byte
+# difference in the output. This is the check that makes it loud.
+ROLLUP_PRIORITY_KEYS = ("P0", "P1", "P2", "P3")
+
+
+def validate_rollup(path: str | Path) -> list[str]:
+    """Return violations for a `.ux/audits/rollup-*.md` ([] = valid)."""
+    path = Path(path)
+    if not path.exists():
+        return [f"rollup not found: {path}"]
+
+    fm, body = _split_frontmatter(path.read_text(encoding="utf-8"))
+    if fm is None:
+        return [body]
+
+    errors: list[str] = []
+    if not fm.get("rollup"):
+        errors.append(
+            "frontmatter missing 'rollup: true' - the HTML companion branches on this key, "
+            "so without it the roll-up renders as an ordinary report and silently loses "
+            "its headline banner")
+    for key in ("date", "target", "scope"):
+        if not str(fm.get(key, "")).strip():
+            errors.append(f"frontmatter missing required key: {key!r}")
+
+    ran = fm.get("auditors_run")
+    if not isinstance(ran, list) or not ran:
+        errors.append("frontmatter 'auditors_run' must be a non-empty list")
+    if "auditors_skipped" in fm and not isinstance(fm["auditors_skipped"], list):
+        errors.append("frontmatter 'auditors_skipped' must be a list when present")
+
+    priorities = fm.get("priorities")
+    if not isinstance(priorities, dict):
+        errors.append("frontmatter 'priorities' must be a mapping of P0-P3 to counts")
+    else:
+        for key in ROLLUP_PRIORITY_KEYS:
+            if key not in priorities:
+                errors.append(f"priorities missing required key: {key!r}")
+                continue
+            value = priorities[key]
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                errors.append(f"priorities[{key!r}] must be a non-negative integer, "
+                              f"got {value!r}")
+        for key in priorities:
+            if str(key).lower() in {"sev0", "sev1", "sev2", "sev3", "sev4"}:
+                errors.append(f"priorities has severity key {key!r}: a roll-up counts "
+                              "priority, and a sevN count is not a PN count")
+
+    # The ship call is gone, not renamed. A roll-up that reintroduces one is asserting
+    # release context the suite does not have (SPEC 6).
+    for key in ("verdict", "verdict_reason"):
+        if key in fm:
+            errors.append(f"frontmatter carries {key!r}: the roll-up makes no ship call")
+
+    low = body.lower()
+    if "## priority distribution" not in low:
+        errors.append("rollup missing the '## Priority distribution' section")
+    if "## coverage" not in low:
+        errors.append("rollup missing the '## Coverage' section (skipped auditors, "
+                      "with reasons)")
+    return errors
+
+
+def _run(label: str, paths: list[str], checker) -> int:
+    ok = True
+    for arg in paths:
+        errors = checker(arg)
+        if errors:
+            ok = False
+            print(f"INVALID {label}: {arg}".replace("INVALID report:", "INVALID:"),
+                  file=sys.stderr)
+            for e in errors:
+                print(f"  - {e}", file=sys.stderr)
+        else:
+            print(f"valid {label}: {arg}".replace("valid report:", "valid:"))
+    return 0 if ok else 1
 
 
 def main(argv: list[str]) -> int:
     if argv and argv[0] == "--index":
-        rest = argv[1:] or ["index.md"]
-        ok = True
-        for arg in rest:
-            errors = validate_index(arg)
-            if errors:
-                ok = False
-                print(f"INVALID index: {arg}", file=sys.stderr)
-                for e in errors:
-                    print(f"  - {e}", file=sys.stderr)
-            else:
-                print(f"valid index: {arg}")
-        return 0 if ok else 1
+        return _run("index", argv[1:] or ["index.md"], validate_index)
+    if argv and argv[0] == "--rollup":
+        rest = argv[1:]
+        if not rest:
+            print("usage: validate_report.py --rollup <rollup-*.md> [...]", file=sys.stderr)
+            return 2
+        return _run("rollup", rest, validate_rollup)
     if not argv:
-        print("usage: validate_report.py <report.md> [...]  |  --index <index.md>",
+        print("usage: validate_report.py <report.md> [...]"
+              "  |  --rollup <rollup-*.md>  |  --index <index.md>",
               file=sys.stderr)
         return 2
-    ok = True
-    for arg in argv:
-        errors = validate(arg)
-        if errors:
-            ok = False
-            print(f"INVALID: {arg}", file=sys.stderr)
-            for e in errors:
-                print(f"  - {e}", file=sys.stderr)
-        else:
-            print(f"valid: {arg}")
-    return 0 if ok else 1
+    return _run("report", argv, validate)
 
 
 if __name__ == "__main__":

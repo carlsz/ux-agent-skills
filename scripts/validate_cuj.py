@@ -36,8 +36,9 @@ import yaml
 REQUIRED_KEYS = ["id", "schema", "title", "actor", "goal", "criticality", "entry_point",
                  "preconditions", "steps", "success_criteria"]
 
-# Criticality is not decoration: `audit-cuj` clamps finding severity by it, so a level
-# outside this set has no defined cap.
+# Criticality is not decoration: `audit-cuj` clamps finding PRIORITY by it, so a level
+# outside this set has no defined clamp. It never clamps severity — priority may be lowered
+# by business context, an observation may not.
 CRITICALITY = ["critical", "high", "medium", "low"]
 
 # CUJ files record no author, and no provenance block at all — git history answers when,
