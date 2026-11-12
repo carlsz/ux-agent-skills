@@ -289,6 +289,18 @@ def check_rollup_skill() -> list[str]:
              "rollup skill: must map external findings onto the P0-P3 priority ladder", errs)
     _require(".ux/audits" in low,
              "rollup skill: must write into .ux/audits", errs)
+    # The roll-up's frontmatter discriminator, and the check that makes its absence loud.
+    # `render_report_html.py` branches on the `rollup` key alone; a roll-up written without
+    # it still renders, as an ordinary report, minus the headline banner naming the worst
+    # finding and the skipped auditors. Nothing failed - the output was 26 bytes smaller.
+    # A component is a prompt, so a key no component names is a key the auditor cannot
+    # know about: this skill is the only place a roll-up is authored.
+    _require("rollup: true" in low,
+             "rollup skill: must specify the 'rollup: true' frontmatter key - the HTML "
+             "companion branches on it and its absence is silent", errs)
+    _require("--rollup" in low,
+             "rollup skill: must self-check the roll-up with validate_report.py --rollup; "
+             "the bare form treats it as a report and reports a page of false errors", errs)
     # The auth handoff is a PRE-FLIGHT here, not a lazy trigger, and the ordering is the
     # whole point: every auditor shares one browser session, so a handoff inside the
     # fan-out interrupts the user minutes in and can ask once per auditor. Assert both

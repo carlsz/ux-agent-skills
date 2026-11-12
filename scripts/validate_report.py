@@ -376,35 +376,105 @@ def validate_index(path: str | Path) -> list[str]:
     return errors
 
 
-def main(argv: list[str]) -> int:
-    if argv and argv[0] == "--index":
-        rest = argv[1:] or ["index.md"]
-        ok = True
-        for arg in rest:
-            errors = validate_index(arg)
-            if errors:
-                ok = False
-                print(f"INVALID index: {arg}", file=sys.stderr)
-                for e in errors:
-                    print(f"  - {e}", file=sys.stderr)
-            else:
-                print(f"valid index: {arg}")
-        return 0 if ok else 1
-    if not argv:
-        print("usage: validate_report.py <report.md> [...]  |  --index <index.md>",
-              file=sys.stderr)
-        return 2
+# The roll-up is NOT a report: it carries no `auditor`, no `mode`, no `frameworks` and no
+# findings, so `validate()` rejects it with a page of irrelevant errors. That is by design -
+# the roll-up sits outside the report contract, which is why replacing its `verdict` with
+# `priorities` cost no schema bump. But "outside the contract" had been read as "unchecked",
+# and it has its own silent failure mode: `render_report_html.py` branches on the `rollup`
+# key, so a roll-up written without it still renders, just minus the headline banner that
+# names the worst finding and the skipped auditors. Nothing was louder than a 26-byte
+# difference in the output. This is the check that makes it loud.
+ROLLUP_PRIORITY_KEYS = ("P0", "P1", "P2", "P3")
+
+
+def validate_rollup(path: str | Path) -> list[str]:
+    """Return violations for a `.ux/audits/rollup-*.md` ([] = valid)."""
+    path = Path(path)
+    if not path.exists():
+        return [f"rollup not found: {path}"]
+
+    fm, body = _split_frontmatter(path.read_text(encoding="utf-8"))
+    if fm is None:
+        return [body]
+
+    errors: list[str] = []
+    if not fm.get("rollup"):
+        errors.append(
+            "frontmatter missing 'rollup: true' - the HTML companion branches on this key, "
+            "so without it the roll-up renders as an ordinary report and silently loses "
+            "its headline banner")
+    for key in ("date", "target", "scope"):
+        if not str(fm.get(key, "")).strip():
+            errors.append(f"frontmatter missing required key: {key!r}")
+
+    ran = fm.get("auditors_run")
+    if not isinstance(ran, list) or not ran:
+        errors.append("frontmatter 'auditors_run' must be a non-empty list")
+    if "auditors_skipped" in fm and not isinstance(fm["auditors_skipped"], list):
+        errors.append("frontmatter 'auditors_skipped' must be a list when present")
+
+    priorities = fm.get("priorities")
+    if not isinstance(priorities, dict):
+        errors.append("frontmatter 'priorities' must be a mapping of P0-P3 to counts")
+    else:
+        for key in ROLLUP_PRIORITY_KEYS:
+            if key not in priorities:
+                errors.append(f"priorities missing required key: {key!r}")
+                continue
+            value = priorities[key]
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                errors.append(f"priorities[{key!r}] must be a non-negative integer, "
+                              f"got {value!r}")
+        for key in priorities:
+            if str(key).lower() in {"sev0", "sev1", "sev2", "sev3", "sev4"}:
+                errors.append(f"priorities has severity key {key!r}: a roll-up counts "
+                              "priority, and a sevN count is not a PN count")
+
+    # The ship call is gone, not renamed. A roll-up that reintroduces one is asserting
+    # release context the suite does not have (SPEC 6).
+    for key in ("verdict", "verdict_reason"):
+        if key in fm:
+            errors.append(f"frontmatter carries {key!r}: the roll-up makes no ship call")
+
+    low = body.lower()
+    if "## priority distribution" not in low:
+        errors.append("rollup missing the '## Priority distribution' section")
+    if "## coverage" not in low:
+        errors.append("rollup missing the '## Coverage' section (skipped auditors, "
+                      "with reasons)")
+    return errors
+
+
+def _run(label: str, paths: list[str], checker) -> int:
     ok = True
-    for arg in argv:
-        errors = validate(arg)
+    for arg in paths:
+        errors = checker(arg)
         if errors:
             ok = False
-            print(f"INVALID: {arg}", file=sys.stderr)
+            print(f"INVALID {label}: {arg}".replace("INVALID report:", "INVALID:"),
+                  file=sys.stderr)
             for e in errors:
                 print(f"  - {e}", file=sys.stderr)
         else:
-            print(f"valid: {arg}")
+            print(f"valid {label}: {arg}".replace("valid report:", "valid:"))
     return 0 if ok else 1
+
+
+def main(argv: list[str]) -> int:
+    if argv and argv[0] == "--index":
+        return _run("index", argv[1:] or ["index.md"], validate_index)
+    if argv and argv[0] == "--rollup":
+        rest = argv[1:]
+        if not rest:
+            print("usage: validate_report.py --rollup <rollup-*.md> [...]", file=sys.stderr)
+            return 2
+        return _run("rollup", rest, validate_rollup)
+    if not argv:
+        print("usage: validate_report.py <report.md> [...]"
+              "  |  --rollup <rollup-*.md>  |  --index <index.md>",
+              file=sys.stderr)
+        return 2
+    return _run("report", argv, validate)
 
 
 if __name__ == "__main__":

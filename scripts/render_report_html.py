@@ -80,9 +80,17 @@ def _view(fm: dict, body: str = "") -> dict:
 # --- inline markdown ---------------------------------------------------------------------
 
 IMG_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
-LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+# Link text may itself contain one level of brackets. Schema 3 heads every finding
+# `### [PN] <title>`, so the natural link to one reads `[[P1] Title](#anchor)` - and a
+# flat `[^\]]+` text class cannot match it. The result was raw Markdown rendered in the
+# one section that exists to carry those links (`## Prioritized fixes`).
+LINK_RE = re.compile(r"\[((?:[^\[\]]|\[[^\[\]]*\])+)\]\(([^)]+)\)")
 CODE_RE = re.compile(r"`([^`]+)`")
 BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+# Applied AFTER bold, so `**x**` is already consumed and cannot be read as emphasis. The
+# lookarounds keep a lone asterisk (a glob) from opening a span, and the no-flanking-
+# whitespace rule keeps arithmetic out: `a * b * c` has a space after the opening `*`.
+EM_RE = re.compile(r"(?<![\w*])\*(?!\s)([^*\n]*[^\s*])\*(?![\w*])")
 
 IMAGE_MIME = {
     ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -132,7 +140,7 @@ def _inline(text: str, report_dir: Path) -> str:
     """Render inline Markdown (images, code, links, bold) to safe HTML.
 
     Images / code / links are rendered first and stashed behind sentinels so their content
-    is not re-escaped; the remaining text is HTML-escaped; bold is applied last.
+    is not re-escaped; the remaining text is HTML-escaped; bold, then emphasis, last.
     """
     tokens: list[str] = []
 
@@ -150,6 +158,7 @@ def _inline(text: str, report_dir: Path) -> str:
     )
     text = html.escape(text)
     text = BOLD_RE.sub(lambda m: f"<strong>{m.group(1)}</strong>", text)
+    text = EM_RE.sub(lambda m: f"<em>{m.group(1)}</em>", text)
     text = re.sub(r"\x00(\d+)\x00", lambda m: tokens[int(m.group(1))], text)
     return text
 
@@ -157,7 +166,75 @@ def _inline(text: str, report_dir: Path) -> str:
 # --- block markdown ----------------------------------------------------------------------
 
 SECTION_RE = re.compile(r"^##\s+(.*)$", re.MULTILINE)
-ORDERED_RE = re.compile(r"^\d+\.\s")
+BULLET_RE = re.compile(r"^(\s*)[-*]\s+(.*)$")
+ORDERED_ITEM_RE = re.compile(r"^(\s*)\d+\.\s+(.*)$")
+
+
+def _collect_list(lines: list[str], i: int) -> tuple[list[list], int]:
+    """Consume one list block into flat `[indent, ordered, text]` entries.
+
+    Two shapes this repo's own house style produces on every report, neither of which the
+    old line-at-a-time loop could read. A **continuation line**: the prose is hard-wrapped
+    at ~95 columns, so most bullets spill onto an indented second line - the loop stopped
+    at the first non-bullet line, so the continuation fell *outside* the `<ul>` and
+    rendered as a stray paragraph beneath it, reading as a separate claim. And a **nested
+    sub-list**: the contract's own Appendix example nests under `Coverage / not
+    inspected:`, and the loop flattened those children up to the parent's level.
+    """
+    entries: list[list] = []
+    while i < len(lines):
+        raw = lines[i]
+        if not raw.strip():
+            break
+        match = BULLET_RE.match(raw)
+        ordered = False
+        if not match:
+            match = ORDERED_ITEM_RE.match(raw)
+            ordered = bool(match)
+        if match:
+            entries.append(
+                [len(match.group(1).expandtabs(4)), ordered, match.group(2).strip()])
+            i += 1
+            continue
+        if entries and raw[:1] in (" ", "\t"):
+            entries[-1][2] += " " + raw.strip()  # a hard-wrapped continuation
+            i += 1
+            continue
+        break
+    return entries, i
+
+
+def _nest(entries: list[list], pos: int, indent: int) -> tuple[list[dict], int]:
+    """Build the indent tree. An over-indented first item is kept at the current level."""
+    nodes: list[dict] = []
+    while pos < len(entries):
+        ind, ordered, text = entries[pos]
+        if ind < indent:
+            break
+        if ind > indent:
+            children, pos = _nest(entries, pos, ind)
+            if nodes:
+                nodes[-1]["children"].extend(children)
+            else:
+                nodes.extend(children)
+            continue
+        nodes.append({"text": text, "ordered": ordered, "children": []})
+        pos += 1
+    return nodes, pos
+
+
+def _render_list(nodes: list[dict], report_dir: Path) -> str:
+    if not nodes:
+        return ""
+    tag = "ol" if nodes[0]["ordered"] else "ul"
+    out = [f"<{tag}>"]
+    for node in nodes:
+        inner = _inline(node["text"], report_dir)
+        if node["children"]:
+            inner += _render_list(node["children"], report_dir)
+        out.append(f"<li>{inner}</li>")
+    out.append(f"</{tag}>")
+    return "".join(out)
 
 
 def _render_table(rows: list[str], report_dir: Path) -> str:
@@ -216,22 +293,18 @@ def _render_blocks(text: str, report_dir: Path) -> str:
             flush()
             quote: list[str] = []
             while i < len(lines) and lines[i].strip().startswith(">"):
-                quote.append(lines[i].strip().lstrip(">").strip()); i += 1
-            out.append(f"<blockquote>{_inline(' '.join(quote), report_dir)}</blockquote>"); continue
-        if stripped.startswith(("- ", "* ")):
+                quote.append(re.sub(r"^\s*>\s?", "", lines[i])); i += 1
+            # Rendered as BLOCKS, not as one joined line: the roll-up skill tells the
+            # auditor to quote the highest-priority finding, and a finding begins with its
+            # `### [PN]` heading - which the old join emitted as literal `###` text.
+            out.append("<blockquote>"
+                       + _render_blocks("\n".join(quote), report_dir)
+                       + "</blockquote>"); continue
+        if BULLET_RE.match(lines[i]) or ORDERED_ITEM_RE.match(lines[i]):
             flush()
-            items: list[str] = []
-            while i < len(lines) and lines[i].strip().startswith(("- ", "* ")):
-                items.append(lines[i].strip()[2:]); i += 1
-            out.append("<ul>" + "".join(
-                f"<li>{_inline(it, report_dir)}</li>" for it in items) + "</ul>"); continue
-        if ORDERED_RE.match(stripped):
-            flush()
-            items = []
-            while i < len(lines) and ORDERED_RE.match(lines[i].strip()):
-                items.append(ORDERED_RE.sub("", lines[i].strip())); i += 1
-            out.append("<ol>" + "".join(
-                f"<li>{_inline(it, report_dir)}</li>" for it in items) + "</ol>"); continue
+            entries, i = _collect_list(lines, i)
+            nodes, _ = _nest(entries, 0, entries[0][0] if entries else 0)
+            out.append(_render_list(nodes, report_dir)); continue
         para.append(stripped); i += 1
 
     flush()

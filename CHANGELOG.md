@@ -69,6 +69,41 @@ first*, so the report answers that with one number and shows the reasoning under
 - Component `description` fields still advertised "severity-scored" reports, and the
   "Running the checks" block in AGENTS.md was missing `test_cuj_contract.py`.
 
+- **The HTML companion dropped every hard-wrapped bullet's continuation line.** The block
+  renderer took lists one line at a time and stopped at the first line that did not start
+  with a bullet - so a continuation fell *outside* the `<ul>` and rendered as a stray
+  paragraph beneath it, reading as a separate claim, and nested sub-lists were flattened up
+  to the parent's level. This repo hard-wraps prose at ~95 columns and the contract's own
+  Appendix example nests, so it was the default shape, not an edge case: a live run against
+  a host app had 45 of 61 bullets affected, breaking every Appendix and every roll-up
+  Coverage section. Lists are now parsed as blocks, with an indent tree.
+- **Three further gaps in the same renderer, all found by that run.** A link whose text
+  carries brackets went unparsed - which is *the* shape schema 3 produces, since findings
+  are headed `### [PN] <title>` and `## Prioritized fixes` is built from links to them, so
+  that section rendered as raw Markdown. A `###` heading inside a blockquote emitted its
+  hashes literally, which is what the roll-up skill's "quote the worst finding" instruction
+  produces. And `*emphasis*` was never implemented (only `**bold**`), so single asterisks
+  reached the page; the new rule declines to open a span on a lone asterisk, so `a * b * c`
+  and a glob stay put.
+- **The roll-up was unvalidated, and `rollup: true` was documented nowhere.** The key is
+  the renderer's only discriminator, and omitting it is **silent**: the file still renders,
+  as an ordinary report, minus the headline banner naming the highest-priority finding and
+  warning about skipped auditors. The whole signal was a 26-byte difference in the output.
+  No persona, skill, command or reference had ever named the key - it existed only in
+  fixtures and in `render_report_html.py` - so an agent following `ux-audit/SKILL.md` could
+  not have known to write it. The skill now specifies the full roll-up frontmatter, and
+  `validate_report.py --rollup` checks it: the key, the `priorities` totals, the ran and
+  skipped lists, the two required sections, and the absence of a reinstated `verdict`.
+- **Step 7 told the auditor to "validate every report", which the roll-up cannot pass.** A
+  roll-up carries no `auditor`, `mode`, `frameworks` or findings, so the bare validator
+  answers with ten confident errors about missing keys. That was by design - the roll-up
+  sits outside the report contract - but the instruction never said so, so the first thing
+  a reader does produces a page of false failures. Step 7 now names the three modes.
+- **The contract required `## Prioritized fixes` to link to each finding, and no fixture
+  did.** Fixtures teach, so the one that teaches schema 3 now carries the links, with
+  anchors that resolve to its own headings, and the contract spells out the line shape and
+  where the anchor comes from.
+
 ### Known
 - **`docs/images/audit-review.png` is a 0.6.1 capture.** It still shows the go/no-go banner and
   `sev`-badged cards. Re-capturing needs a live `/ux-audit` run against a host app; the README

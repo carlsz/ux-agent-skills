@@ -201,8 +201,21 @@ After the frontmatter, in order:
 
 1. **`# <Auditor> Audit — <scope>`** — title.
 2. **`## Executive summary`** — 2–4 sentences plus a priority-count table.
-3. **`## Prioritized fixes`** — findings listed `P0` → `P3`, each line linking to its
-   finding below.
+3. **`## Prioritized fixes`** — findings listed `P0` → `P3`, one line each, linking to the
+   finding below:
+
+   ```markdown
+   - **P1** — [Seeding a blank task fails silently](#p1-seeding-a-blank-task-fails-silently)
+   ```
+
+   The link **text** may name the fix (that is this section's subject); the **anchor** is
+   always the finding heading's slug — lowercased, spaces to hyphens, everything else
+   dropped: `### [P1] Seeding a blank task fails silently` becomes
+   `#p1-seeding-a-blank-task-fails-silently`. `[[P1] <title>](#anchor)` is equivalent and
+   also renders; it is spelled out here because the link *was* the one thing fixtures kept
+   leaving out, and because a link whose text carries brackets went unparsed by the HTML
+   companion until 0.7.0 — so an auditor following the contract got raw Markdown in the
+   one section built from links. With no findings, the section reads `None — no findings.`
 4. **`## Findings`** — one finding per **level-3 heading tagged with its priority**:
 
    ```markdown

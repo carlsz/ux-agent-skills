@@ -132,9 +132,36 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
 5. **Append the index.** Add one `.ux/audits/index.md` row per auditor run (append-only),
    exactly as a single-auditor run does.
 
-6. **Write the roll-up.** Create `.ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md` with
-   frontmatter carrying `priorities:` (the `P0`-`P3` totals), `auditors_run:` and
-   `auditors_skipped:`, and a body holding:
+6. **Write the roll-up.** Create `.ux/audits/rollup-<YYYYMMDD>-<HHMMSS>.md` with this
+   frontmatter:
+
+   ```yaml
+   ---
+   rollup: true                 # REQUIRED — see below
+   date: 2026-11-12T02:12:05Z   # ISO-8601, UTC, from the runtime clock
+   target: http://localhost:3000
+   scope: "whole app — default bundle (usability, accessibility, cuj)"
+   auditors_run: [usability, accessibility, cuj]
+   auditors_skipped:
+     - "web-performance — opt-in; run with --only web-performance or --all"
+   priorities:                  # the P0-P3 totals across every auditor that ran
+     P0: 0
+     P1: 1
+     P2: 3
+     P3: 1
+   ---
+   ```
+
+   **`rollup: true` is load-bearing and its absence is silent.**
+   [`render_report_html.py`](../../scripts/render_report_html.py) branches on that one key
+   to pick the dashboard view. Omit it and the file still renders — as an ordinary report,
+   minus the headline banner that names the highest-priority finding and warns when
+   auditors were skipped. Nothing fails; the warning simply is not there. Step 7's
+   `--rollup` check exists to make that loud.
+
+   There is **no `verdict:`** key — see the no-ship-call rule below.
+
+   The body holds:
 
    - **The priority distribution** — per-auditor counts plus a total row, e.g.
      `1 x P0 - 4 x P1 - 7 x P2 - 2 x P3`. This is the headline.
@@ -157,9 +184,24 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
    nothing about the product. The same discriminator the CUJ reports use (a verified pass is
    not a run that verified nothing) applies to the suite as a whole. Link to each report.
 
-7. **Self-check.** Validate every report and the index with
-   [`scripts/validate_report.py`](../../scripts/validate_report.py), and confirm the safety
-   invariant with [`scripts/audit_safety.py`](../../scripts/audit_safety.py) `<host-repo>`.
+7. **Self-check.** Validate each artifact with
+   [`scripts/validate_report.py`](../../scripts/validate_report.py) — **three modes, and
+   the roll-up needs its own**:
+
+   ```
+   python3 scripts/validate_report.py .ux/audits/<auditor>-*.md   # the member reports
+   python3 scripts/validate_report.py --rollup .ux/audits/rollup-*.md
+   python3 scripts/validate_report.py --index .ux/audits/index.md
+   ```
+
+   A roll-up is **not** a report — it carries no `auditor`, `mode`, `frameworks` or
+   findings — so passing it to the bare form reports a page of irrelevant errors. Use
+   `--rollup`, which checks what a roll-up actually promises: the `rollup: true` key, the
+   `priorities` totals, the auditors ran/skipped lists, the two required sections, and the
+   absence of a reinstated `verdict`.
+
+   Then confirm the safety invariant with
+   [`scripts/audit_safety.py`](../../scripts/audit_safety.py) `<host-repo>`.
    It checks **both halves** of the invariant (SPEC §5.2) and exits 0 only if both
    hold: nothing changed outside `.ux/audits/`, **and** the writes you just made inside it
    were observed — it prints them. Exit 1 with *"no writes were observed"* means the run
@@ -193,5 +235,6 @@ Two native auditors plus two wrapped from **[web-quality-skills](https://github.
   with one appended index row apiece.
 - A `rollup-<timestamp>.md` exists with the priority distribution, the highest-priority
   finding named, skipped auditors (with reasons), merged issues, and no ship call.
-- Every report validates; `audit_safety.py` exits 0 on **both** halves: nothing changed
+- Every member report validates, the roll-up validates under `--rollup`, and the index
+  validates under `--index`; `audit_safety.py` exits 0 on **both** halves: nothing changed
   outside `.ux/audits/`, **and** the reports this run wrote inside it were observed.

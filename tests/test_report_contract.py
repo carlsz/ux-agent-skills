@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from validate_report import validate, validate_index  # noqa: E402
+from validate_report import validate, validate_index, validate_rollup  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures"
 
@@ -48,6 +48,22 @@ def _expect_invalid_index(path: Path, needle: str) -> list[str]:
         return [f"expected INVALID index but passed: {path.name}"]
     if not any(needle in e for e in errors):
         return [f"{path.name}: expected an index error mentioning {needle!r}, got {errors}"]
+    return []
+
+
+def _expect_valid_rollup(path: Path) -> list[str]:
+    errors = validate_rollup(path)
+    if errors:
+        return [f"expected VALID rollup but got errors: {path.name}: {errors}"]
+    return []
+
+
+def _expect_invalid_rollup(path: Path, needle: str) -> list[str]:
+    errors = validate_rollup(path)
+    if not errors:
+        return [f"expected INVALID rollup but passed: {path.name}"]
+    if not any(needle in e for e in errors):
+        return [f"{path.name}: expected a rollup error mentioning {needle!r}, got {errors}"]
     return []
 
 
@@ -175,12 +191,35 @@ def main() -> int:
     failures += _expect_valid_index(tmp)
     tmp.unlink()
 
+    # --- the roll-up (outside the report contract, but not unchecked) --------------------
+    # A roll-up carries no `auditor`, `mode`, `frameworks` or findings, so `validate()`
+    # rejects it with a page of irrelevant errors. `--rollup` checks what it does promise.
+    failures += _expect_valid_rollup(FIXTURES / "valid" / "rollup-20261111-150000.md")
+    failures += _expect_valid_rollup(FIXTURES / "valid" / "rollup-20261111-160000.md")
+    # The `rollup` key is the renderer's only discriminator and its absence is SILENT:
+    # the file still renders, as an ordinary report, minus the headline banner that names
+    # the worst finding and warns about skipped auditors. A 26-byte difference in the
+    # output was the entire signal. This is what makes it loud.
+    failures += _expect_invalid_rollup(FIXTURES / "invalid" / "rollup-no-key.md",
+                                       "rollup: true")
+    # The go/no-go verdict was dropped, not renamed. A roll-up that reinstates one is
+    # asserting release context the suite does not have (SPEC §6).
+    failures += _expect_invalid_rollup(FIXTURES / "invalid" / "rollup-verdict.md",
+                                       "no ship call")
+    # A severity count is not a priority count, in a roll-up as anywhere else.
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as fh:
+        fh.write((FIXTURES / "valid" / "rollup-20261111-150000.md")
+                 .read_text(encoding="utf-8").replace("  P0: 1", "  P0: 1\n  sev4: 1"))
+        tmp = Path(fh.name)
+    failures += _expect_invalid_rollup(tmp, "sev")
+    tmp.unlink()
+
     if failures:
         print("FAIL — report contract:")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (26 checks, schemas 2 and 3)")
+    print("PASS — report contract (31 checks, schemas 2 and 3, plus the roll-up)")
     return 0
 
 

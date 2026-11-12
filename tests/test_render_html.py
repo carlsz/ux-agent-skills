@@ -264,12 +264,58 @@ def main() -> int:
             failures.append("index: run link not repointed to .html")
         failures += [f"index: {e}" for e in _self_contained(html)]
 
+    # --- block Markdown: the shapes this repo's own house style actually produces -------
+    # The body is hard-wrapped at ~95 columns, so most bullets spill onto an indented
+    # continuation line, and the contract's Appendix example nests a sub-list. The old
+    # line-at-a-time loop stopped at the first non-bullet line: the continuation fell
+    # OUTSIDE the <ul> and rendered as a stray paragraph reading like a separate claim,
+    # and nested children were flattened up to the parent's level. 45 of 61 bullets in a
+    # single real run were affected, so this is the default shape, not an edge case.
+    from render_report_html import _render_blocks  # noqa: PLC0415
+
+    blocks = _render_blocks(
+        "- **Ran:** usability, and this bullet continues\n"
+        "  onto a second hard-wrapped line.\n"
+        "- **Coverage:**\n"
+        "  - A child that also wraps\n"
+        "    onto a second line.\n",
+        Path("."),
+    )
+    if "continues onto a second hard-wrapped line.</li>" not in blocks:
+        failures.append("blocks: a hard-wrapped bullet loses its continuation line")
+    if "<li><strong>Coverage:</strong><ul><li>" not in blocks:
+        failures.append("blocks: a nested sub-list is flattened to the parent's level")
+    if "wraps onto a second line.</li></ul></li></ul>" not in blocks:
+        failures.append("blocks: a nested bullet loses its continuation line")
+
+    # Schema 3 heads every finding `### [PN] <title>`, so the natural link to one carries
+    # brackets in its text — and `## Prioritized fixes` is built entirely from such links.
+    link = _render_blocks("- [[P1] Seeding a blank task fails](#p1-seeding-a-blank-task-fails)",
+                          Path("."))
+    if '<a href="#p1-seeding-a-blank-task-fails">[P1] Seeding a blank task fails</a>' not in link:
+        failures.append("blocks: a link whose text contains brackets renders as raw Markdown")
+
+    # The roll-up skill tells the auditor to QUOTE the highest-priority finding, and a
+    # finding begins with its heading — which a joined blockquote emitted as literal '###'.
+    quoted = _render_blocks("> ### [P1] Seeding a blank task fails\n>\n> Spaces do nothing.",
+                            Path("."))
+    if "<blockquote><h3>[P1] Seeding a blank task fails</h3>" not in quoted:
+        failures.append("blocks: a heading inside a blockquote renders its hashes literally")
+
+    # Emphasis, without swallowing arithmetic or a glob into a span that never closes.
+    em = _render_blocks("It answers *what to fix first*; `a * b` and a * b * c stay put.",
+                        Path("."))
+    if "<em>what to fix first</em>" not in em:
+        failures.append("blocks: single-asterisk emphasis renders as literal asterisks")
+    if "<em>" in em.split("</em>", 1)[1]:
+        failures.append("blocks: a lone asterisk opened an emphasis span")
+
     if failures:
         print("FAIL — render_html:")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — render_html (self-contained, deterministic, flipbook, findings, cuj banners, rollup dashboard)")
+    print("PASS — render_html (self-contained, deterministic, flipbook, findings, cuj banners, rollup dashboard, block markdown)")
     return 0
 
 
