@@ -1,6 +1,6 @@
 ---
 name: ux-audit
-description: Run the default UX auditor suite (usability + accessibility + cuj) against one target — web performance is opt-in — normalize into the shared .ux/audits contract, and produce one combined go/no-go roll-up. Invokes the ux-audit skill.
+description: Run the default UX auditor suite (usability + accessibility + cuj) against one target — web performance is opt-in — normalize into the shared .ux/audits contract, and produce one combined roll-up ranked by priority (P0-P3). Invokes the ux-audit skill.
 argument-hint: "[target] [--scope <area>] [--only usability,accessibility,web-performance,cuj] [--all] [--mode static|live|hybrid]"
 ---
 

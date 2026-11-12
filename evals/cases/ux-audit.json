@@ -20,12 +20,12 @@
     {
       "id": 1,
       "prompt": "Clone and run https://github.com/carlsz/sprout, then run the full suite roll-up (/ux-agent-skills:ux-audit) against it.",
-      "expected_output": "One normalized contract report per available auditor plus a rollup with a go/no-go verdict; unavailable auditors skipped and disclosed.",
+      "expected_output": "One normalized contract report per available auditor plus a rollup with a P0-P3 priority distribution and the highest-priority finding named; no ship call; unavailable auditors skipped and disclosed.",
       "expectations": [
         "Runs the native usability auditor and writes a contract-valid usability report under Sprout/.ux/audits/",
         "For accessibility, either writes a normalized contract report or discloses the auditor as skipped with a reason — never a silent pass",
         "Web performance is opt-in: with no --only/--all it is disclosed in the rollup as skipped with its opt-in reason, never a silent pass",
-        "Writes a rollup-<timestamp>.md containing a per-auditor severity table and an overall go/no-go verdict",
+        "Writes a rollup-<timestamp>.md containing a per-auditor priority table, the priority distribution, and the highest-priority finding named, with no overall ship call",
         "Appends one index.md row per auditor run (append-only)",
         "No auditor edits any of Sprout's application code",
         "All writes are confined to Sprout/.ux/audits/"

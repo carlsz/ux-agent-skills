@@ -1,6 +1,6 @@
 ---
 name: usability-audit
-description: Run an expert heuristic usability evaluation of a host app and write a severity-scored report to .ux/audits. Use for "usability audit", "heuristic evaluation", "UX audit", or "usability review".
+description: Run an expert heuristic usability evaluation of a host app and write a priority-ranked report to .ux/audits. Use for "usability audit", "heuristic evaluation", "UX audit", or "usability review".
 ---
 
 # Usability Audit
@@ -17,7 +17,7 @@ one issue, one finding, attributed to its primary framework (see step 4).
 
 **Evaluation modes:** `static` (read source), `live` (drive the running app in a
 browser), and `hybrid` (both). The modes differ only in how evidence is gathered — the
-frameworks, severity rubric, and report format are identical. Mode is auto-selected by
+frameworks, rating rubrics, and report format are identical. Mode is auto-selected by
 default (see step 1); `--mode` forces one.
 
 ---
@@ -97,10 +97,11 @@ default (see step 1); `--mode` forces one.
    often surfaces under several (e.g. missing feedback = Nielsen #1 = Shneiderman #3 =
    NPCIS Interaction). Merge those into **one finding**, attributed to the **primary**
    framework, noting the corroborating ones in the Framework Violation field — never file
-   a defect four times. Then apply the severity rubric from the contract (**omit severity
-   0**) and capture the five fields per finding: Issue Description, Framework Violation
-   (primary + corroborating), Severity, Evidence, Recommended Fix. Group findings by
-   framework in the report body if it aids readability; the severity ordering in the
+   a defect four times. Then apply the contract's rubrics — the `P0`–`P3` ladder for
+   priority, the three factors for severity, and **omit a severity-0 non-problem entirely**
+   — and capture the six fields per finding: Issue Description, Framework Violation
+   (primary + corroborating), Priority, Severity, Evidence, Recommended Fix. Group findings
+   by framework in the report body if it aids readability; the `P0` → `P3` ordering in the
    prioritized-fix list still governs.
 
 5. **Apply the render-vs-source honesty rule.** A claim about what a user *perceives at
@@ -125,11 +126,11 @@ default (see step 1); `--mode` forces one.
 7. **Append to the index.** Add one row for this run to `.ux/audits/index.md` — create the
    file with the contract's header if it doesn't exist. The index is **append-only**: add
    your row, never rewrite or reorder prior rows (they may belong to earlier runs or other
-   auditors). The row records date, auditor, scope, and the four severity counts, linking
+   auditors). The row records date, auditor, scope, and the four priority counts, linking
    to the report file.
 
 8. **Self-check before finishing.** Ensure `summary` counts reconcile with the findings in
-   the body and no `[sev0]` appears. Validate the report and index with
+   the body and no severity-0 non-problem was filed. Validate the report and index with
    [`scripts/validate_report.py`](../../scripts/validate_report.py) — `validate_report.py
    <report>` and `validate_report.py --index .ux/audits/index.md`. Then confirm the safety
    invariant with [`scripts/audit_safety.py`](../../scripts/audit_safety.py)
@@ -172,15 +173,16 @@ default (see step 1); `--mode` forces one.
   safety check, take the baseline **after** any authorized setup (or revert setup changes
   first) so it measures the audit's footprint, and note any setup side-effect in the report
   appendix rather than letting it read as an audit write.
-- **Never fabricate** findings, severities, or evidence.
+- **Never fabricate** findings, priorities, severities, or evidence.
 
 ## Exit criteria (done when)
 
 - A timestamped report exists under `.ux/audits/` and validates against the contract.
 - One row was appended to `.ux/audits/index.md` (created if absent), with no prior rows
   rewritten.
-- Every reported finding has a framework citation (primary + any corroborating), a 0–4
-  severity, evidence, and a fix, with no issue filed under more than one finding.
+- Every reported finding has a framework citation (primary + any corroborating), a
+  `P0`–`P3` priority, an `S1`–`S4` severity naming the three factors, evidence, and a fix,
+  with no issue filed under more than one finding.
 - Runtime-perception findings are `verified` (live) or `potential — unverified` (static),
   matching the mode actually used.
 - Live-mode screenshots are saved under `.ux/audits/assets/` with their stable names,

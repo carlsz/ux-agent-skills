@@ -1,0 +1,88 @@
+---
+auditor: usability
+schema: 3
+version: 0.7.0
+date: 2026-11-11T14:30:00Z
+target: https://localhost:3000/checkout
+mode: hybrid
+scope: "checkout flow"
+frameworks:
+  - nielsen-10
+  - shneiderman-8
+summary:
+  total: 3
+  P0: 0
+  P1: 1
+  P2: 1
+  P3: 1
+---
+
+# Usability Audit — checkout flow
+
+## Executive summary
+
+The checkout flow completes. One issue needs fixing before release, one can wait for the
+next pass, and one is polish.
+
+| Priority | Count |
+|----------|-------|
+| P0 — Blocks the task | 0 |
+| P1 — Significant difficulty | 1 |
+| P2 — Workaround exists | 1 |
+| P3 — No effect on completion | 1 |
+
+## Prioritized fixes
+
+1. [P1] Add processing feedback to "Place order"
+2. [P2] Make the promo-code error specific and actionable
+3. [P3] Use one currency format in the order summary
+
+## Findings
+
+### [P1] "Place order" gives no processing feedback
+
+- **Issue Description:** After clicking "Place order" the button stays idle with no
+  spinner or disabled state; users may click again and double-submit.
+- **Framework Violation:** Nielsen #1 — Visibility of System Status.
+- **Priority:** P1 — a workaround exists (wait and hope) but it is non-obvious and costs
+  a duplicate order when guessed wrong. Fix before release.
+- **Severity:** 3 — major; every purchaser meets it (frequency), there is no signal to
+  work around (impact), and it recurs on every order (persistence).
+- **Evidence:** live capture ![place order idle](./assets/usability-checkout-mid-flow.png);
+  handler at `src/checkout/PlaceOrderButton.tsx:42` sets no pending state.
+- **Recommended Fix:** disable the button and show an inline spinner while the request
+  is in flight; restore on success or error.
+
+### [P2] Promo-code error is vague
+
+- **Issue Description:** An invalid promo code shows only "Error" with no reason.
+- **Framework Violation:** Nielsen #9 — Help Users Recognize, Diagnose, and Recover
+  from Errors.
+- **Priority:** P2 — the order still completes without the code, so an obvious workaround
+  exists. Next improvement pass.
+- **Severity:** 2 — minor; only promo users meet it (frequency), retrying is possible
+  though blind (impact), and it recurs per attempt (persistence).
+- **Evidence:** live capture ![promo error](./assets/usability-checkout-error.png); string at
+  `src/checkout/PromoField.tsx:88`.
+- **Recommended Fix:** state the specific reason (expired, invalid, minimum not met)
+  and how to proceed.
+
+### [P4] Order summary mixes two currency formats
+
+- **Issue Description:** Line items render as `$12.00` while the total renders as
+  `USD 12.00`.
+- **Framework Violation:** Nielsen #4 — Consistency and Standards.
+- **Priority:** P3 — nothing about completing the order changes. After higher priorities.
+- **Severity:** 1 — cosmetic, and deliberately at the 0-vs-1 margin: a user *notices* the
+  mismatch (so not a 0), but no user behaviour changes because of it. Every buyer sees it
+  (frequency), it costs nothing to overcome (impact), it recurs every order (persistence).
+- **Evidence:** live capture ![order summary](./assets/usability-checkout-success.png);
+  formatter at `src/checkout/Summary.tsx:31`.
+- **Recommended Fix:** route both through the shared `formatCurrency` helper.
+
+## Appendix
+
+- **Mode:** hybrid (live render + source lookup for `file:line`).
+- **Frameworks applied:** nielsen-10, shneiderman-8.
+- **Coverage / not inspected:** guest-checkout path (auth-gated, no test account
+  supplied) — not audited.

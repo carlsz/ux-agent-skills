@@ -9,7 +9,7 @@ disk with no network access.
 
 Design notes:
 - Parsing helpers are **reused** from `validate_report.py` (one source of truth for the
-  frontmatter split and the finding/​walkthrough/​image shapes).
+  frontmatter split and the finding/walkthrough/image shapes).
 - Output is **deterministic**: identical input (report + assets) yields byte-identical HTML,
   so re-rendering an unchanged report produces no diff churn. No timestamps, no randomness.
 
@@ -18,9 +18,9 @@ Usage:
 
 Exit code 0 = all rendered; 1 = at least one failed (message on stderr).
 
-Scope: Phase 0 — frontmatter header, severity bar, generic section rendering, and findings
-as severity-badged cards with inline Evidence images. The `## Walkthrough` flipbook, the
-cuj verified-pass banner, the roll-up dashboard, and `--index` land in later phases.
+Scope: frontmatter header, rating bar, generic section rendering, and findings
+as priority-badged cards with inline Evidence images. The `## Walkthrough` flipbook, the
+cuj verified-pass banner, the roll-up priority dashboard, and `--index` are all here.
 """
 from __future__ import annotations
 
@@ -31,30 +31,79 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from validate_report import _split_frontmatter, FINDING_RE  # noqa: E402
+from validate_report import _split_frontmatter  # noqa: E402
 
-# --- severity vocabulary (mirrors the report contract §4) --------------------------------
+# --- rating vocabulary, per schema (mirrors the report contract §4) -----------------------
+#
+# The CSS ramp is POSITIONAL: 4 is the hottest colour, 1 the coolest. Both vocabularies map
+# onto it, so `P0` renders in the `sev4` red without the stylesheet knowing anything about
+# priority — and `test_render_html.py`'s `.finding sev` probe keeps working for both. The
+# class stays positional; only the badge text and labels follow the schema.
+RATING_VIEW = {
+    2: {
+        "pattern": re.compile(r"^###\s+\[sev(\d)\]", re.MULTILINE),
+        "strip": re.compile(r"^###\s+\[sev\d\]\s*"),
+        "order": ["4", "3", "2", "1"],
+        "labels": {"4": "Catastrophe", "3": "Major", "2": "Minor", "1": "Cosmetic"},
+        "key": "sev{}",
+        "ramp": lambda r: int(r),
+    },
+    3: {
+        "pattern": re.compile(r"^###\s+\[P(\d)\]", re.MULTILINE),
+        "strip": re.compile(r"^###\s+\[P\d\]\s*"),
+        "order": ["0", "1", "2", "3"],
+        "labels": {"0": "Blocks the task", "1": "Significant difficulty",
+                   "2": "Workaround exists", "3": "No effect"},
+        "key": "P{}",
+        "ramp": lambda r: 4 - int(r),
+    },
+}
 
-SEV_LABELS = {4: "Catastrophe", 3: "Major", 2: "Minor", 1: "Cosmetic"}
-SEV_ORDER = [4, 3, 2, 1]
+
+def _view(fm: dict, body: str = "") -> dict:
+    """The rating vocabulary this report speaks.
+
+    An unknown or absent `schema` must NOT fall through to a default that finds nothing —
+    rendering zero findings at exit 0 is precisely how a schema-3 report silently lost every
+    card before this slice. So an unrecognised schema sniffs the body for whichever
+    vocabulary is actually in it, and a future schema 4 degrades to "renders like the thing
+    it most resembles" rather than to a blank page.
+    """
+    view = RATING_VIEW.get(fm.get("schema"))
+    if view is not None:
+        return view
+    for candidate in (RATING_VIEW[3], RATING_VIEW[2]):
+        if candidate["pattern"].search(body):
+            return candidate
+    return RATING_VIEW[3]
 
 # --- inline markdown ---------------------------------------------------------------------
 
 IMG_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
-LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+# Link text may itself contain one level of brackets. Schema 3 heads every finding
+# `### [PN] <title>`, so the natural link to one reads `[[P1] Title](#anchor)` - and a
+# flat `[^\]]+` text class cannot match it. The result was raw Markdown rendered in the
+# one section that exists to carry those links (`## Prioritized fixes`).
+LINK_RE = re.compile(r"\[((?:[^\[\]]|\[[^\[\]]*\])+)\]\(([^)]+)\)")
 CODE_RE = re.compile(r"`([^`]+)`")
 BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+# Applied AFTER bold, so `**x**` is already consumed and cannot be read as emphasis. The
+# lookarounds keep a lone asterisk (a glob) from opening a span, and the no-flanking-
+# whitespace rule keeps arithmetic out: `a * b * c` has a space after the opening `*`.
+EM_RE = re.compile(r"(?<![\w*])\*(?!\s)([^*\n]*[^\s*])\*(?![\w*])")
 
 IMAGE_MIME = {
     ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
     ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
 }
 
-# The five labelled fields of a finding block (report contract §5).
+# The labelled fields of a finding block (report contract §5). Schema 3 adds `Priority`;
+# a schema-2 block simply has no such row.
+_FIELD_NAMES = ("Issue Description|Framework Violation|Priority|Severity|Evidence|"
+                "Recommended Fix")
 FINDING_FIELD_RE = re.compile(
-    r"-\s+\*\*(Issue Description|Framework Violation|Severity|Evidence|Recommended Fix):\*\*"
-    r"\s*(.*?)(?=\n-\s+\*\*(?:Issue Description|Framework Violation|Severity|Evidence|"
-    r"Recommended Fix):\*\*|\Z)",
+    rf"-\s+\*\*({_FIELD_NAMES}):\*\*"
+    rf"\s*(.*?)(?=\n-\s+\*\*(?:{_FIELD_NAMES}):\*\*|\Z)",
     re.DOTALL,
 )
 
@@ -91,7 +140,7 @@ def _inline(text: str, report_dir: Path) -> str:
     """Render inline Markdown (images, code, links, bold) to safe HTML.
 
     Images / code / links are rendered first and stashed behind sentinels so their content
-    is not re-escaped; the remaining text is HTML-escaped; bold is applied last.
+    is not re-escaped; the remaining text is HTML-escaped; bold, then emphasis, last.
     """
     tokens: list[str] = []
 
@@ -109,6 +158,7 @@ def _inline(text: str, report_dir: Path) -> str:
     )
     text = html.escape(text)
     text = BOLD_RE.sub(lambda m: f"<strong>{m.group(1)}</strong>", text)
+    text = EM_RE.sub(lambda m: f"<em>{m.group(1)}</em>", text)
     text = re.sub(r"\x00(\d+)\x00", lambda m: tokens[int(m.group(1))], text)
     return text
 
@@ -116,7 +166,75 @@ def _inline(text: str, report_dir: Path) -> str:
 # --- block markdown ----------------------------------------------------------------------
 
 SECTION_RE = re.compile(r"^##\s+(.*)$", re.MULTILINE)
-ORDERED_RE = re.compile(r"^\d+\.\s")
+BULLET_RE = re.compile(r"^(\s*)[-*]\s+(.*)$")
+ORDERED_ITEM_RE = re.compile(r"^(\s*)\d+\.\s+(.*)$")
+
+
+def _collect_list(lines: list[str], i: int) -> tuple[list[list], int]:
+    """Consume one list block into flat `[indent, ordered, text]` entries.
+
+    Two shapes this repo's own house style produces on every report, neither of which the
+    old line-at-a-time loop could read. A **continuation line**: the prose is hard-wrapped
+    at ~95 columns, so most bullets spill onto an indented second line - the loop stopped
+    at the first non-bullet line, so the continuation fell *outside* the `<ul>` and
+    rendered as a stray paragraph beneath it, reading as a separate claim. And a **nested
+    sub-list**: the contract's own Appendix example nests under `Coverage / not
+    inspected:`, and the loop flattened those children up to the parent's level.
+    """
+    entries: list[list] = []
+    while i < len(lines):
+        raw = lines[i]
+        if not raw.strip():
+            break
+        match = BULLET_RE.match(raw)
+        ordered = False
+        if not match:
+            match = ORDERED_ITEM_RE.match(raw)
+            ordered = bool(match)
+        if match:
+            entries.append(
+                [len(match.group(1).expandtabs(4)), ordered, match.group(2).strip()])
+            i += 1
+            continue
+        if entries and raw[:1] in (" ", "\t"):
+            entries[-1][2] += " " + raw.strip()  # a hard-wrapped continuation
+            i += 1
+            continue
+        break
+    return entries, i
+
+
+def _nest(entries: list[list], pos: int, indent: int) -> tuple[list[dict], int]:
+    """Build the indent tree. An over-indented first item is kept at the current level."""
+    nodes: list[dict] = []
+    while pos < len(entries):
+        ind, ordered, text = entries[pos]
+        if ind < indent:
+            break
+        if ind > indent:
+            children, pos = _nest(entries, pos, ind)
+            if nodes:
+                nodes[-1]["children"].extend(children)
+            else:
+                nodes.extend(children)
+            continue
+        nodes.append({"text": text, "ordered": ordered, "children": []})
+        pos += 1
+    return nodes, pos
+
+
+def _render_list(nodes: list[dict], report_dir: Path) -> str:
+    if not nodes:
+        return ""
+    tag = "ol" if nodes[0]["ordered"] else "ul"
+    out = [f"<{tag}>"]
+    for node in nodes:
+        inner = _inline(node["text"], report_dir)
+        if node["children"]:
+            inner += _render_list(node["children"], report_dir)
+        out.append(f"<li>{inner}</li>")
+    out.append(f"</{tag}>")
+    return "".join(out)
 
 
 def _render_table(rows: list[str], report_dir: Path) -> str:
@@ -175,22 +293,18 @@ def _render_blocks(text: str, report_dir: Path) -> str:
             flush()
             quote: list[str] = []
             while i < len(lines) and lines[i].strip().startswith(">"):
-                quote.append(lines[i].strip().lstrip(">").strip()); i += 1
-            out.append(f"<blockquote>{_inline(' '.join(quote), report_dir)}</blockquote>"); continue
-        if stripped.startswith(("- ", "* ")):
+                quote.append(re.sub(r"^\s*>\s?", "", lines[i])); i += 1
+            # Rendered as BLOCKS, not as one joined line: the roll-up skill tells the
+            # auditor to quote the highest-priority finding, and a finding begins with its
+            # `### [PN]` heading - which the old join emitted as literal `###` text.
+            out.append("<blockquote>"
+                       + _render_blocks("\n".join(quote), report_dir)
+                       + "</blockquote>"); continue
+        if BULLET_RE.match(lines[i]) or ORDERED_ITEM_RE.match(lines[i]):
             flush()
-            items: list[str] = []
-            while i < len(lines) and lines[i].strip().startswith(("- ", "* ")):
-                items.append(lines[i].strip()[2:]); i += 1
-            out.append("<ul>" + "".join(
-                f"<li>{_inline(it, report_dir)}</li>" for it in items) + "</ul>"); continue
-        if ORDERED_RE.match(stripped):
-            flush()
-            items = []
-            while i < len(lines) and ORDERED_RE.match(lines[i].strip()):
-                items.append(ORDERED_RE.sub("", lines[i].strip())); i += 1
-            out.append("<ol>" + "".join(
-                f"<li>{_inline(it, report_dir)}</li>" for it in items) + "</ol>"); continue
+            entries, i = _collect_list(lines, i)
+            nodes, _ = _nest(entries, 0, entries[0][0] if entries else 0)
+            out.append(_render_list(nodes, report_dir)); continue
         para.append(stripped); i += 1
 
     flush()
@@ -199,8 +313,8 @@ def _render_blocks(text: str, report_dir: Path) -> str:
 
 # --- findings ----------------------------------------------------------------------------
 
-def _parse_findings(body: str) -> list[dict]:
-    matches = list(FINDING_RE.finditer(body))
+def _parse_findings(body: str, view: dict) -> list[dict]:
+    matches = list(view["pattern"].finditer(body))
     findings: list[dict] = []
     for idx, m in enumerate(matches):
         start = m.start()
@@ -208,23 +322,26 @@ def _parse_findings(body: str) -> list[dict]:
         block = body[start:end]
         newline = block.find("\n")
         heading = block[:newline] if newline != -1 else block
-        title = re.sub(r"^###\s+\[sev[0-4]\]\s*", "", heading).strip()
+        title = view["strip"].sub("", heading).strip()
         fields = {name: val.strip() for name, val in FINDING_FIELD_RE.findall(block)}
-        findings.append({"sev": int(m.group(1)), "title": title, "fields": fields})
+        findings.append({"rank": m.group(1), "title": title, "fields": fields})
     return findings
 
 
-def _render_findings(body: str, report_dir: Path) -> str:
-    findings = _parse_findings(body)
+def _render_findings(body: str, report_dir: Path, view: dict) -> str:
+    findings = _parse_findings(body, view)
     if not findings:
         return '<p class="none">No findings.</p>'
     cards: list[str] = []
     for f in findings:
-        sev = f["sev"]
+        rank = f["rank"]
+        ramp = view["ramp"](rank)
+        badge = view["key"].format(rank)
         rows = []
         for key, dt in (
             ("Issue Description", "Issue"),
             ("Framework Violation", "Violation"),
+            ("Priority", "Priority"),
             ("Severity", "Severity"),
             ("Evidence", "Evidence"),
             ("Recommended Fix", "Fix"),
@@ -233,8 +350,8 @@ def _render_findings(body: str, report_dir: Path) -> str:
                 rows.append(
                     f"<dt>{dt}</dt><dd>{_render_blocks(f['fields'][key], report_dir)}</dd>")
         cards.append(
-            f'<article class="finding sev{sev}">'
-            f'<header><span class="badge sev{sev}">sev{sev}</span>'
+            f'<article class="finding sev{ramp}">'
+            f'<header><span class="badge sev{ramp}">{badge}</span>'
             f"<h3>{_inline(f['title'], report_dir)}</h3></header>"
             f"<dl>{''.join(rows)}</dl></article>"
         )
@@ -334,7 +451,7 @@ def _render_walkthrough(content: str, report_dir: Path) -> str:
     return "\n".join(parts)
 
 
-# --- header + severity bar ---------------------------------------------------------------
+# --- header + rating bar ---------------------------------------------------------------
 
 def _chip(text: str) -> str:
     return f'<span class="chip">{html.escape(str(text))}</span>'
@@ -362,23 +479,26 @@ def _render_header(fm: dict) -> str:
     )
 
 
-def _severity_bar(fm: dict) -> str:
-    """Minimal inline severity summary — `sev4 0  sev3 1 …  N findings`.
+def _rating_bar(fm: dict, view: dict) -> str:
+    """Minimal inline rating summary — `P0 0  P1 1 …  N findings` (schema 2: `sev4 …`).
 
-    Severity is the only colour on the page: the count numbers carry the ramp, dimmed when
-    zero. No cells, no bar — the badges on the cards do the heavy visual lifting.
+    The rating is the only colour on the page: the count numbers carry the ramp, dimmed
+    when zero. No cells, no bar — the badges on the cards do the heavy visual lifting.
     """
     summary = fm.get("summary") or {}
     total = summary.get("total", 0)
     cells = [f'<div class="scell total"><b>{total}</b><span>findings</span></div>']
-    for n in SEV_ORDER:
-        count = summary.get(f"sev{n}", 0)
+    for rank in view["order"]:
+        key = view["key"].format(rank)
+        count = summary.get(key, 0)
         off = "" if count else " off"
+        ramp = view["ramp"](rank)
         cells.append(
-            f'<div class="scell sev{n}{off}"><b>{count}</b>'
-            f"<span>sev{n} · {SEV_LABELS[n]}</span></div>"
+            f'<div class="scell sev{ramp}{off}"><b>{count}</b>'
+            f'<span>{key} · {view["labels"][rank]}</span></div>'
         )
-    return f'<section class="sevrow">{"".join(cells)}</section>'
+    joined = "".join(cells)
+    return f'<section class="sevrow">{joined}</section>'
 
 
 # --- banners (cuj verified-pass, provenance) ---------------------------------------------
@@ -563,10 +683,9 @@ font-size:.9rem;box-shadow:var(--shadow)}
 .banner.pass{background:rgba(34,197,94,.10);border-color:rgba(34,197,94,.35);border-left-color:#22c55e}
 .banner.warn{background:rgba(234,179,8,.12);border-color:rgba(234,179,8,.4);border-left-color:#eab308}
 .banner.info{background:rgba(148,163,184,.13);border-color:rgba(148,163,184,.4);border-left-color:#94a3b8}
-.banner.go{background:rgba(34,197,94,.10);border-color:rgba(34,197,94,.4);border-left-color:#22c55e}
-.banner.nogo{background:rgba(239,68,68,.10);border-color:rgba(239,68,68,.4);border-left-color:#ef4444}
-.banner.verdict{font-size:1rem;padding:.9rem 1.1rem}
-.banner.verdict b{font-size:1.15rem;text-transform:uppercase;letter-spacing:.03em}
+.banner.alert{background:rgba(239,68,68,.10);border-color:rgba(239,68,68,.4);border-left-color:#ef4444}
+.banner.headline{font-size:1rem;padding:.9rem 1.1rem}
+.banner.headline b{font-size:1.15rem;letter-spacing:.01em}
 /* evidence fallback gallery */
 .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.8rem}
 .tile{margin:0;background:var(--card);border:1px solid var(--line);border-radius:10px;
@@ -625,17 +744,91 @@ def _link_md_to_html(text: str) -> str:
     return MD_LINK_RE.sub(r"](\1.html\2", text)
 
 
-def _render_rollup(fm: dict, body: str, report_dir: Path) -> str:
-    """Render a `rollup-*.md` suite report as a verdict dashboard.
+_P_ORDER = ("P0", "P1", "P2", "P3")
 
-    The roll-up has its own frontmatter (`rollup`, `verdict`, `auditors_run`) rather than the
-    per-report `auditor`/`summary`, so it renders through a dedicated path: a prominent
-    go/no-go verdict, then the roll-up's sections (auditor table, per-auditor severity matrix,
-    merged issues) generically — with report links repointed to their `.html` views.
+
+def _priority_counts(fm: dict) -> dict[str, int] | None:
+    """The roll-up's `priorities:` map, or **None if it cannot be read**.
+
+    Returning None rather than zeros is the whole point. Nothing validates roll-up
+    frontmatter -- it sits outside the report contract -- so this function is the only
+    thing standing between a malformed `priorities:` map and the dashboard. Reading an
+    absent, misnamed or non-numeric map as "all zero" made the banner announce *"every
+    auditor reported clean"* above a body table listing findings, which is exactly the
+    false-clean read `_distribution_banner()` exists to prevent.
+
+    `type(v) is not int` rather than `isinstance`: `True` is an `int` in Python, so a
+    `P0: yes` in YAML would otherwise have counted as one finding.
     """
-    verdict = str(fm.get("verdict", "")).strip()
-    kind = "go" if verdict.lower() == "go" else "nogo"
-    icon = "✅" if verdict.lower() == "go" else "🔴"
+    raw = fm.get("priorities")
+    if not isinstance(raw, dict):
+        return None                     # absent, or a list/string/scalar
+    present = {k: raw[k] for k in _P_ORDER if k in raw}
+    if not present:
+        return None                     # a map, but none of the keys we score on
+    if any(type(v) is not int for v in present.values()):
+        return None                     # a count we cannot trust is not a count of zero
+    return {k: present.get(k, 0) for k in _P_ORDER}
+
+
+def _distribution_banner(fm: dict) -> str:
+    """The roll-up's headline: what to fix first, never whether to ship.
+
+    This replaced a binary go/no-go verdict (SPEC 9.5). A ship call needs release context
+    the suite does not have and SPEC 6 forbids it from inventing, and forcing a binary onto
+    a borderline judgement was what made the old verdict misleading rather than useful.
+
+    The hazard is that dropping the verdict does not remove the false-clean read, it moves
+    it: `0 x P0 - 0 x P1` reads as "ship it" to a human exactly as a GO banner did. So an
+    empty distribution is only a pass when coverage was complete; with any auditor skipped
+    it is a warn that says so, and a map that cannot be read is a warn rather than a zero. That is the same discriminator `_pass_banner()` applies to a
+    cuj `total: 0` -- a verified pass and a run that verified nothing are not the same claim.
+    """
+    counts = _priority_counts(fm)
+    ran = fm.get("auditors_run") or []
+    skipped = fm.get("auditors_skipped") or []
+    coverage = f"{len(ran)} auditor{'' if len(ran) == 1 else 's'} ran"
+    if skipped:
+        coverage += f", {len(skipped)} skipped"
+
+    if counts is None:
+        return _banner(
+            "warn headline", "\u26a0",
+            "<b>Priority distribution unavailable</b> \u2014 this roll-up's "
+            "<code>priorities:</code> frontmatter is missing or unreadable, so the counts "
+            "below are the only record. Do not read this as a clean result.")
+
+    total = sum(counts.values())
+    if total == 0:
+        if skipped:
+            return _banner(
+                "warn headline", "\u26a0",
+                f"<b>No findings, partial coverage</b> \u2014 {html.escape(coverage)}. An empty "
+                f"distribution is not a clean bill of health; see Coverage below.")
+        return _banner(
+            "pass headline", "\u2713",
+            f"<b>No findings</b> \u2014 {html.escape(coverage)}, every auditor reported clean.")
+
+    worst = next(key for key in _P_ORDER if counts[key])
+    kind = {"P0": "alert", "P1": "warn"}.get(worst, "info")
+    dist = " \u00b7 ".join(f"{counts[k]} \u00d7 {k.upper()}" for k in _P_ORDER if counts[k])
+    return _banner(
+        f"{kind} headline", "\U0001f4cb",
+        f"<b>{html.escape(dist)}</b> \u2014 {html.escape(coverage)}. Ranked by what to fix "
+        f"first; this is not a ship call.")
+
+
+def _render_rollup(fm: dict, body: str, report_dir: Path) -> str:
+    """Render a `rollup-*.md` suite report as a priority dashboard.
+
+    The roll-up has its own frontmatter (`rollup`, `priorities`, `auditors_run`,
+    `auditors_skipped`) rather than the per-report `auditor`/`summary`, so it renders through
+    a dedicated path: the priority distribution, then the roll-up's sections (auditor table,
+    merged issues, coverage) generically — with report links repointed to their `.html` views.
+
+    Roll-up frontmatter sits OUTSIDE the report contract, which is why replacing `verdict`
+    with `priorities` cost no schema bump; `validate_report.py` never reads a rollup.
+    """
     date, target = fm.get("date", ""), fm.get("target", "")
     runs = fm.get("auditors_run") or []
     chip_vals = ([str(date)] if date else []) + ([f"{len(runs)} auditors"] if runs else [])
@@ -644,15 +837,13 @@ def _render_rollup(fm: dict, body: str, report_dir: Path) -> str:
     header = (f'<header class="report-head"><div class="eyebrow">UX audit roll-up</div>'
               f'<h1>{html.escape(str(fm.get("scope", "")))}</h1>{target_html}'
               f'<div class="chips">{"".join(_chip(v) for v in chip_vals)}</div></header>')
-    verdict_banner = _banner(
-        f"verdict {kind}", icon,
-        f'<b>{html.escape(verdict.upper())}</b> — suite verdict; detail below.')
+    headline = _distribution_banner(fm)
 
     body = _link_md_to_html(body)
     matches = list(SECTION_RE.finditer(body))
     pre = body[:matches[0].start()] if matches else body
     pre = re.sub(r"^\s*#\s+.*\n", "", pre, count=1)  # drop the redundant H1 title line
-    parts = [header, verdict_banner]
+    parts = [header, headline]
     if pre.strip():
         parts.append(f'<section class="md">{_render_blocks(pre, report_dir)}</section>')
     for idx, m in enumerate(matches):
@@ -677,6 +868,7 @@ def render(md_path: str | Path) -> str:
         title = f"UX audit roll-up — {fm.get('scope', '')}".strip(" —")
         return _page(title, _render_rollup(fm, body, report_dir))
 
+    view = _view(fm, body)
     matches = list(SECTION_RE.finditer(body))
     sections: list[tuple[str, str]] = []  # (lowercased name, section html)
     has_walkthrough = False
@@ -686,7 +878,7 @@ def render(md_path: str | Path) -> str:
         end = matches[idx + 1].start() if idx + 1 < len(matches) else len(body)
         content = body[start:end]
         if name.lower() == "findings":
-            inner = _render_findings(content, report_dir)
+            inner = _render_findings(content, report_dir, view)
         elif name.lower() == "walkthrough":
             has_walkthrough = True
             inner = _render_walkthrough(content, report_dir)
@@ -703,7 +895,7 @@ def render(md_path: str | Path) -> str:
             gallery = _gallery_section(imgs)
 
     parts: list[str] = [_render_header(fm), _pass_banner(fm, body),
-                        _provenance_banner(fm, body), _severity_bar(fm)]
+                        _provenance_banner(fm, body), _rating_bar(fm, view)]
     injected = False
     for nlow, shtml in sections:
         if nlow == "appendix" and gallery and not injected:

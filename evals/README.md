@@ -86,7 +86,7 @@ Clone https://github.com/carlsz/sprout into a temp dir, npm install, and start t
 server. Then run /ux-agent-skills:ux-audit http://localhost:<port> against it. Fan out to
 usability (native) + accessibility + web performance (wrapping web-quality-skills);
 normalize each into a .ux/audits contract report; skip+disclose any auditor whose skill
-isn't installed; write a rollup with a go/no-go verdict. Findings only — do not edit
+isn't installed; write a rollup with a P0-P3 priority distribution. Findings only — do not edit
 Sprout's code. Note: `npm install` may touch package-lock.json (a setup side-effect, not
 an audit write) — revert it before the safety check.
 ```

@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from validate_report import validate, validate_index  # noqa: E402
+from validate_report import validate, validate_index, validate_rollup  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures"
 
@@ -48,6 +48,22 @@ def _expect_invalid_index(path: Path, needle: str) -> list[str]:
         return [f"expected INVALID index but passed: {path.name}"]
     if not any(needle in e for e in errors):
         return [f"{path.name}: expected an index error mentioning {needle!r}, got {errors}"]
+    return []
+
+
+def _expect_valid_rollup(path: Path) -> list[str]:
+    errors = validate_rollup(path)
+    if errors:
+        return [f"expected VALID rollup but got errors: {path.name}: {errors}"]
+    return []
+
+
+def _expect_invalid_rollup(path: Path, needle: str) -> list[str]:
+    errors = validate_rollup(path)
+    if not errors:
+        return [f"expected INVALID rollup but passed: {path.name}"]
+    if not any(needle in e for e in errors):
+        return [f"{path.name}: expected a rollup error mentioning {needle!r}, got {errors}"]
     return []
 
 
@@ -91,16 +107,119 @@ def main() -> int:
     failures += _expect_invalid(FIXTURES / "invalid" / "walkthrough-bad-path.md",
                                 "walkthrough image path")
 
+    # --- schema 3: priority is the scored field, severity is reported per finding ---
+    # The schema-2 fixtures above are the regression proof that the dispatch did not
+    # break the permanent path; these prove the new one works.
+    failures += _expect_valid(FIXTURES / "valid" / "usability-20261111-143000.md")
+
+    # Reconciliation, in the new vocabulary.
+    failures += _expect_invalid(FIXTURES / "invalid" / "priority-mismatch.md", "P0-P3")
+    # There is no rank below P3 and none above P0 — an out-of-range heading is caught
+    # explicitly rather than silently going uncounted (which would surface as a confusing
+    # total mismatch instead).
+    failures += _expect_invalid(FIXTURES / "invalid" / "priority-out-of-range.md",
+                                "outside the P0-P3")
+    # Schema 3 adds a sixth field; a finding without it is incomplete.
+    failures += _expect_invalid(FIXTURES / "invalid" / "missing-priority-field.md",
+                                "Priority")
+    # --- cross-schema confusion, both directions ---
+    # Half-migrated reports are the failure mode a two-vocabulary validator invites, so
+    # both halves are asserted: right shape, wrong summary keys...
+    failures += _expect_invalid(FIXTURES / "invalid" / "schema-mixed.md",
+                                "schema-2 keys")
+    # ...and right summary, wrong headings. Built inline rather than as a fixture: it is a
+    # one-line mutation of a file already on disk, and a frozen copy would drift from it.
+    import tempfile
+    for schema, bad_heading, needle in (
+        (3, "### [sev3] ", "[sevN] finding headings"),
+        (2, "### [P1] ", "[PN] finding headings"),
+    ):
+        src = ("valid/usability-20261111-143000.md" if schema == 3
+               else "valid/usability-20260715-143000.md")
+        text = (FIXTURES / src).read_text(encoding="utf-8")
+        old_tag = "### [P1] " if schema == 3 else "### [sev3] "
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as fh:
+            fh.write(text.replace(old_tag, bad_heading, 1))
+            tmp = Path(fh.name)
+        failures += _expect_invalid(tmp, needle)
+        tmp.unlink()
+
+    # A schema nobody implements must fail loudly, not fall through to a default.
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as fh:
+        fh.write((FIXTURES / "valid" / "usability-20261111-143000.md")
+                 .read_text(encoding="utf-8").replace("schema: 3", "schema: 4", 1))
+        tmp = Path(fh.name)
+    failures += _expect_invalid(tmp, "'schema' must be one of")
+    tmp.unlink()
+
+    # --- review findings from PR #20, pinned so they cannot regress ----------------
+    # Lowercase summary keys: SPEC's canonical example shipped `p0:` while the validator
+    # requires `P0:`, so an auditor copying the spec failed its own self-check every run.
+    # The keys are now uppercase everywhere AND the error names casing as the cause --
+    # the previous "missing required key: 'P0'" sent the author hunting an absent key.
+    import re as _re
+    _s3 = (FIXTURES / "valid" / "usability-20261111-143000.md").read_text(encoding="utf-8")
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as fh:
+        fh.write(_re.sub(r"^  P(\d):", lambda m: f"  p{m.group(1)}:", _s3, flags=_re.M))
+        tmp = Path(fh.name)
+    failures += _expect_invalid(tmp, "case-sensitive")
+    tmp.unlink()
+
+    # `3.0 == 3` and `True == 1` in Python, so a membership test accepted both and then
+    # indexed the rating table by something that is not a contract version.
+    for bad in ("schema: 3.0", "schema: true"):
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as fh:
+            fh.write(_s3.replace("schema: 3", bad, 1))
+            tmp = Path(fh.name)
+        failures += _expect_invalid(tmp, "an integer")
+        tmp.unlink()
+
     # index.md: a conforming index passes; a malformed one is rejected.
     failures += _expect_valid_index(FIXTURES / "valid" / "index.md")
     failures += _expect_invalid_index(FIXTURES / "invalid" / "index-badcols.md", "column")
+    # The index is append-only and shared, so schema 3 cannot swap its columns. A legacy
+    # table with a priority table appended below it is the documented transition (§7), and
+    # both must validate in one file.
+    failures += _expect_valid_index(FIXTURES / "valid" / "index-dual.md")
+    # Header detection keyed on two phrases appearing anywhere in a line, so PROSE about
+    # the columns -- which this contract, SPEC and the README all contain -- was parsed as
+    # a header row and then rejected for having the wrong columns.
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as fh:
+        fh.write((FIXTURES / "valid" / "index.md").read_text(encoding="utf-8")
+                 + "\nEach row lists Date (UTC), Auditor, Scope and Report.\n")
+        tmp = Path(fh.name)
+    failures += _expect_valid_index(tmp)
+    tmp.unlink()
+
+    # --- the roll-up (outside the report contract, but not unchecked) --------------------
+    # A roll-up carries no `auditor`, `mode`, `frameworks` or findings, so `validate()`
+    # rejects it with a page of irrelevant errors. `--rollup` checks what it does promise.
+    failures += _expect_valid_rollup(FIXTURES / "valid" / "rollup-20261111-150000.md")
+    failures += _expect_valid_rollup(FIXTURES / "valid" / "rollup-20261111-160000.md")
+    # The `rollup` key is the renderer's only discriminator and its absence is SILENT:
+    # the file still renders, as an ordinary report, minus the headline banner that names
+    # the worst finding and warns about skipped auditors. A 26-byte difference in the
+    # output was the entire signal. This is what makes it loud.
+    failures += _expect_invalid_rollup(FIXTURES / "invalid" / "rollup-no-key.md",
+                                       "rollup: true")
+    # The go/no-go verdict was dropped, not renamed. A roll-up that reinstates one is
+    # asserting release context the suite does not have (SPEC §6).
+    failures += _expect_invalid_rollup(FIXTURES / "invalid" / "rollup-verdict.md",
+                                       "no ship call")
+    # A severity count is not a priority count, in a roll-up as anywhere else.
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as fh:
+        fh.write((FIXTURES / "valid" / "rollup-20261111-150000.md")
+                 .read_text(encoding="utf-8").replace("  P0: 1", "  P0: 1\n  sev4: 1"))
+        tmp = Path(fh.name)
+    failures += _expect_invalid_rollup(tmp, "sev")
+    tmp.unlink()
 
     if failures:
         print("FAIL — report contract:")
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS — report contract (12 checks)")
+    print("PASS — report contract (31 checks, schemas 2 and 3, plus the roll-up)")
     return 0
 
 
