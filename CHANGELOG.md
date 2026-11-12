@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+- **`docs/images/audit-review.png` is re-captured from a live 0.7.1 run.** It had been a
+  0.6.1 capture since the rating change, showing the go/no-go banner and `sev`-badged cards -
+  0.7.0 shipped that as a Known item because re-capturing needed a live `/ux-audit` against a
+  host app. The new figure keeps the old one's framing - the session on the left, the rendered
+  report beside it - from a full `--all` run against
+  [Sprout](https://github.com/carlsz/sprout) with all four auditors. What changed is what it
+  shows: the priority distribution where the verdict used to be, a highest-priority finding
+  carrying `P1 . Severity S3` rather than one number, `Priority` and `Severity` as separate
+  labelled fields on the card, and a self-check line for `--rollup`, which did not exist before
+  this release.
+
 ## [0.7.1] - 2026-11-12
 
 ### Fixed

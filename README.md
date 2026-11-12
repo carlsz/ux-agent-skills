@@ -282,15 +282,17 @@ That writes one normalized report per auditor plus a `rollup-<timestamp>.md` wit
 per-auditor priority table and the suite-wide distribution — all under `Sprout/.ux/audits/`,
 and nothing else in the repo is touched.
 
-![A completed /ux-audit run of Sprout in Claude Code: the roll-up verdict banner and per-auditor table on the left, and the self-contained HTML usability report — findings as cards, prioritized fixes — open in a browser on the right.](docs/images/audit-review.png)
+![A Claude Code window with two panes. Left, the session transcript of a /ux-audit run of Sprout at plugin 0.7.1, live mode, --all: a priority distribution reading 0 x P0, 2 x P1, 4 x P2, 1 x P3 across seven findings; a per-auditor table with rows for usability, accessibility, web-performance and cuj, the last reading 3/3 passed; the highest-priority finding given as P1 with Severity S3; honesty caveats noting the web-performance numbers came from a dev build and that no auditor was skipped; a No ship call line; and a self-check listing every report valid, the roll-up valid under --rollup, the index valid, and audit_safety.py clean on both halves. Right, the browser pane showing the rendered usability report: prioritized fixes badged P2, P2 and P3, and a finding card badged P2 carrying Issue, Violation, Priority, Severity and Evidence as separate labelled fields.](docs/images/audit-review.png)
 
-*A full `/ux-audit` roll-up in the session, and the derived HTML report open in a browser.
+*A full `/ux-audit` roll-up in the session, and the derived HTML report open beside it.
 Everything under `.ux/audits/`; nothing else in the host repo is touched.*
 
-> **This capture is from 0.6.1.** It shows the go/no-go verdict banner that 0.7.0 replaced
-> with the priority distribution, and `sev`-badged cards rather than `P`-badged ones.
-> Re-capturing it needs a live `/ux-audit` run against a host app; until then the surrounding
-> prose, not the screenshot, is authoritative.
+Both ratings travel with every finding: the roll-up names its worst as `P1 · Severity S3`,
+and the card on the right is `P2` rated `S2`. Priority answers *what do I fix first* and may be
+clamped by business context; severity says what the defect actually is, and nothing clamps it.
+Reporting the pair side by side is what lets a rarely-met but silent defect outrank a louder
+one without the record pretending it is the bigger bug. The roll-up makes **no ship call**:
+that needs release context the suite does not have.
 
 ## Contributing
 
