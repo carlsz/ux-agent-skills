@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-12
+
 ### Fixed
 - **The safety baseline no longer lives at one fixed path in `/tmp`.** `audit-cuj` step 1
   said `--snapshot > /tmp/ux-baseline.json` and step 8 read that same name back: one
