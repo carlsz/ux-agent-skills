@@ -282,15 +282,16 @@ That writes one normalized report per auditor plus a `rollup-<timestamp>.md` wit
 per-auditor priority table and the suite-wide distribution — all under `Sprout/.ux/audits/`,
 and nothing else in the repo is touched.
 
-![A completed /ux-audit run of Sprout in Claude Code: the roll-up verdict banner and per-auditor table on the left, and the self-contained HTML usability report — findings as cards, prioritized fixes — open in a browser on the right.](docs/images/audit-review.png)
+![Two HTML companions from a /ux-audit run of Sprout, side by side. Left, the roll-up dashboard: a headline reading 1 x P1, 3 x P2, 1 x P3 with the note that this is not a ship call, a per-auditor priority distribution table, the highest-priority finding quoted, and a merged issues table whose Priority and Severity are separate columns. Right, the usability report's first finding card, badged P1, with Issue, Violation, Priority, Severity and Evidence as labelled fields and an embedded screenshot of Sprout's empty state.](docs/images/audit-review.png)
 
-*A full `/ux-audit` roll-up in the session, and the derived HTML report open in a browser.
-Everything under `.ux/audits/`; nothing else in the host repo is touched.*
+*The roll-up dashboard and one finding card, both rendered by `/ux-review` from the Markdown
+beside them. Everything under `.ux/audits/`; nothing else in the host repo is touched.*
 
-> **This capture is from 0.6.1.** It shows the go/no-go verdict banner that 0.7.0 replaced
-> with the priority distribution, and `sev`-badged cards rather than `P`-badged ones.
-> Re-capturing it needs a live `/ux-audit` run against a host app; until then the surrounding
-> prose, not the screenshot, is authoritative.
+The two ratings are the thing to read here. That `P1` is rated **severity 2** — a minor defect,
+rarely met — and it still outranks a severity-3 finding below it, because it fails *silently*.
+Priority answers what to fix first; severity says what the defect actually is. The roll-up
+names the worst finding and makes no ship call: that needs release context the suite does not
+have.
 
 ## Contributing
 

@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+- **`docs/images/audit-review.png` is re-captured from a live 0.7.1 run.** It had been a
+  0.6.1 capture since the rating change, showing the go/no-go banner and `sev`-badged cards -
+  0.7.0 shipped that as a Known item because re-capturing needed a live `/ux-audit` against a
+  host app. The new figure is the roll-up dashboard beside a finding card, from an audit of
+  [Sprout](https://github.com/carlsz/sprout): the headline distribution in place of the
+  verdict, `Priority` and `Severity` as separate columns in the merged-issues table, and as
+  separate labelled fields on the card. It no longer shows the Claude Code session that the
+  0.6.1 capture did - a transcript cannot be re-shot without re-staging the session, and a
+  staged one would illustrate a run that never happened.
+
 ## [0.7.1] - 2026-11-12
 
 ### Fixed
